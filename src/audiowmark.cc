@@ -9,6 +9,7 @@
 
 using std::string;
 using std::vector;
+using std::min;
 
 namespace Params
 {
@@ -148,6 +149,19 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
+  vector<float> synth_window (Params::frame_size);
+  for (int i = 0; i < Params::frame_size; i++)
+    {
+      const double threshold = 0.2;
+
+      // triangular basic window
+      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
+
+      // cosine
+      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+
+      printf ("cosw %d %f\n", i, synth_window[i]);
+    }
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -218,11 +232,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               for (int i = 0; i < new_frame.size(); i++)
                 {
                   printf ("out %d %d %d %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
-                  new_frame[i] += fft_delta_out[i];
+                  new_frame[i] += fft_delta_out[i] * synth_window[i];
                 }
               for (int i = 0; i < new_frame.size(); i++)
                 {
-                  out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i];
+                  out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * 0.75;
                 }
               free_array_float (fft_delta_spect);
               free_array_float (fft_delta_out);
