@@ -1,6 +1,7 @@
 #include <string.h>
 #include <math.h>
 #include <string>
+#include <random>
 
 #include <fftw3.h>
 
@@ -11,7 +12,10 @@ using std::vector;
 
 namespace Params
 {
-  static constexpr int frame_size = 1024;
+  static constexpr int frame_size      = 1024;
+  static constexpr int bands_per_frame = 30;
+  static constexpr int max_band        = 100;
+  static constexpr int min_band        = 20;
 }
 
 inline double
@@ -106,6 +110,30 @@ fftsr_float (size_t N, float *in, float *out)
   fftwf_execute_dft_c2r (plan, (fftwf_complex *)in, out);
 }
 
+void
+get_up_down (int f, vector<int>& up, vector<int>& down)
+{
+  vector<int> used (Params::frame_size / 2);
+  std::mt19937_64 rng;
+
+  // use per frame random seed, may want to have cryptographically secure algorithm
+  rng.seed (f);
+
+  auto choose_bands = [&used, &rng] (vector<int>& bands) {
+    while (bands.size() < Params::bands_per_frame)
+      {
+        int p = rng() % (Params::max_band - Params::min_band) + Params::min_band;
+        if (!used[p])
+          {
+            bands.push_back (p);
+            used[p] = 1;
+          }
+      }
+  };
+  choose_bands (up);
+  choose_bands (down);
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -117,6 +145,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
+  vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
   for (int f = 0; f < frame_count (wav_data); f++)
@@ -148,6 +177,33 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               std::copy (frame.begin(), frame.end(), fft_in);
               fftar_float (frame.size(), fft_in, fft_out);
 
+              float *fft_delta_spect = new_array_float (frame.size());
+              float *fft_delta_out = new_array_float (frame.size());
+              std::fill (fft_delta_spect, fft_delta_spect + frame.size() + 2, 0);
+
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
+              double umag = 0, dmag = 0;
+              for (auto u : up)
+                {
+                  const double re = fft_out[u * 2];
+                  const double im = fft_out[u * 2 + 1];
+                  const double mag = sqrt (re * re + im * im);
+
+                  fft_delta_spect[u * 2]     = re * 0.25;
+                  fft_delta_spect[u * 2 + 1] = im * 0.25;
+                }
+              for (auto d : down)
+                {
+                  const double re = fft_out[d * 2];
+                  const double im = fft_out[d * 2 + 1];
+                  const double mag = sqrt (re * re + im * im);
+
+                  fft_delta_spect[d * 2]     = re * -0.25;
+                  fft_delta_spect[d * 2 + 1] = im * -0.25;
+                }
+
               for (size_t i = 0; i <= Params::frame_size / 2; i++)
                 {
                   const double re = fft_out[i * 2];
@@ -156,13 +212,28 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                   printf ("fft %d %d %zd %f\n", f, ch, i, mag);
                 }
 
+              fftsr_float (frame.size(), fft_delta_spect, fft_delta_out);
+
+              vector<float> new_frame = get_frame (wav_data, f, ch);
+              for (int i = 0; i < new_frame.size(); i++)
+                {
+                  printf ("out %d %d %d %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
+                  new_frame[i] += fft_delta_out[i];
+                }
+              for (int i = 0; i < new_frame.size(); i++)
+                {
+                  out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i];
+                }
+              free_array_float (fft_delta_spect);
+              free_array_float (fft_delta_out);
               free_array_float (fft_out);
               free_array_float (fft_in);
             }
         }
     }
 
-  if (!wav_data.save (outfile))
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), wav_data.error_blurb());
       return 1;
