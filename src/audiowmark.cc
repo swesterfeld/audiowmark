@@ -135,9 +135,46 @@ get_up_down (int f, vector<int>& up, vector<int>& down)
   choose_bands (down);
 }
 
+static unsigned char
+from_hex_nibble (char c)
+{
+  int uc = (unsigned char)c;
+
+  if (uc >= '0' && uc <= '9') return uc - (unsigned char)'0';
+  if (uc >= 'a' && uc <= 'f') return uc + 10 - (unsigned char)'a';
+  if (uc >= 'A' && uc <= 'F') return uc + 10 - (unsigned char)'A';
+
+  return 16;	// error
+}
+
+vector<int>
+bit_str_to_vec (const string& bits)
+{
+  vector<int> bitvec;
+  for (auto nibble : bits)
+    {
+      unsigned char c = from_hex_nibble (nibble);
+      if (c >= 16)
+        return vector<int>(); // error
+
+      bitvec.push_back ((c & 8) > 0);
+      bitvec.push_back ((c & 4) > 0);
+      bitvec.push_back ((c & 2) > 0);
+      bitvec.push_back ((c & 1) > 0);
+    }
+  return bitvec;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
+  auto bitvec = bit_str_to_vec (bits);
+  if (bitvec.empty())
+    {
+      fprintf (stderr, "audiowmark: cannot parse bits %s\n", bits.c_str());
+      return 1;
+    }
+
   printf ("loading %s\n", infile.c_str());
 
   WavData wav_data;
@@ -198,15 +235,17 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               vector<int> up;
               vector<int> down;
               get_up_down (f, up, down);
-              double umag = 0, dmag = 0;
+
+              const int     data_bit = bitvec[f % bitvec.size()];
+              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
               for (auto u : up)
                 {
                   const double re = fft_out[u * 2];
                   const double im = fft_out[u * 2 + 1];
                   const double mag = sqrt (re * re + im * im);
 
-                  fft_delta_spect[u * 2]     = re * 0.25;
-                  fft_delta_spect[u * 2 + 1] = im * 0.25;
+                  fft_delta_spect[u * 2]     = re * 0.25 * data_bit_sign;
+                  fft_delta_spect[u * 2 + 1] = im * 0.25 * data_bit_sign;
                 }
               for (auto d : down)
                 {
@@ -214,8 +253,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                   const double im = fft_out[d * 2 + 1];
                   const double mag = sqrt (re * re + im * im);
 
-                  fft_delta_spect[d * 2]     = re * -0.25;
-                  fft_delta_spect[d * 2 + 1] = im * -0.25;
+                  fft_delta_spect[d * 2]     = re * -0.25 * data_bit_sign;
+                  fft_delta_spect[d * 2 + 1] = im * -0.25 * data_bit_sign;
                 }
 
               for (size_t i = 0; i <= Params::frame_size / 2; i++)
@@ -255,11 +294,92 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 }
 
 int
+get_watermark (const string& origfile, const string& infile)
+{
+  WavData orig_wav_data;
+  if (!orig_wav_data.load (origfile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
+      return 1;
+    }
+
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+  string bit_str[wav_data.n_channels()];
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          vector<float> frame = get_frame (wav_data, f, ch);
+          if (frame.size() == Params::frame_size)
+            {
+              /* windowing */
+              double window_weight = 0;
+              for (size_t i = 0; i < frame.size(); i++)
+                {
+                  const double fsize_2 = frame.size() / 2.0;
+                  // const double win =  window_cos ((i - fsize_2) / fsize_2);
+                  const double win = window_hamming ((i - fsize_2) / fsize_2);
+                  //const double win = 1;
+                  frame[i] *= win;
+                  window_weight += win;
+                }
+
+              /* to get normalized fft output corrected by window weight */
+              for (size_t i = 0; i < frame.size(); i++)
+                frame[i] *= 2.0 / window_weight;
+
+              /* FFT transform */
+              float *fft_in = new_array_float (frame.size());
+              float *fft_out = new_array_float (frame.size());
+              std::copy (frame.begin(), frame.end(), fft_in);
+              fftar_float (frame.size(), fft_in, fft_out);
+
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
+              double umag = 0, dmag = 0;
+              for (auto u : up)
+                {
+                  const double re = fft_out[u * 2];
+                  const double im = fft_out[u * 2 + 1];
+                  const double mag = sqrt (re * re + im * im);
+
+                  umag += mag;
+                }
+              for (auto d : down)
+                {
+                  const double re = fft_out[d * 2];
+                  const double im = fft_out[d * 2 + 1];
+                  const double mag = sqrt (re * re + im * im);
+
+                  dmag += mag;
+                }
+
+              bit_str[ch] += (umag > dmag) ? "1" : "0";
+              free_array_float (fft_out);
+              free_array_float (fft_in);
+            }
+        }
+    }
+  for (int ch = 0; ch < wav_data.n_channels(); ch++)
+    printf ("bits[%d]=%s\n", ch, bit_str[ch].c_str());
+}
+
+int
 main (int argc, char **argv)
 {
   if (strcmp (argv[1], "add") == 0 && argc == 5)
     {
       return add_watermark (argv[2], argv[3], argv[4]);
+    }
+  else if (strcmp (argv[1], "get") == 0 && argc == 4)
+    {
+      return get_watermark (argv[2], argv[3]);
     }
   else
     {
