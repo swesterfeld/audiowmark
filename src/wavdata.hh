@@ -13,6 +13,9 @@ class WavData
   std::string        m_error_blurb;
 
 public:
+  WavData();
+  WavData (const std::vector<float>& samples, int n_channels, float mix_freq, int bit_depth);
+
   bool load (const std::string& filename);
   bool save (const std::string& filename);
 

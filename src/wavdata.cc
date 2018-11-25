@@ -13,6 +13,17 @@ bound (const T& min_value, const T& value, const T& max_value)
   return std::min (std::max (value, min_value), max_value);
 }
 
+WavData::WavData()
+{
+}
+
+WavData::WavData (const vector<float>& samples, int n_channels, float mix_freq, int bit_depth)
+{
+  m_samples     = samples;
+  m_n_channels  = n_channels;
+  m_mix_freq    = mix_freq;
+  m_bit_depth   = bit_depth;
+}
 
 bool
 WavData::load (const string& filename)
