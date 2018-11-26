@@ -408,22 +408,62 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
           printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
         }
     }
+  return 0;
+}
+
+int
+gentest (const string& infile, const string& outfile)
+{
+  printf ("generating test sample from '%s' to '%s'\n", infile.c_str(), outfile.c_str());
+
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+  const vector<float>& in_signal = wav_data.samples();
+  vector<float> out_signal;
+  int offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
+  int n_samples = 10 * wav_data.n_channels() * int (wav_data.mix_freq());
+  if (in_signal.size() < (offset + n_samples))
+    {
+      fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+  for (size_t i = 0; i < n_samples; i++)
+    {
+      out_signal.push_back (in_signal[i + offset]);
+    }
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  if (!out_wav_data.save (outfile))
+    {
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+  return 0;
 }
 
 int
 main (int argc, char **argv)
 {
-  if (strcmp (argv[1], "add") == 0 && argc == 5)
+  string op = (argc >= 2) ? argv[1] : "";
+
+  if (op == "add" && argc == 5)
     {
       return add_watermark (argv[2], argv[3], argv[4]);
     }
-  else if (strcmp (argv[1], "get") == 0 && argc == 4)
+  else if (op == "get" && argc == 4)
     {
       return get_watermark (argv[2], argv[3], /* no ber */ "");
     }
-  else if (strcmp (argv[1], "cmp") == 0 && argc == 5)
+  else if (op == "cmp" && argc == 5)
     {
       return get_watermark (argv[2], argv[3], argv[4]);
+    }
+  else if (op == "gentest" && argc == 4)
+    {
+      return gentest (argv[2], argv[3]);
     }
   else
     {
