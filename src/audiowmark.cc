@@ -332,9 +332,12 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-  vector<int> bit_vec[wav_data.n_channels()];
+  vector<int> bit_vec;
+
   for (int f = 0; f < frame_count (wav_data); f++)
     {
+      double umag = 0, dmag = 0;
+
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           vector<float> frame = get_frame (wav_data, f, ch);
@@ -365,7 +368,6 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
               vector<int> up;
               vector<int> down;
               get_up_down (f, up, down);
-              double umag = 0, dmag = 0;
               for (auto u : up)
                 {
                   const double re = fft_out[u * 2];
@@ -383,30 +385,26 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
                   dmag += mag;
                 }
 
-              bit_vec[ch].push_back ((umag > dmag) ? 1 : 0);
               free_array_float (fft_out);
               free_array_float (fft_in);
             }
         }
+      bit_vec.push_back ((umag > dmag) ? 1 : 0);
     }
 
-  int bits = 0, bit_errors = 0;
-  for (int ch = 0; ch < wav_data.n_channels(); ch++)
+  if (!orig_pattern.empty())
     {
-      printf ("ch[%d]=%s\n", ch, bit_vec_to_str (bit_vec[ch]).c_str());
+      int bits = 0, bit_errors = 0;
 
-      if (!orig_pattern.empty())
+      vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+      for (size_t i = 0; i < bit_vec.size(); i++)
         {
-          vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-          for (size_t i = 0; i < bit_vec[ch].size(); i++)
-            {
-              bits++;
-              if (bit_vec[ch][i] != orig_vec[i % orig_vec.size()])
-                bit_errors++;
-            }
+          bits++;
+          if (bit_vec[i] != orig_vec[i % orig_vec.size()])
+            bit_errors++;
         }
+      printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
     }
-  printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
   return 0;
 }
 
