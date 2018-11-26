@@ -389,14 +389,14 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
             }
         }
     }
+
+  int bits = 0, bit_errors = 0;
   for (int ch = 0; ch < wav_data.n_channels(); ch++)
     {
       printf ("ch[%d]=%s\n", ch, bit_vec_to_str (bit_vec[ch]).c_str());
 
       if (!orig_pattern.empty())
         {
-          int bits = 0, bit_errors = 0;
-
           vector<int> orig_vec = bit_str_to_vec (orig_pattern);
           for (int i = 0; i < bit_vec[ch].size(); i++)
             {
@@ -404,10 +404,9 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
               if (bit_vec[ch][i] != orig_vec[i % orig_vec.size()])
                 bit_errors++;
             }
-
-          printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
         }
     }
+  printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
   return 0;
 }
 

@@ -1,4 +1,3 @@
-- bit error rate evaluation
 - use both channels for decoding
 - non-blind decoder
 - standard tests (-> mp3, ->ogg, ...)
