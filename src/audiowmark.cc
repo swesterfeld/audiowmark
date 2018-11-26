@@ -73,7 +73,7 @@ new_array_float (size_t N)
   return (float *) fftwf_malloc (sizeof (float) * N_2);
 }
 
-float *
+void
 free_array_float (float *f)
 {
   fftwf_free (f);
@@ -265,7 +265,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                 {
                   const double re = fft_out[u * 2];
                   const double im = fft_out[u * 2 + 1];
-                  const double mag = sqrt (re * re + im * im);
 
                   fft_delta_spect[u * 2]     = re * 0.25 * data_bit_sign;
                   fft_delta_spect[u * 2 + 1] = im * 0.25 * data_bit_sign;
@@ -274,7 +273,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                 {
                   const double re = fft_out[d * 2];
                   const double im = fft_out[d * 2 + 1];
-                  const double mag = sqrt (re * re + im * im);
 
                   fft_delta_spect[d * 2]     = re * -0.25 * data_bit_sign;
                   fft_delta_spect[d * 2 + 1] = im * -0.25 * data_bit_sign;
@@ -291,12 +289,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               fftsr_float (frame.size(), fft_delta_spect, fft_delta_out);
 
               vector<float> new_frame = get_frame (wav_data, f, ch);
-              for (int i = 0; i < new_frame.size(); i++)
+              for (size_t i = 0; i < new_frame.size(); i++)
                 {
-                  printf ("out %d %d %d %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
+                  printf ("out %d %d %zd %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
                   new_frame[i] += fft_delta_out[i] * synth_window[i];
                 }
-              for (int i = 0; i < new_frame.size(); i++)
+              for (size_t i = 0; i < new_frame.size(); i++)
                 {
                   out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * 0.75;
                 }
@@ -314,6 +312,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), wav_data.error_blurb());
       return 1;
     }
+  return 0;
 }
 
 int
@@ -398,7 +397,7 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
       if (!orig_pattern.empty())
         {
           vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-          for (int i = 0; i < bit_vec[ch].size(); i++)
+          for (size_t i = 0; i < bit_vec[ch].size(); i++)
             {
               bits++;
               if (bit_vec[ch][i] != orig_vec[i % orig_vec.size()])
@@ -423,11 +422,13 @@ gentest (const string& infile, const string& outfile)
     }
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
-  int offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
-  int n_samples = 10 * wav_data.n_channels() * int (wav_data.mix_freq());
+
+  /* 10 seconds of audio - starting at 30 seconds of the original track */
+  const size_t offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t n_samples = 10 * wav_data.n_channels() * int (wav_data.mix_freq());
   if (in_signal.size() < (offset + n_samples))
     {
-      fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
       return 1;
     }
   for (size_t i = 0; i < n_samples; i++)
