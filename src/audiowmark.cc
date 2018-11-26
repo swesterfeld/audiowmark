@@ -14,6 +14,7 @@ using std::min;
 namespace Params
 {
   static constexpr int frame_size      = 1024;
+  static constexpr int frames_per_bit  = 1;
   static constexpr int bands_per_frame = 30;
   static constexpr int max_band        = 100;
   static constexpr int min_band        = 20;
@@ -260,7 +261,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               vector<int> down;
               get_up_down (f, up, down);
 
-              const int     data_bit = bitvec[f % bitvec.size()];
+              const int     data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
               const double  data_bit_sign = data_bit > 0 ? 1 : -1;
               for (auto u : up)
                 {
@@ -334,10 +335,9 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
     }
   vector<int> bit_vec;
 
+  double umag = 0, dmag = 0;
   for (int f = 0; f < frame_count (wav_data); f++)
     {
-      double umag = 0, dmag = 0;
-
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           vector<float> frame = get_frame (wav_data, f, ch);
@@ -389,9 +389,14 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
               free_array_float (fft_in);
             }
         }
-      bit_vec.push_back ((umag > dmag) ? 1 : 0);
+      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+        {
+          bit_vec.push_back ((umag > dmag) ? 1 : 0);
+          umag = 0;
+          dmag = 0;
+        }
     }
-
+  printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
   if (!orig_pattern.empty())
     {
       int bits = 0, bit_errors = 0;
