@@ -17,6 +17,7 @@ namespace Params
   static constexpr int bands_per_frame = 30;
   static constexpr int max_band        = 100;
   static constexpr int min_band        = 20;
+  static constexpr double water_gain   = 0.25; // relative amplitude of the watermark
 }
 
 inline double
@@ -266,16 +267,16 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                   const double re = fft_out[u * 2];
                   const double im = fft_out[u * 2 + 1];
 
-                  fft_delta_spect[u * 2]     = re * 0.25 * data_bit_sign;
-                  fft_delta_spect[u * 2 + 1] = im * 0.25 * data_bit_sign;
+                  fft_delta_spect[u * 2]     = re * Params::water_gain * data_bit_sign;
+                  fft_delta_spect[u * 2 + 1] = im * Params::water_gain * data_bit_sign;
                 }
               for (auto d : down)
                 {
                   const double re = fft_out[d * 2];
                   const double im = fft_out[d * 2 + 1];
 
-                  fft_delta_spect[d * 2]     = re * -0.25 * data_bit_sign;
-                  fft_delta_spect[d * 2 + 1] = im * -0.25 * data_bit_sign;
+                  fft_delta_spect[d * 2]     = -re * Params::water_gain * data_bit_sign;
+                  fft_delta_spect[d * 2 + 1] = -im * Params::water_gain * data_bit_sign;
                 }
 
               for (size_t i = 0; i <= Params::frame_size / 2; i++)
