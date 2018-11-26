@@ -165,6 +165,29 @@ bit_str_to_vec (const string& bits)
   return bitvec;
 }
 
+string
+bit_vec_to_str (const vector<int>& bit_vec)
+{
+  string bit_str;
+
+  for (size_t pos = 0; pos < bit_vec.size(); pos += 4)
+    {
+      int nibble = 0;
+      for (int j = 0; j < 4; j++)
+        {
+          if (pos + j < bit_vec.size())
+            if (bit_vec[pos + j])
+              {
+                // j == 0 has the highest value, then 1, 2, 3 (lowest)
+                nibble |= 1 << (3 - j);
+              }
+        }
+      const char *to_hex = "0123456789abcdef";
+      bit_str += to_hex[nibble];
+    }
+  return bit_str;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -294,7 +317,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 }
 
 int
-get_watermark (const string& origfile, const string& infile)
+get_watermark (const string& origfile, const string& infile, const string& orig_pattern)
 {
   WavData orig_wav_data;
   if (!orig_wav_data.load (origfile))
@@ -309,7 +332,7 @@ get_watermark (const string& origfile, const string& infile)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-  string bit_str[wav_data.n_channels()];
+  vector<int> bit_vec[wav_data.n_channels()];
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -360,14 +383,31 @@ get_watermark (const string& origfile, const string& infile)
                   dmag += mag;
                 }
 
-              bit_str[ch] += (umag > dmag) ? "1" : "0";
+              bit_vec[ch].push_back ((umag > dmag) ? 1 : 0);
               free_array_float (fft_out);
               free_array_float (fft_in);
             }
         }
     }
   for (int ch = 0; ch < wav_data.n_channels(); ch++)
-    printf ("bits[%d]=%s\n", ch, bit_str[ch].c_str());
+    {
+      printf ("ch[%d]=%s\n", ch, bit_vec_to_str (bit_vec[ch]).c_str());
+
+      if (!orig_pattern.empty())
+        {
+          int bits = 0, bit_errors = 0;
+
+          vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+          for (int i = 0; i < bit_vec[ch].size(); i++)
+            {
+              bits++;
+              if (bit_vec[ch][i] != orig_vec[i % orig_vec.size()])
+                bit_errors++;
+            }
+
+          printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
+        }
+    }
 }
 
 int
@@ -379,7 +419,11 @@ main (int argc, char **argv)
     }
   else if (strcmp (argv[1], "get") == 0 && argc == 4)
     {
-      return get_watermark (argv[2], argv[3]);
+      return get_watermark (argv[2], argv[3], /* no ber */ "");
+    }
+  else if (strcmp (argv[1], "cmp") == 0 && argc == 5)
+    {
+      return get_watermark (argv[2], argv[3], argv[4]);
     }
   else
     {

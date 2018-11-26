@@ -1,0 +1,8 @@
+- bit error rate evaluation
+- use both channels for decoding
+- non-blind decoder
+- test set (20 songs)
+- standard tests (-> mp3, ->ogg, ...)
+- refactor fft
+- peaq scores
+- snr
