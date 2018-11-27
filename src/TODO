@@ -2,4 +2,3 @@
 - standard tests (-> mp3, ->ogg, ...)
 - refactor fft
 - peaq scores
-- snr

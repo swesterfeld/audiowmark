@@ -18,7 +18,8 @@ namespace Params
   static constexpr int bands_per_frame = 30;
   static constexpr int max_band        = 100;
   static constexpr int min_band        = 20;
-  static constexpr double water_gain   = 0.1; // relative amplitude of the watermark
+  static constexpr double water_gain   = 0.1;   // relative amplitude of the watermark
+  static constexpr double pre_scale    = 0.75;  // rescale the signal to avoid clipping after watermark is added
 }
 
 inline double
@@ -229,6 +230,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           vector<float> frame = get_frame (wav_data, f, ch);
+          vector<float> new_frame = frame; /* will be modified below */
           if (frame.size() == Params::frame_size)
             {
               /* windowing */
@@ -290,21 +292,18 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
               fftsr_float (frame.size(), fft_delta_spect, fft_delta_out);
 
-              vector<float> new_frame = get_frame (wav_data, f, ch);
               for (size_t i = 0; i < new_frame.size(); i++)
                 {
                   printf ("out %d %d %zd %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
                   new_frame[i] += fft_delta_out[i] * synth_window[i];
-                }
-              for (size_t i = 0; i < new_frame.size(); i++)
-                {
-                  out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * 0.75;
                 }
               free_array_float (fft_delta_spect);
               free_array_float (fft_delta_out);
               free_array_float (fft_out);
               free_array_float (fft_in);
             }
+          for (size_t i = 0; i < new_frame.size(); i++)
+            out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * Params::pre_scale;
         }
     }
 
@@ -449,6 +448,47 @@ gentest (const string& infile, const string& outfile)
 }
 
 int
+get_snr (const string& origfile, const string& wmfile)
+{
+  WavData orig_wav_data;
+  if (!orig_wav_data.load (origfile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
+      return 1;
+    }
+
+  WavData wav_data;
+  if (!wav_data.load (wmfile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", wmfile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+  const vector<float>& orig_samples = orig_wav_data.samples();
+  const vector<float>& samples = wav_data.samples();
+
+  if (samples.size() != orig_samples.size())
+    {
+      fprintf (stderr, "audiowmark: files have different length\n");
+      return 1;
+    }
+  double delta_power = 0;
+  double signal_power = 0;
+  for (size_t i = 0; i < samples.size(); i++)
+    {
+      const double orig_scaled = orig_samples[i] * Params::pre_scale;
+      const double delta       = samples[i] - orig_scaled;
+
+      delta_power += delta * delta;
+      signal_power += orig_scaled * orig_scaled;
+    }
+  delta_power /= samples.size();
+  signal_power /= samples.size();
+
+  printf ("snr_db %f\n", 10 * log10 (signal_power / delta_power));
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   string op = (argc >= 2) ? argv[1] : "";
@@ -468,6 +508,10 @@ main (int argc, char **argv)
   else if (op == "gentest" && argc == 4)
     {
       return gentest (argv[2], argv[3]);
+    }
+  else if (op == "snr" && argc == 4)
+    {
+      get_snr (argv[2], argv[3]);
     }
   else
     {
