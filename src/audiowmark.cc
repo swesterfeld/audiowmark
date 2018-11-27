@@ -14,11 +14,11 @@ using std::min;
 namespace Params
 {
   static constexpr int frame_size      = 1024;
-  static constexpr int frames_per_bit  = 1;
+  static constexpr int frames_per_bit  = 4;
   static constexpr int bands_per_frame = 30;
   static constexpr int max_band        = 100;
   static constexpr int min_band        = 20;
-  static constexpr double water_gain   = 0.25; // relative amplitude of the watermark
+  static constexpr double water_gain   = 0.1; // relative amplitude of the watermark
 }
 
 inline double
@@ -374,7 +374,7 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
                   const double im = fft_out[u * 2 + 1];
                   const double mag = sqrt (re * re + im * im);
 
-                  umag += mag;
+                  umag += log (mag);
                 }
               for (auto d : down)
                 {
@@ -382,7 +382,7 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
                   const double im = fft_out[d * 2 + 1];
                   const double mag = sqrt (re * re + im * im);
 
-                  dmag += mag;
+                  dmag += log (mag);
                 }
 
               free_array_float (fft_out);
