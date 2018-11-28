@@ -390,33 +390,19 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
                 frame[i] *= 2.0 / window_weight;
 
               /* FFT transform */
-              float *fft_in = new_array_float (frame.size());
-              float *fft_out = new_array_float (frame.size());
-              std::copy (frame.begin(), frame.end(), fft_in);
-              fftar_float (frame.size(), fft_in, fft_out);
+              vector<complex<float>> fft_out = fft (frame);
 
               vector<int> up;
               vector<int> down;
               get_up_down (f, up, down);
               for (auto u : up)
                 {
-                  const double re = fft_out[u * 2];
-                  const double im = fft_out[u * 2 + 1];
-                  const double mag = sqrt (re * re + im * im);
-
-                  umag += log (mag);
+                  umag += log (abs (fft_out[u]));
                 }
               for (auto d : down)
                 {
-                  const double re = fft_out[d * 2];
-                  const double im = fft_out[d * 2 + 1];
-                  const double mag = sqrt (re * re + im * im);
-
-                  dmag += log (mag);
+                  dmag += log (abs (fft_out[d]));
                 }
-
-              free_array_float (fft_out);
-              free_array_float (fft_in);
             }
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
