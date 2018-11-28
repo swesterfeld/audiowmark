@@ -333,7 +333,7 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
           if (bit_vec[i] != orig_vec[i % orig_vec.size()])
             bit_errors++;
         }
-      printf ("bit_error_rate %.3f %%\n", double (100.0 * bit_errors) / bits);
+      printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
     }
   return 0;
 }
