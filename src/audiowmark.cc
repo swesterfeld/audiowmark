@@ -146,6 +146,81 @@ bit_vec_to_str (const vector<int>& bit_vec)
   return bit_str;
 }
 
+vector<float>
+watermark_frame (const vector<float>& input_frame, int f, int data_bit)
+{
+  vector<float> frame = input_frame;
+
+  /* windowing */
+  double window_weight = 0;
+  for (size_t i = 0; i < frame.size(); i++)
+    {
+      const double fsize_2 = frame.size() / 2.0;
+      // const double win =  window_cos ((i - fsize_2) / fsize_2);
+      const double win = window_hamming ((i - fsize_2) / fsize_2);
+      //const double win = 1;
+      frame[i] *= win;
+      window_weight += win;
+    }
+
+  /* to get normalized fft output corrected by window weight */
+  for (size_t i = 0; i < frame.size(); i++)
+    frame[i] *= 2.0 / window_weight;
+
+  /* FFT transform */
+  vector<complex<float>> fft_out = fft (frame);
+
+  vector<complex<float>> fft_delta_spect (fft_out.size());
+
+  vector<int> up;
+  vector<int> down;
+  get_up_down (f, up, down);
+
+  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+  for (auto u : up)
+    {
+      /*
+       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       *
+       * this actually increases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+    }
+  for (auto d : down)
+    {
+      /*
+       * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+       *
+       * this actually decreases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+    }
+
+  /* add watermark to output frame */
+  vector<float> fft_delta_out = ifft (fft_delta_spect);
+
+  vector<float> synth_window (Params::frame_size);
+  for (int i = 0; i < Params::frame_size; i++)
+    {
+      const double threshold = 0.2;
+
+      // triangular basic window
+      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
+
+      // cosine
+      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+    }
+
+  vector<float> new_frame = input_frame;
+  for (size_t i = 0; i < frame.size(); i++)
+    new_frame[i] += fft_delta_out[i] * synth_window[i];
+  return new_frame;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -167,80 +242,22 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
-  vector<float> synth_window (Params::frame_size);
-  for (int i = 0; i < Params::frame_size; i++)
-    {
-      const double threshold = 0.2;
-
-      // triangular basic window
-      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
-
-      // cosine
-      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-    }
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           vector<float> frame = get_frame (wav_data, f, ch);
-          vector<float> new_frame = frame; /* will be modified below */
+          vector<float> new_frame;
+
           if (frame.size() == Params::frame_size)
             {
-              /* windowing */
-              double window_weight = 0;
-              for (size_t i = 0; i < frame.size(); i++)
-                {
-                  const double fsize_2 = frame.size() / 2.0;
-                  // const double win =  window_cos ((i - fsize_2) / fsize_2);
-                  const double win = window_hamming ((i - fsize_2) / fsize_2);
-                  //const double win = 1;
-                  frame[i] *= win;
-                  window_weight += win;
-                }
+              const int data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
 
-              /* to get normalized fft output corrected by window weight */
-              for (size_t i = 0; i < frame.size(); i++)
-                frame[i] *= 2.0 / window_weight;
-
-              /* FFT transform */
-              vector<complex<float>> fft_out = fft (frame);
-
-              vector<complex<float>> fft_delta_spect (fft_out.size());
-
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const int     data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
-              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-              for (auto u : up)
-                {
-                  /*
-                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-                   *
-                   * this actually increases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
-                }
-              for (auto d : down)
-                {
-                  /*
-                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
-                   *
-                   * this actually decreases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
-                }
-
-              /* add watermark to output frame */
-              vector<float> fft_delta_out = ifft (fft_delta_spect);
-
-              for (size_t i = 0; i < new_frame.size(); i++)
-                new_frame[i] += fft_delta_out[i] * synth_window[i];
+              new_frame = watermark_frame (frame, f, data_bit);
+            }
+          else
+            {
+              new_frame = frame;
             }
           for (size_t i = 0; i < new_frame.size(); i++)
             out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * Params::pre_scale;
@@ -319,6 +336,76 @@ get_watermark (const string& origfile, const string& infile, const string& orig_
           bit_vec.push_back ((umag > dmag) ? 1 : 0);
           umag = 0;
           dmag = 0;
+        }
+    }
+  printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
+  if (!orig_pattern.empty())
+    {
+      int bits = 0, bit_errors = 0;
+
+      vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+      for (size_t i = 0; i < bit_vec.size(); i++)
+        {
+          bits++;
+          if (bit_vec[i] != orig_vec[i % orig_vec.size()])
+            bit_errors++;
+        }
+      printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
+    }
+  return 0;
+}
+
+int
+get_watermark_delta (const string& origfile, const string& infile, const string& orig_pattern)
+{
+  WavData orig_wav_data;
+  if (!orig_wav_data.load (origfile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
+      return 1;
+    }
+
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+
+  vector<int> bit_vec;
+  double error0 = 0;
+  double error1 = 0;
+
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          /* prescale original data (may want to do energy normalization or similar instead) */
+          vector<float> orig_frame = get_frame (orig_wav_data, f, ch);
+          for (auto& orig_value : orig_frame)
+            orig_value *= Params::pre_scale;
+          vector<float> frame = get_frame (wav_data, f, ch);
+
+          if (frame.size() == Params::frame_size)
+            {
+              vector<float> f0 = watermark_frame (orig_frame, f, 0);
+              vector<float> f1 = watermark_frame (orig_frame, f, 1);
+
+              for (size_t i = 0; i < frame.size(); i++)
+                {
+                  const double delta0 = frame[i] - f0[i];
+                  error0 += delta0 * delta0;
+
+                  const double delta1 = frame[i] - f1[i];
+                  error1 += delta1 * delta1;
+                }
+            }
+        }
+      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+        {
+          bit_vec.push_back ((error0 > error1) ? 1 : 0);
+          error0 = 0;
+          error1 = 0;
         }
     }
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
@@ -438,6 +525,14 @@ main (int argc, char **argv)
   else if (op == "snr" && argc == 4)
     {
       get_snr (argv[2], argv[3]);
+    }
+  else if (op == "get-delta" && argc == 4)
+    {
+      return get_watermark_delta (argv[2], argv[3], /* no ber */ "");
+    }
+  else if (op == "cmp-delta" && argc == 5)
+    {
+      return get_watermark_delta (argv[2], argv[3], argv[4]);
     }
   else
     {
