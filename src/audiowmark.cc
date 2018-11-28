@@ -266,7 +266,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
       return 1;
     }
   return 0;
@@ -446,7 +446,31 @@ gentest (const string& infile, const string& outfile)
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      return 1;
+    }
+  return 0;
+}
+
+int
+scale (const string& infile, const string& outfile)
+{
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+
+  const vector<float>& in_signal = wav_data.samples();
+  vector<float> out_signal;
+  for (size_t i = 0; i < in_signal.size(); i++)
+    out_signal.push_back (in_signal[i] * Params::pre_scale);
+
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  if (!out_wav_data.save (outfile))
+    {
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
       return 1;
     }
   return 0;
@@ -517,6 +541,10 @@ main (int argc, char **argv)
   else if (op == "snr" && argc == 4)
     {
       get_snr (argv[2], argv[3]);
+    }
+  else if (op == "scale" && argc == 4)
+    {
+      scale (argv[2], argv[3]);
     }
   else if (op == "get-delta" && argc == 4)
     {
