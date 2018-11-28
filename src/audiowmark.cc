@@ -19,7 +19,7 @@ namespace Params
   static constexpr int bands_per_frame = 30;
   static constexpr int max_band        = 100;
   static constexpr int min_band        = 20;
-  static constexpr double water_gain   = 0.1;   // relative amplitude of the watermark
+  static constexpr double water_delta  = 0.015; // strength of the watermark
   static constexpr double pre_scale    = 0.75;  // rescale the signal to avoid clipping after watermark is added
 }
 
@@ -217,23 +217,30 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               const double  data_bit_sign = data_bit > 0 ? 1 : -1;
               for (auto u : up)
                 {
-                  const float factor = Params::water_gain * data_bit_sign;
+                  /*
+                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+                   *
+                   * this actually increases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
 
-                  fft_delta_spect[u] = fft_out[u] * factor;
+                  fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
                 }
               for (auto d : down)
                 {
-                  const float factor = -Params::water_gain * data_bit_sign;
+                  /*
+                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+                   *
+                   * this actually decreases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
 
-                  fft_delta_spect[d] = fft_out[d] * factor;
+                  fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
                 }
 
               for (size_t i = 0; i <= Params::frame_size / 2; i++)
                 {
-                  const double re = fft_out[i].real();
-                  const double im = fft_out[i].imag();
-                  const double mag = sqrt (re * re + im * im);
-                  printf ("fft %d %d %zd %f\n", f, ch, i, mag);
+                  printf ("fft %d %d %zd %f\n", f, ch, i, abs (fft_out[i]));
                 }
 
               vector<float> fft_delta_out = ifft (fft_delta_spect);
