@@ -177,8 +177,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
       // cosine
       synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-
-      printf ("cosw %d %f\n", i, synth_window[i]);
     }
   for (int f = 0; f < frame_count (wav_data); f++)
     {
@@ -238,18 +236,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                   fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
                 }
 
-              for (size_t i = 0; i <= Params::frame_size / 2; i++)
-                {
-                  printf ("fft %d %d %zd %f\n", f, ch, i, abs (fft_out[i]));
-                }
-
+              /* add watermark to output frame */
               vector<float> fft_delta_out = ifft (fft_delta_spect);
 
               for (size_t i = 0; i < new_frame.size(); i++)
-                {
-                  printf ("out %d %d %zd %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
-                  new_frame[i] += fft_delta_out[i] * synth_window[i];
-                }
+                new_frame[i] += fft_delta_out[i] * synth_window[i];
             }
           for (size_t i = 0; i < new_frame.size(); i++)
             out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * Params::pre_scale;
