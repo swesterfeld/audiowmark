@@ -6,4 +6,4 @@ for i in test/T*
 do
   audiowmark add $i t.wav $PATTERN >/dev/null
   echo $i $(audiowmark snr $i t.wav)
-done | grep snr | awk '{s += $2; n++} END { print s/n; }'
+done | grep snr | awk '{s += $3; n++} END { print s/n; }'
