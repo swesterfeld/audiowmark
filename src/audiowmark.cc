@@ -273,15 +273,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 }
 
 int
-get_watermark (const string& origfile, const string& infile, const string& orig_pattern)
+get_watermark (const string& infile, const string& orig_pattern)
 {
-  WavData orig_wav_data;
-  if (!orig_wav_data.load (origfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
-      return 1;
-    }
-
   WavData wav_data;
   if (!wav_data.load (infile))
     {
@@ -509,13 +502,13 @@ main (int argc, char **argv)
     {
       return add_watermark (argv[2], argv[3], argv[4]);
     }
-  else if (op == "get" && argc == 4)
+  else if (op == "get" && argc == 3)
     {
-      return get_watermark (argv[2], argv[3], /* no ber */ "");
+      return get_watermark (argv[2], /* no ber */ "");
     }
-  else if (op == "cmp" && argc == 5)
+  else if (op == "cmp" && argc == 4)
     {
-      return get_watermark (argv[2], argv[3], argv[4]);
+      return get_watermark (argv[2], argv[3]);
     }
   else if (op == "gentest" && argc == 4)
     {

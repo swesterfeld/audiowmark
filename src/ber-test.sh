@@ -27,5 +27,5 @@ do
     echo "unknown transform $TRANSFORM" >&2
     exit 1
   fi
-  audiowmark cmp "$i" t.wav $PATTERN
+  audiowmark cmp t.wav $PATTERN
 done | grep bit_error_rate | awk '{ er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
