@@ -1,4 +1,3 @@
 - non-blind decoder
 - standard tests (-> mp3, ->ogg, ...)
-- refactor fft
 - peaq scores
