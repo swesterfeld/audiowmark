@@ -2,6 +2,7 @@
 #include <math.h>
 #include <string>
 #include <random>
+#include <complex>
 
 #include <fftw3.h>
 
@@ -9,6 +10,7 @@
 
 using std::string;
 using std::vector;
+using std::complex;
 using std::min;
 
 namespace Params
@@ -191,6 +193,48 @@ bit_vec_to_str (const vector<int>& bit_vec)
   return bit_str;
 }
 
+vector<complex<float>>
+fft (const vector<float>& in)
+{
+  vector<complex<float>> out (in.size() / 2 + 1);
+
+  /* ensure memory is SSE-aligned (or other vectorized stuff) */
+  float *fft_in = new_array_float (in.size());
+  float *fft_out = new_array_float (in.size());
+
+  std::copy (in.begin(), in.end(), fft_in);
+  fftar_float (in.size(), fft_in, fft_out);
+
+  /* complex<float> vector and fft_out have the same layout in memory */
+  std::copy (fft_out, fft_out + out.size() * 2, reinterpret_cast<float *> (&out[0]));
+
+  free_array_float (fft_out);
+  free_array_float (fft_in);
+
+  return out;
+}
+
+vector<float>
+ifft (const vector<complex<float>>& in)
+{
+  vector<float> out ((in.size() - 1) * 2);
+
+  /* ensure memory is SSE-aligned (or other vectorized stuff) */
+  float *ifft_in = new_array_float (out.size());
+  float *ifft_out = new_array_float (out.size());
+
+  /* complex<float> vector and fft_out have the same layout in memory */
+  std::copy (in.begin(), in.end(), reinterpret_cast<complex<float> *> (ifft_in));
+  fftsr_float (out.size(), ifft_in, ifft_out);
+
+  std::copy (ifft_out, ifft_out + out.size(), &out[0]);
+
+  free_array_float (ifft_out);
+  free_array_float (ifft_in);
+
+  return out;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -250,14 +294,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
                 frame[i] *= 2.0 / window_weight;
 
               /* FFT transform */
-              float *fft_in = new_array_float (frame.size());
-              float *fft_out = new_array_float (frame.size());
-              std::copy (frame.begin(), frame.end(), fft_in);
-              fftar_float (frame.size(), fft_in, fft_out);
+              vector<complex<float>> fft_out = fft (frame);
 
-              float *fft_delta_spect = new_array_float (frame.size());
-              float *fft_delta_out = new_array_float (frame.size());
-              std::fill (fft_delta_spect, fft_delta_spect + frame.size() + 2, 0);
+              vector<complex<float>> fft_delta_spect (fft_out.size());
 
               vector<int> up;
               vector<int> down;
@@ -267,40 +306,32 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               const double  data_bit_sign = data_bit > 0 ? 1 : -1;
               for (auto u : up)
                 {
-                  const double re = fft_out[u * 2];
-                  const double im = fft_out[u * 2 + 1];
+                  const float factor = Params::water_gain * data_bit_sign;
 
-                  fft_delta_spect[u * 2]     = re * Params::water_gain * data_bit_sign;
-                  fft_delta_spect[u * 2 + 1] = im * Params::water_gain * data_bit_sign;
+                  fft_delta_spect[u] = fft_out[u] * factor;
                 }
               for (auto d : down)
                 {
-                  const double re = fft_out[d * 2];
-                  const double im = fft_out[d * 2 + 1];
+                  const float factor = -Params::water_gain * data_bit_sign;
 
-                  fft_delta_spect[d * 2]     = -re * Params::water_gain * data_bit_sign;
-                  fft_delta_spect[d * 2 + 1] = -im * Params::water_gain * data_bit_sign;
+                  fft_delta_spect[d] = fft_out[d] * factor;
                 }
 
               for (size_t i = 0; i <= Params::frame_size / 2; i++)
                 {
-                  const double re = fft_out[i * 2];
-                  const double im = fft_out[i * 2 + 1];
+                  const double re = fft_out[i].real();
+                  const double im = fft_out[i].imag();
                   const double mag = sqrt (re * re + im * im);
                   printf ("fft %d %d %zd %f\n", f, ch, i, mag);
                 }
 
-              fftsr_float (frame.size(), fft_delta_spect, fft_delta_out);
+              vector<float> fft_delta_out = ifft (fft_delta_spect);
 
               for (size_t i = 0; i < new_frame.size(); i++)
                 {
                   printf ("out %d %d %zd %f %f\n", f, ch, i, new_frame[i], fft_delta_out[i]);
                   new_frame[i] += fft_delta_out[i] * synth_window[i];
                 }
-              free_array_float (fft_delta_spect);
-              free_array_float (fft_delta_out);
-              free_array_float (fft_out);
-              free_array_float (fft_in);
             }
           for (size_t i = 0; i < new_frame.size(); i++)
             out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * Params::pre_scale;
