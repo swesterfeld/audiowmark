@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir -p test
+
 seq=1
 cat test_list | while read f
 do
