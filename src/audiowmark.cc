@@ -128,17 +128,16 @@ bit_vec_to_str (const vector<int>& bit_vec)
 {
   string bit_str;
 
-  for (size_t pos = 0; pos < bit_vec.size(); pos += 4)
+  for (size_t pos = 0; pos + 3 < bit_vec.size(); pos += 4) // convert only groups of 4 bits
     {
       int nibble = 0;
       for (int j = 0; j < 4; j++)
         {
-          if (pos + j < bit_vec.size())
-            if (bit_vec[pos + j])
-              {
-                // j == 0 has the highest value, then 1, 2, 3 (lowest)
-                nibble |= 1 << (3 - j);
-              }
+          if (bit_vec[pos + j])
+            {
+              // j == 0 has the highest value, then 1, 2, 3 (lowest)
+              nibble |= 1 << (3 - j);
+            }
         }
       const char *to_hex = "0123456789abcdef";
       bit_str += to_hex[nibble];
