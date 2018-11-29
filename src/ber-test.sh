@@ -21,6 +21,33 @@ do
       sox t.wav tr.wav rate 44100
       mv tr.wav t.wav
     fi
+  elif [ "x$TRANSFORM" == "xdouble-mp3" ]; then
+    if [ "x$2" == "x" ]; then
+      echo "need mp3 bitrate" >&2
+      exit 1
+    fi
+    # first mp3 step (fixed bitrate)
+    lame -b 128 t.wav t.mp3 --quiet
+    rm t.wav
+    ffmpeg -i t.mp3 t.wav -v quiet
+
+    # second mp3 step
+    lame -b $2 t.wav t.mp3 --quiet
+    rm t.wav
+    ffmpeg -i t.mp3 t.wav -v quiet
+
+    # some (low) mpeg quality settings use a lower sample rate
+    if [ "x$(soxi -r t.wav)" != "x44100" ]; then
+      sox t.wav tr.wav rate 44100
+      mv tr.wav t.wav
+    fi
+  elif [ "x$TRANSFORM" == "xogg" ]; then
+    if [ "x$2" == "x" ]; then
+      echo "need ogg bitrate" >&2
+      exit 1
+    fi
+    oggenc -b $2 t.wav -o t.ogg --quiet
+    oggdec t.ogg -o t.wav --quiet
   elif [ "x$TRANSFORM" == "x" ]; then
     :
   else
