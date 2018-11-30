@@ -24,7 +24,7 @@ namespace Params
   static int max_band        = 100;
   static int min_band        = 20;
   static double water_delta  = 0.015; // strength of the watermark
-  static double pre_scale    = 0.75;  // rescale the signal to avoid clipping after watermark is added
+  static double pre_scale    = 0.95;  // rescale the signal to avoid clipping after watermark is added
 }
 
 void
