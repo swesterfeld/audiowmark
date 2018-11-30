@@ -396,6 +396,16 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
 
+  bool clipping_warning = false;
+  for (auto value : out_signal)
+    {
+      if (fabs (value) >= 1.0 && !clipping_warning)
+        {
+          fprintf (stderr, "audiowmark: warning: clipping occured in watermarked audio signal\n");
+          clipping_warning = true;
+        }
+    }
+
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
