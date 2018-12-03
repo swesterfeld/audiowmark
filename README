@@ -1,1 +1,22 @@
 Audio Watermarking
+
+(TODO)
+
+Building fftw
+
+audiowmark needs the single prevision variant of fftw3.
+
+If you are building fftw3 from source, use the `--enable-float`
+configure parameter to build it, e.g.::
+
+	cd ${FFTW3_SOURCE}
+	./configure --enable-float --enable-sse && \
+	make && \
+	sudo make install
+
+or, when building from git
+
+	cd ${FFTW3_GIT}
+	./bootstrap.sh --enable-shared --enable-sse --enable-float && \
+	make && \
+	sudo make install
