@@ -34,4 +34,4 @@ fi
 test "0$DIE" -gt 0 && exit 1
 
 echo "Running: autoreconf -i && ./configure $@"
-autoreconf -i -Wno-portability && ./configure "$@"
+autoreconf -f -i -Wno-portability && ./configure "$@"
