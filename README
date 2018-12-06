@@ -20,3 +20,11 @@ or, when building from git
 	./bootstrap.sh --enable-shared --enable-sse --enable-float && \
 	make && \
 	sudo make install
+
+Docker Build
+
+You should be able to execute audiowmark via Docker.
+Example that outputs the usage message:
+
+  docker build -t audiowmark .
+  docker run -it audiowmark -h

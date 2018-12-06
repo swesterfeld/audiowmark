@@ -1,0 +1,16 @@
+autom4te.cache/
+build-aux/
+m4/
+src/*.o
+src/.deps/
+src/audiowmark
+aclocal.m4
+configure
+config.h
+config.h.in
+config.log
+config.status
+Makefile
+Makefile.in
+libtool
+stamp-h1
