@@ -23,7 +23,7 @@ peaq_print_scores()
 
 for i in test/T*
 do
-  audiowmark add "$i" t.wav $PATTERN >/dev/null
+  audiowmark add "$i" t.wav $PATTERN $AWM_PARAMS >/dev/null
   audiowmark scale "$i" t_in.wav
   echo $i $(peaq t_in.wav t.wav | peaq_print_scores)
 done | awk 'BEGIN {

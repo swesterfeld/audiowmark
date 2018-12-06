@@ -6,7 +6,7 @@ TRANSFORM=$1
 for i in test/T*
 do
   echo $i
-  audiowmark add "$i" t.wav $PATTERN >/dev/null
+  audiowmark add "$i" t.wav $PATTERN $AWM_PARAMS >/dev/null
   if [ "x$TRANSFORM" == "xmp3" ]; then
     if [ "x$2" == "x" ]; then
       echo "need mp3 bitrate" >&2
@@ -54,5 +54,5 @@ do
     echo "unknown transform $TRANSFORM" >&2
     exit 1
   fi
-  audiowmark cmp t.wav $PATTERN
+  audiowmark cmp t.wav $PATTERN $AWM_PARAMS
 done | grep bit_error_rate | awk '{ er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
