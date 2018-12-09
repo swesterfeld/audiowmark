@@ -2,8 +2,20 @@
 
 PATTERN=4e1243bd22c66e76c2ba9eddc1f91394e57f9f83
 TRANSFORM=$1
+if [ "x$AWM_SET" == "x" ]; then
+  AWM_SET=small
+fi
 
-for i in test/T*
+{
+  if [ "x$AWM_SET" == "xsmall" ]; then
+    ls test/T*
+  elif [ "x$AWM_SET" == "xbig" ]; then
+    cat test_list
+  else
+    echo "bad AWM_SET $AWM_SET" >&2
+    exit 1
+  fi
+} | while read i
 do
   echo $i
   audiowmark add "$i" t.wav $PATTERN $AWM_PARAMS >/dev/null
