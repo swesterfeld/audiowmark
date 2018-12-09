@@ -173,6 +173,19 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
   return 0.54 + 0.46 * cos (M_PI * x);
 }
 
+double
+db_from_factor (double factor, double min_dB)
+{
+  if (factor > 0)
+    {
+      double dB = log10 (factor); /* Bell */
+      dB *= 20;
+      return dB;
+    }
+  else
+    return min_dB;
+}
+
 int
 frame_count (WavData& wav_data)
 {
@@ -456,13 +469,15 @@ get_watermark (const string& infile, const string& orig_pattern)
               vector<int> up;
               vector<int> down;
               get_up_down (f, up, down);
+
+              const double min_db = -96;
               for (auto u : up)
                 {
-                  umag += log (abs (fft_out[u]));
+                  umag += db_from_factor (abs (fft_out[u]), min_db);
                 }
               for (auto d : down)
                 {
-                  dmag += log (abs (fft_out[d]));
+                  dmag += db_from_factor (abs (fft_out[d]), min_db);
                 }
             }
         }
