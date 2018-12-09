@@ -26,7 +26,7 @@ do
     fi
     lame -b $2 t.wav t.mp3 --quiet
     rm t.wav
-    ffmpeg -i t.mp3 t.wav -v quiet
+    ffmpeg -i t.mp3 t.wav -v quiet -nostdin
 
     # some (low) mpeg quality settings use a lower sample rate
     if [ "x$(soxi -r t.wav)" != "x44100" ]; then
@@ -41,12 +41,12 @@ do
     # first mp3 step (fixed bitrate)
     lame -b 128 t.wav t.mp3 --quiet
     rm t.wav
-    ffmpeg -i t.mp3 t.wav -v quiet
+    ffmpeg -i t.mp3 t.wav -v quiet -nostdin
 
     # second mp3 step
     lame -b $2 t.wav t.mp3 --quiet
     rm t.wav
-    ffmpeg -i t.mp3 t.wav -v quiet
+    ffmpeg -i t.mp3 t.wav -v quiet -nostdin
 
     # some (low) mpeg quality settings use a lower sample rate
     if [ "x$(soxi -r t.wav)" != "x44100" ]; then
