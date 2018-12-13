@@ -400,6 +400,32 @@ watermark_frame (const vector<float>& input_frame, int f, int data_bit)
   return new_frame;
 }
 
+struct MixEntry
+{
+  int  frame;
+  int  up;
+  int  down;
+};
+
+vector<MixEntry>
+gen_mix_entries (int block)
+{
+  vector<MixEntry> mix_entries;
+
+  for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+    {
+      vector<int> up;
+      vector<int> down;
+      get_up_down (f, up, down);
+
+      assert (up.size() == down.size());
+      for (size_t i = 0; i < up.size(); i++)
+        mix_entries.push_back ({ f, up[i], down[i] });
+    }
+  gen_shuffle (mix_entries, /* seed */ block);
+  return mix_entries;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -466,23 +492,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
       for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
         {
-          struct MixEntry {
-            int  frame;
-            int  up;
-            int  down;
-          };
-          vector<MixEntry> mix_entries;
-          for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
-            {
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              assert (up.size() == down.size());
-              for (size_t i = 0; i < up.size(); i++)
-                mix_entries.push_back ({ f, up[i], down[i] });
-            }
-          gen_shuffle (mix_entries, /* seed */ block);
+          vector<MixEntry> mix_entries = gen_mix_entries (block);
 
           const int block_start = block * Params::block * Params::frames_per_bit;
           for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
@@ -639,23 +649,7 @@ get_watermark (const string& infile, const string& orig_pattern)
     {
       for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
         {
-          struct MixEntry {
-            int  frame;
-            int  up;
-            int  down;
-          };
-          vector<MixEntry> mix_entries;
-          for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
-            {
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              assert (up.size() == down.size());
-              for (size_t i = 0; i < up.size(); i++)
-                mix_entries.push_back ({ f, up[i], down[i] });
-            }
-          gen_shuffle (mix_entries, /* seed */ block);
+          vector<MixEntry> mix_entries = gen_mix_entries (block);
 
           double umag = 0, dmag = 0;
           for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
