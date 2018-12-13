@@ -199,7 +199,7 @@ db_from_factor (double factor, double min_dB)
 }
 
 int
-frame_count (WavData& wav_data)
+frame_count (const WavData& wav_data)
 {
   return (wav_data.n_values() / wav_data.n_channels() + (Params::frame_size - 1)) / Params::frame_size;
 }
@@ -210,7 +210,7 @@ frame_count (WavData& wav_data)
  * in case of stereo: deinterleave
  */
 vector<float>
-get_frame (WavData& wav_data, int f, int ch)
+get_frame (const WavData& wav_data, int f, int ch)
 {
   auto& samples = wav_data.samples();
 
@@ -432,6 +432,40 @@ gen_mix_entries (int block)
   return mix_entries;
 }
 
+vector<vector<complex<float>>>
+compute_frame_ffts (const WavData& wav_data)
+{
+  vector<vector<complex<float>>> fft_out;
+
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          vector<float> frame = get_frame (wav_data, f, ch);
+
+          /* windowing */
+          double window_weight = 0;
+          for (size_t i = 0; i < frame.size(); i++)
+            {
+              const double fsize_2 = frame.size() / 2.0;
+              // const double win =  window_cos ((i - fsize_2) / fsize_2);
+              const double win = window_hamming ((i - fsize_2) / fsize_2);
+              //const double win = 1;
+              frame[i] *= win;
+              window_weight += win;
+            }
+
+          /* to get normalized fft output corrected by window weight */
+          for (size_t i = 0; i < frame.size(); i++)
+            frame[i] *= 2.0 / window_weight;
+
+          /* FFT transform */
+          fft_out.push_back (fft (frame));
+        }
+    }
+  return fft_out;
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -467,32 +501,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   if (Params::mix)
     {
-      vector<vector<complex<float>>> fft_out;
+      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
       vector<vector<complex<float>>> fft_delta_spect;
       for (int f = 0; f < frame_count (wav_data); f++)
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              vector<float> frame = get_frame (wav_data, f, ch);
-
-              /* windowing */
-              double window_weight = 0;
-              for (size_t i = 0; i < frame.size(); i++)
-                {
-                  const double fsize_2 = frame.size() / 2.0;
-                  // const double win =  window_cos ((i - fsize_2) / fsize_2);
-                  const double win = window_hamming ((i - fsize_2) / fsize_2);
-                  //const double win = 1;
-                  frame[i] *= win;
-                  window_weight += win;
-                }
-
-              /* to get normalized fft output corrected by window weight */
-              for (size_t i = 0; i < frame.size(); i++)
-                frame[i] *= 2.0 / window_weight;
-
-              /* FFT transform */
-              fft_out.push_back (fft (frame));
               fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
             }
         }
@@ -608,33 +622,7 @@ get_watermark (const string& infile, const string& orig_pattern)
 
   WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
 
-  vector<vector<complex<float>>> fft_out;
-  for (int f = 0; f < frame_count (wav_data); f++)
-    {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
-        {
-          vector<float> frame = get_frame (wav_data, f, ch);
-
-          /* windowing */
-          double window_weight = 0;
-          for (size_t i = 0; i < frame.size(); i++)
-            {
-              const double fsize_2 = frame.size() / 2.0;
-              // const double win =  window_cos ((i - fsize_2) / fsize_2);
-              const double win = window_hamming ((i - fsize_2) / fsize_2);
-              //const double win = 1;
-              frame[i] *= win;
-              window_weight += win;
-            }
-
-          /* to get normalized fft output corrected by window weight */
-          for (size_t i = 0; i < frame.size(); i++)
-            frame[i] *= 2.0 / window_weight;
-
-          /* FFT transform */
-          fft_out.push_back (fft (frame));
-        }
-    }
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   if (Params::mix)
     {
       for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
