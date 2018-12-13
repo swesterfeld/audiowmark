@@ -608,35 +608,35 @@ get_watermark (const string& infile, const string& orig_pattern)
 
   WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
 
+  vector<vector<complex<float>>> fft_out;
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          vector<float> frame = get_frame (wav_data, f, ch);
+
+          /* windowing */
+          double window_weight = 0;
+          for (size_t i = 0; i < frame.size(); i++)
+            {
+              const double fsize_2 = frame.size() / 2.0;
+              // const double win =  window_cos ((i - fsize_2) / fsize_2);
+              const double win = window_hamming ((i - fsize_2) / fsize_2);
+              //const double win = 1;
+              frame[i] *= win;
+              window_weight += win;
+            }
+
+          /* to get normalized fft output corrected by window weight */
+          for (size_t i = 0; i < frame.size(); i++)
+            frame[i] *= 2.0 / window_weight;
+
+          /* FFT transform */
+          fft_out.push_back (fft (frame));
+        }
+    }
   if (Params::mix)
     {
-      vector<vector<complex<float>>> fft_out;
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              vector<float> frame = get_frame (wav_data, f, ch);
-
-              /* windowing */
-              double window_weight = 0;
-              for (size_t i = 0; i < frame.size(); i++)
-                {
-                  const double fsize_2 = frame.size() / 2.0;
-                  // const double win =  window_cos ((i - fsize_2) / fsize_2);
-                  const double win = window_hamming ((i - fsize_2) / fsize_2);
-                  //const double win = 1;
-                  frame[i] *= win;
-                  window_weight += win;
-                }
-
-              /* to get normalized fft output corrected by window weight */
-              for (size_t i = 0; i < frame.size(); i++)
-                frame[i] *= 2.0 / window_weight;
-
-              /* FFT transform */
-              fft_out.push_back (fft (frame));
-            }
-        }
       for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
         {
           struct MixEntry {
@@ -694,41 +694,19 @@ get_watermark (const string& infile, const string& orig_pattern)
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              vector<float> frame = get_frame (wav_data, f, ch);
-              if (frame.size() == Params::frame_size)
+              const int index = f * wav_data.n_channels() + ch;
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
+
+              const double min_db = -96;
+              for (auto u : up)
                 {
-                  /* windowing */
-                  double window_weight = 0;
-                  for (size_t i = 0; i < frame.size(); i++)
-                    {
-                      const double fsize_2 = frame.size() / 2.0;
-                      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-                      const double win = window_hamming ((i - fsize_2) / fsize_2);
-                      //const double win = 1;
-                      frame[i] *= win;
-                      window_weight += win;
-                    }
-
-                  /* to get normalized fft output corrected by window weight */
-                  for (size_t i = 0; i < frame.size(); i++)
-                    frame[i] *= 2.0 / window_weight;
-
-                  /* FFT transform */
-                  vector<complex<float>> fft_out = fft (frame);
-
-                  vector<int> up;
-                  vector<int> down;
-                  get_up_down (f, up, down);
-
-                  const double min_db = -96;
-                  for (auto u : up)
-                    {
-                      umag += db_from_factor (abs (fft_out[u]), min_db);
-                    }
-                  for (auto d : down)
-                    {
-                      dmag += db_from_factor (abs (fft_out[d]), min_db);
-                    }
+                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
+                }
+              for (auto d : down)
+                {
+                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
                 }
             }
           if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
