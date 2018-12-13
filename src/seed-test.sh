@@ -9,4 +9,4 @@ echo "right         : $P2"
 for seed in $(seq 0 $MAX_SEED)
 do
   echo $(AWM_SEEDS=$seed AWM_PARAMS="$P1" ber-test.sh "$@") $(AWM_SEEDS=$seed AWM_PARAMS="$P2" ber-test.sh "$@")
-done | awk '{a += $1; b += $2; c += $3; d += $4; n++; } {printf ("%.5f %.5f     -     %.5f %.5f    -    (((%s)))\n", a/n, b/n, c/n, d/n, $0);}'
+done | awk '{a += $1; if ($2 > b) b = $2; c += $3; if ($4 > d) d = $4; n++; } {printf ("%.5f %.5f     -     %.5f %.5f    -    (((%s)))\n", a/n, b, c/n, d, $0);}'
