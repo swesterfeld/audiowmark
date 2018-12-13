@@ -18,16 +18,16 @@ using std::min;
 
 namespace Params
 {
-  static size_t frame_size   = 1024;
-  static int frames_per_bit  = 4;
-  static int bands_per_frame = 30;
-  static int max_band        = 100;
-  static int min_band        = 20;
-  static double water_delta  = 0.015; // strength of the watermark
-  static double pre_scale    = 0.95;  // rescale the signal to avoid clipping after watermark is added
-  static bool mix            = true;
-  static int block           = 32;    // block size for mix step (non-linear bit storage)
-  static unsigned int seed   = 0;
+  static size_t frame_size      = 1024;
+  static int    frames_per_bit  = 4;
+  static size_t bands_per_frame = 30;
+  static int max_band          = 100;
+  static int min_band          = 20;
+  static double water_delta    = 0.015; // strength of the watermark
+  static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
+  static bool mix              = true;
+  static int block             = 32;    // block size for mix step (non-linear bit storage)
+  static unsigned int seed     = 0;
 }
 
 void
@@ -325,6 +325,28 @@ bit_vec_to_str (const vector<int>& bit_vec)
   return bit_str;
 }
 
+void
+watermark_mix2frame (vector<float>& frame, vector<complex<float>>& fft_delta_spect)
+{
+  /* mix watermark signal to output frame */
+  vector<float> fft_delta_out = ifft (fft_delta_spect);
+
+  vector<float> synth_window (Params::frame_size);
+  for (size_t i = 0; i < Params::frame_size; i++)
+    {
+      const double threshold = 0.2;
+
+      // triangular basic window
+      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
+
+      // cosine
+      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+    }
+
+  for (size_t i = 0; i < frame.size(); i++)
+    frame[i] += fft_delta_out[i] * synth_window[i];
+}
+
 vector<float>
 watermark_frame (const vector<float>& input_frame, int f, int data_bit)
 {
@@ -379,24 +401,8 @@ watermark_frame (const vector<float>& input_frame, int f, int data_bit)
       fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
     }
 
-  /* add watermark to output frame */
-  vector<float> fft_delta_out = ifft (fft_delta_spect);
-
-  vector<float> synth_window (Params::frame_size);
-  for (size_t i = 0; i < Params::frame_size; i++)
-    {
-      const double threshold = 0.2;
-
-      // triangular basic window
-      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
-
-      // cosine
-      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-    }
-
   vector<float> new_frame = input_frame;
-  for (size_t i = 0; i < frame.size(); i++)
-    new_frame[i] += fft_delta_out[i] * synth_window[i];
+  watermark_mix2frame (new_frame, fft_delta_spect);
   return new_frame;
 }
 
@@ -499,7 +505,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             {
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
-                  for (int frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
                     {
                       int b = f * Params::bands_per_frame + frame_b;
 
@@ -529,28 +535,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
               /* add watermark to output frame */
-              vector<float> fft_delta_out = ifft (fft_delta_spect[f * wav_data.n_channels() + ch]);
-
-              vector<float> input_frame = get_frame (wav_data, f, ch);
-              vector<float> synth_window (Params::frame_size);
-              for (size_t i = 0; i < Params::frame_size; i++)
-                {
-                  const double threshold = 0.2;
-
-                  // triangular basic window
-                  const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
-
-                  // cosine
-                  synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-                }
-
-              vector<float> new_frame = input_frame;
-              for (size_t i = 0; i < new_frame.size(); i++)
-                new_frame[i] += fft_delta_out[i] * synth_window[i];
+              vector<float> frame = get_frame (wav_data, f, ch);
+              watermark_mix2frame (frame, fft_delta_spect[f * wav_data.n_channels() + ch]);
 
               /* modify out signal */
-              for (size_t i = 0; i < new_frame.size(); i++)
-                out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = new_frame[i] * Params::pre_scale;
+              for (size_t i = 0; i < frame.size(); i++)
+                out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = frame[i] * Params::pre_scale;
             }
         }
     }
@@ -656,7 +646,7 @@ get_watermark (const string& infile, const string& orig_pattern)
             {
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
-                  for (int frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
                     {
                       int b = f * Params::bands_per_frame + frame_b;
                       const double min_db = -96;
