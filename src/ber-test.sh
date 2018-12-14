@@ -71,6 +71,9 @@ do
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
+    # blind decoding
     audiowmark cmp t.wav $PATTERN $AWM_PARAMS --seed $SEED
+    # decoding with original
+    # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --seed $SEED
   done
-done | grep bit_error_rate | awk '{ er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
+done | grep bit_error_rate | awk 'BEGIN { max_er = er = n = 0 } { er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
