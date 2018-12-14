@@ -26,7 +26,7 @@ namespace Params
   static double water_delta    = 0.015; // strength of the watermark
   static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
-  static int block             = 32;    // block size for mix step (non-linear bit storage)
+  static int block_size        = 32;    // block size for mix step (non-linear bit storage)
   static unsigned int seed     = 0;
 }
 
@@ -202,6 +202,12 @@ int
 frame_count (const WavData& wav_data)
 {
   return (wav_data.n_values() / wav_data.n_channels() + (Params::frame_size - 1)) / Params::frame_size;
+}
+
+int
+block_count (const WavData& wav_data)
+{
+  return frame_count (wav_data) / (Params::block_size * Params::frames_per_bit);
 }
 
 /*
@@ -418,7 +424,7 @@ gen_mix_entries (int block)
 {
   vector<MixEntry> mix_entries;
 
-  for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+  for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
     {
       vector<int> up;
       vector<int> down;
@@ -490,7 +496,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
    * to avoid processing a partly filled block
    */
   vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block * Params::frames_per_bit))
+  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
     in_signal.push_back (0);
 
   WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
@@ -510,12 +516,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
             }
         }
-      for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
+      for (int block = 0; block < block_count (wav_data); block++)
         {
           vector<MixEntry> mix_entries = gen_mix_entries (block);
 
-          const int block_start = block * Params::block * Params::frames_per_bit;
-          for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+          const int block_start = block * Params::block_size * Params::frames_per_bit;
+          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
             {
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
@@ -608,7 +614,7 @@ void
 truncate_to_block_size (WavData& wav_data)
 {
   vector<float> in_signal (wav_data.samples());
-  while (in_signal.size() % (wav_data.n_channels() * Params::frame_size * Params::block * Params::frames_per_bit))
+  while (in_signal.size() % (wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
     in_signal.pop_back();
 
   wav_data.set_samples (in_signal);
@@ -631,12 +637,12 @@ get_watermark (const string& infile, const string& orig_pattern)
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   if (Params::mix)
     {
-      for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
+      for (int block = 0; block < block_count (wav_data); block++)
         {
           vector<MixEntry> mix_entries = gen_mix_entries (block);
 
           double umag = 0, dmag = 0;
-          for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
             {
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
@@ -645,7 +651,7 @@ get_watermark (const string& infile, const string& orig_pattern)
                       int b = f * Params::bands_per_frame + frame_b;
                       const double min_db = -96;
 
-                      const int index = (block * (Params::block * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                      const int index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
                       const int u = mix_entries[b].up;
                       {
                         umag += db_from_factor (abs (fft_out[index][u]), min_db);
@@ -739,12 +745,12 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
       vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
       vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
 
-      for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
+      for (int block = 0; block < block_count (wav_data); block++)
       {
         vector<MixEntry> mix_entries = gen_mix_entries (block);
 
         double umag = 0, dmag = 0;
-        for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+        for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
           {
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
               {
@@ -753,7 +759,7 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
                     int b = f * Params::bands_per_frame + frame_b;
                     const double min_db = -96;
 
-                    const int index = (block * (Params::block * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                    const int index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
                     const int u = mix_entries[b].up;
                     {
                       umag += db_from_factor (abs (fft_out[index][u]), min_db);
