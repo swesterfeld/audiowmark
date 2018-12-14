@@ -353,63 +353,6 @@ watermark_mix2frame (vector<float>& frame, vector<complex<float>>& fft_delta_spe
     frame[i] += fft_delta_out[i] * synth_window[i];
 }
 
-vector<complex<float>>
-watermark_frame (const vector<float>& input_frame, int f, int data_bit)
-{
-  vector<float> frame = input_frame;
-
-  /* windowing */
-  double window_weight = 0;
-  for (size_t i = 0; i < frame.size(); i++)
-    {
-      const double fsize_2 = frame.size() / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      const double win = window_hamming ((i - fsize_2) / fsize_2);
-      //const double win = 1;
-      frame[i] *= win;
-      window_weight += win;
-    }
-
-  /* to get normalized fft output corrected by window weight */
-  for (size_t i = 0; i < frame.size(); i++)
-    frame[i] *= 2.0 / window_weight;
-
-  /* FFT transform */
-  vector<complex<float>> fft_out = fft (frame);
-
-  vector<complex<float>> fft_delta_spect (fft_out.size());
-
-  vector<int> up;
-  vector<int> down;
-  get_up_down (f, up, down);
-
-  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-  for (auto u : up)
-    {
-      /*
-       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-       *
-       * this actually increases the amount of energy because mag is less than 1.0
-       */
-      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
-
-      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
-    }
-  for (auto d : down)
-    {
-      /*
-       * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
-       *
-       * this actually decreases the amount of energy because mag is less than 1.0
-       */
-      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
-
-      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
-    }
-
-  return fft_delta_spect;
-}
-
 struct MixEntry
 {
   int  frame;
@@ -505,16 +448,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   vector<vector<complex<float>>> fft_delta_spect;
-
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
+        }
+    }
   if (Params::mix)
     {
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
-            }
-        }
       for (int block = 0; block < block_count (wav_data); block++)
         {
           vector<MixEntry> mix_entries = gen_mix_entries (block);
@@ -556,11 +498,36 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              vector<float> frame = get_frame (wav_data, f, ch);
+              size_t index = f * wav_data.n_channels() + ch;
+
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
 
               const int data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
+              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+              for (auto u : up)
+                {
+                  /*
+                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+                   *
+                   * this actually increases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
 
-              fft_delta_spect.push_back (watermark_frame (frame, f, data_bit));
+                  fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                }
+              for (auto d : down)
+                {
+                  /*
+                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+                   *
+                   * this actually decreases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+
+                  fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                }
             }
         }
     }
