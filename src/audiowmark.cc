@@ -620,6 +620,50 @@ truncate_to_block_size (WavData& wav_data)
   wav_data.set_samples (in_signal);
 }
 
+vector<int>
+mix_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+{
+  vector<int> bit_vec;
+
+  for (int block = 0; block < block_count (wav_data); block++)
+    {
+      vector<MixEntry> mix_entries = gen_mix_entries (block);
+
+      double umag = 0, dmag = 0;
+      for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
+        {
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            {
+              for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                {
+                  int b = f * Params::bands_per_frame + frame_b;
+                  const double min_db = -96;
+
+                  const size_t index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                  const int u = mix_entries[b].up;
+                  const int d = mix_entries[b].down;
+
+                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
+                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+
+                  if (index < fft_orig_out.size()) /* non-blind decode? */
+                    {
+                      umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+                      dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
+                    }
+                }
+            }
+          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+            {
+              bit_vec.push_back ((umag > dmag) ? 1 : 0);
+              umag = 0;
+              dmag = 0;
+            }
+        }
+    }
+  return bit_vec;
+}
+
 int
 get_watermark (const string& infile, const string& orig_pattern)
 {
@@ -637,39 +681,9 @@ get_watermark (const string& infile, const string& orig_pattern)
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   if (Params::mix)
     {
-      for (int block = 0; block < block_count (wav_data); block++)
-        {
-          vector<MixEntry> mix_entries = gen_mix_entries (block);
+      vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
 
-          double umag = 0, dmag = 0;
-          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-            {
-              for (int ch = 0; ch < wav_data.n_channels(); ch++)
-                {
-                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
-                    {
-                      int b = f * Params::bands_per_frame + frame_b;
-                      const double min_db = -96;
-
-                      const int index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                      const int u = mix_entries[b].up;
-                      {
-                        umag += db_from_factor (abs (fft_out[index][u]), min_db);
-                      }
-                      const int d = mix_entries[b].down;
-                      {
-                        dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-                      }
-                    }
-                }
-              if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-                {
-                  bit_vec.push_back ((umag > dmag) ? 1 : 0);
-                  umag = 0;
-                  dmag = 0;
-                }
-            }
-        }
+      mix_decode (wav_data, fft_out, fft_orig_out);
     }
   else
     {
@@ -745,41 +759,7 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
       vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
       vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
 
-      for (int block = 0; block < block_count (wav_data); block++)
-      {
-        vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-        double umag = 0, dmag = 0;
-        for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-          {
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
-              {
-                for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
-                  {
-                    int b = f * Params::bands_per_frame + frame_b;
-                    const double min_db = -96;
-
-                    const int index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                    const int u = mix_entries[b].up;
-                    {
-                      umag += db_from_factor (abs (fft_out[index][u]), min_db);
-                      umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-                    }
-                    const int d = mix_entries[b].down;
-                    {
-                      dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-                      dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-                    }
-                  }
-              }
-            if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-              {
-                bit_vec.push_back ((umag > dmag) ? 1 : 0);
-                umag = 0;
-                dmag = 0;
-              }
-          }
-        }
+      bit_vec = mix_decode (wav_data, fft_out, fft_orig_out);
   }
   else
     {
