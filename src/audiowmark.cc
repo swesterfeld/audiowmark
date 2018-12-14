@@ -664,6 +664,47 @@ mix_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, ve
   return bit_vec;
 }
 
+vector<int>
+linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+{
+  vector<int> bit_vec;
+
+  double umag = 0, dmag = 0;
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          const size_t index = f * wav_data.n_channels() + ch;
+          vector<int> up;
+          vector<int> down;
+          get_up_down (f, up, down);
+
+          const double min_db = -96;
+          for (auto u : up)
+            {
+              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+
+              if (index < fft_orig_out.size())
+                umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+            }
+          for (auto d : down)
+            {
+              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+
+              if (index < fft_orig_out.size())
+                dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
+            }
+        }
+      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+        {
+          bit_vec.push_back ((umag > dmag) ? 1 : 0);
+          umag = 0;
+          dmag = 0;
+        }
+    }
+  return bit_vec;
+}
+
 int
 get_watermark (const string& infile, const string& orig_pattern)
 {
@@ -679,41 +720,15 @@ get_watermark (const string& infile, const string& orig_pattern)
   truncate_to_block_size (wav_data);
 
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+  vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
+
   if (Params::mix)
     {
-      vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
-
       bit_vec = mix_decode (wav_data, fft_out, fft_orig_out);
     }
   else
     {
-      double umag = 0, dmag = 0;
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              const int index = f * wav_data.n_channels() + ch;
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const double min_db = -96;
-              for (auto u : up)
-                {
-                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
-                }
-              for (auto d : down)
-                {
-                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-                }
-            }
-          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-            {
-              bit_vec.push_back ((umag > dmag) ? 1 : 0);
-              umag = 0;
-              dmag = 0;
-            }
-        }
+      bit_vec = linear_decode (wav_data, fft_out, fft_orig_out);
     }
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
   if (!orig_pattern.empty())
@@ -763,39 +778,7 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
     }
   else
     {
-      double umag = 0, dmag = 0;
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              const size_t index = f * wav_data.n_channels() + ch;
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const double min_db = -96;
-              for (auto u : up)
-                {
-                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
-
-                  if (index < fft_orig_out.size())
-                    umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-                }
-              for (auto d : down)
-                {
-                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-                  if (index < fft_orig_out.size())
-                    dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-                }
-            }
-          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-            {
-              bit_vec.push_back ((umag > dmag) ? 1 : 0);
-              umag = 0;
-              dmag = 0;
-            }
-        }
+      bit_vec = linear_decode (wav_data, fft_out, fft_orig_out);
     }
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
   if (!orig_pattern.empty())
