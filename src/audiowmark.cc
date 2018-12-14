@@ -604,23 +604,29 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   return 0;
 }
 
+void
+truncate_to_block_size (WavData& wav_data)
+{
+  vector<float> in_signal (wav_data.samples());
+  while (in_signal.size() % (wav_data.n_channels() * Params::frame_size * Params::block * Params::frames_per_bit))
+    in_signal.pop_back();
+
+  wav_data.set_samples (in_signal);
+}
+
 int
 get_watermark (const string& infile, const string& orig_pattern)
 {
-  WavData in_wav_data;
-  if (!in_wav_data.load (infile))
+  WavData wav_data;
+  if (!wav_data.load (infile))
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), in_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
   vector<int> bit_vec;
 
   // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block * Params::frames_per_bit))
-    in_signal.pop_back();
-
-  WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
+  truncate_to_block_size (wav_data);
 
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   if (Params::mix)
@@ -716,54 +722,95 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
       return 1;
     }
 
-  WavData in_wav_data;
-  if (!in_wav_data.load (infile))
+  WavData wav_data;
+  if (!wav_data.load (infile))
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), in_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
 
   // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block * Params::frames_per_bit))
-    in_signal.pop_back();
-
-  WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
+  truncate_to_block_size (wav_data);
+  truncate_to_block_size (orig_wav_data);
 
   vector<int> bit_vec;
-  double error0 = 0;
-  double error1 = 0;
-
-  for (int f = 0; f < frame_count (wav_data); f++)
+  if (Params::mix)
     {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+      vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
+
+      for (int block = 0; block < frame_count (wav_data) / (Params::block * Params::frames_per_bit); block++)
+      {
+        vector<MixEntry> mix_entries = gen_mix_entries (block);
+
+        double umag = 0, dmag = 0;
+        for (int f = 0; f < Params::block * Params::frames_per_bit; f++)
+          {
+            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              {
+                for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                  {
+                    int b = f * Params::bands_per_frame + frame_b;
+                    const double min_db = -96;
+
+                    const int index = (block * (Params::block * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                    const int u = mix_entries[b].up;
+                    {
+                      umag += db_from_factor (abs (fft_out[index][u]), min_db);
+                      umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+                    }
+                    const int d = mix_entries[b].down;
+                    {
+                      dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+                      dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
+                    }
+                  }
+              }
+            if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+              {
+                bit_vec.push_back ((umag > dmag) ? 1 : 0);
+                umag = 0;
+                dmag = 0;
+              }
+          }
+        }
+  }
+  else
+    {
+      double error0 = 0;
+      double error1 = 0;
+
+      for (int f = 0; f < frame_count (wav_data); f++)
         {
-          /* prescale original data (may want to do energy normalization or similar instead) */
-          vector<float> orig_frame = get_frame (orig_wav_data, f, ch);
-          for (auto& orig_value : orig_frame)
-            orig_value *= Params::pre_scale;
-          vector<float> frame = get_frame (wav_data, f, ch);
-
-          if (frame.size() == Params::frame_size)
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              vector<float> f0 = watermark_frame (orig_frame, f, 0);
-              vector<float> f1 = watermark_frame (orig_frame, f, 1);
+              /* prescale original data (may want to do energy normalization or similar instead) */
+              vector<float> orig_frame = get_frame (orig_wav_data, f, ch);
+              for (auto& orig_value : orig_frame)
+                orig_value *= Params::pre_scale;
+              vector<float> frame = get_frame (wav_data, f, ch);
 
-              for (size_t i = 0; i < frame.size(); i++)
+              if (frame.size() == Params::frame_size)
                 {
-                  const double delta0 = frame[i] - f0[i];
-                  error0 += delta0 * delta0;
+                  vector<float> f0 = watermark_frame (orig_frame, f, 0);
+                  vector<float> f1 = watermark_frame (orig_frame, f, 1);
 
-                  const double delta1 = frame[i] - f1[i];
-                  error1 += delta1 * delta1;
+                  for (size_t i = 0; i < frame.size(); i++)
+                    {
+                      const double delta0 = frame[i] - f0[i];
+                      error0 += delta0 * delta0;
+
+                      const double delta1 = frame[i] - f1[i];
+                      error1 += delta1 * delta1;
+                    }
                 }
             }
-        }
-      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-        {
-          bit_vec.push_back ((error0 > error1) ? 1 : 0);
-          error0 = 0;
-          error1 = 0;
+          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+            {
+              bit_vec.push_back ((error0 > error1) ? 1 : 0);
+              error0 = 0;
+              error1 = 0;
+            }
         }
     }
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
