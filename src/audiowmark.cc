@@ -331,28 +331,6 @@ bit_vec_to_str (const vector<int>& bit_vec)
   return bit_str;
 }
 
-void
-watermark_mix2frame (vector<float>& frame, vector<complex<float>>& fft_delta_spect)
-{
-  /* mix watermark signal to output frame */
-  vector<float> fft_delta_out = ifft (fft_delta_spect);
-
-  vector<float> synth_window (Params::frame_size);
-  for (size_t i = 0; i < Params::frame_size; i++)
-    {
-      const double threshold = 0.2;
-
-      // triangular basic window
-      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
-
-      // cosine
-      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-    }
-
-  for (size_t i = 0; i < frame.size(); i++)
-    frame[i] += fft_delta_out[i] * synth_window[i];
-}
-
 struct MixEntry
 {
   int  frame;
@@ -531,13 +509,32 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             }
         }
     }
+
+  /* generate synthesis window */
+  vector<float> synth_window (Params::frame_size);
+  for (size_t i = 0; i < Params::frame_size; i++)
+    {
+      const double threshold = 0.2;
+
+      // triangular basic window
+      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
+
+      // cosine
+      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+    }
+
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           /* add watermark to output frame */
           vector<float> frame = get_frame (wav_data, f, ch);
-          watermark_mix2frame (frame, fft_delta_spect[f * wav_data.n_channels() + ch]);
+
+          /* mix watermark signal to output frame */
+          vector<float> fft_delta_out = ifft (fft_delta_spect[f * wav_data.n_channels() + ch]);
+
+          for (size_t i = 0; i < frame.size(); i++)
+            frame[i] += fft_delta_out[i] * synth_window[i];
 
           /* modify out signal */
           for (size_t i = 0; i < frame.size(); i++)
