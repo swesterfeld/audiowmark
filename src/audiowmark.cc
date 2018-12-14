@@ -683,7 +683,7 @@ get_watermark (const string& infile, const string& orig_pattern)
     {
       vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
 
-      mix_decode (wav_data, fft_out, fft_orig_out);
+      bit_vec = mix_decode (wav_data, fft_out, fft_orig_out);
     }
   else
     {
