@@ -753,49 +753,47 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
   truncate_to_block_size (wav_data);
   truncate_to_block_size (orig_wav_data);
 
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+  vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
+
   vector<int> bit_vec;
   if (Params::mix)
     {
-      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
-      vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
-
       bit_vec = mix_decode (wav_data, fft_out, fft_orig_out);
-  }
+    }
   else
     {
-      double error0 = 0;
-      double error1 = 0;
-
+      double umag = 0, dmag = 0;
       for (int f = 0; f < frame_count (wav_data); f++)
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              /* prescale original data (may want to do energy normalization or similar instead) */
-              vector<float> orig_frame = get_frame (orig_wav_data, f, ch);
-              for (auto& orig_value : orig_frame)
-                orig_value *= Params::pre_scale;
-              vector<float> frame = get_frame (wav_data, f, ch);
+              const size_t index = f * wav_data.n_channels() + ch;
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
 
-              if (frame.size() == Params::frame_size)
+              const double min_db = -96;
+              for (auto u : up)
                 {
-                  vector<float> f0 = watermark_frame (orig_frame, f, 0);
-                  vector<float> f1 = watermark_frame (orig_frame, f, 1);
+                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
 
-                  for (size_t i = 0; i < frame.size(); i++)
-                    {
-                      const double delta0 = frame[i] - f0[i];
-                      error0 += delta0 * delta0;
+                  if (index < fft_orig_out.size())
+                    umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+                }
+              for (auto d : down)
+                {
+                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
 
-                      const double delta1 = frame[i] - f1[i];
-                      error1 += delta1 * delta1;
-                    }
+                  if (index < fft_orig_out.size())
+                    dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
                 }
             }
           if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
             {
-              bit_vec.push_back ((error0 > error1) ? 1 : 0);
-              error0 = 0;
-              error1 = 0;
+              bit_vec.push_back ((umag > dmag) ? 1 : 0);
+              umag = 0;
+              dmag = 0;
             }
         }
     }
