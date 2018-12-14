@@ -503,10 +503,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+  vector<vector<complex<float>>> fft_delta_spect;
+
   if (Params::mix)
     {
-      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
-      vector<vector<complex<float>>> fft_delta_spect;
       for (int f = 0; f < frame_count (wav_data); f++)
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -548,19 +549,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             }
         }
 
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              /* add watermark to output frame */
-              vector<float> frame = get_frame (wav_data, f, ch);
-              watermark_mix2frame (frame, fft_delta_spect[f * wav_data.n_channels() + ch]);
-
-              /* modify out signal */
-              for (size_t i = 0; i < frame.size(); i++)
-                out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = frame[i] * Params::pre_scale;
-            }
-        }
     }
   else
     {
@@ -572,12 +560,21 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
               const int data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
 
-              vector<complex<float>> delta_spect = watermark_frame (frame, f, data_bit);
-              watermark_mix2frame (frame, delta_spect);
-
-              for (size_t i = 0; i < frame.size(); i++)
-                out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = frame[i] * Params::pre_scale;
+              fft_delta_spect.push_back (watermark_frame (frame, f, data_bit));
             }
+        }
+    }
+  for (int f = 0; f < frame_count (wav_data); f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          /* add watermark to output frame */
+          vector<float> frame = get_frame (wav_data, f, ch);
+          watermark_mix2frame (frame, fft_delta_spect[f * wav_data.n_channels() + ch]);
+
+          /* modify out signal */
+          for (size_t i = 0; i < frame.size(); i++)
+            out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = frame[i] * Params::pre_scale;
         }
     }
 
