@@ -362,27 +362,36 @@ compute_frame_ffts (const WavData& wav_data)
 {
   vector<vector<complex<float>>> fft_out;
 
+  /* generate analysis window */
+  vector<float> window (Params::frame_size);
+
+  double window_weight = 0;
+  for (size_t i = 0; i < Params::frame_size; i++)
+    {
+      const double fsize_2 = Params::frame_size / 2.0;
+      // const double win =  window_cos ((i - fsize_2) / fsize_2);
+      const double win = window_hamming ((i - fsize_2) / fsize_2);
+      //const double win = 1;
+      window[i] = win;
+      window_weight += win;
+    }
+
+  /* normalize window using window weight */
+  for (size_t i = 0; i < Params::frame_size; i++)
+    {
+      window[i] *= 2.0 / window_weight;
+    }
+
+
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           vector<float> frame = get_frame (wav_data, f, ch);
 
-          /* windowing */
-          double window_weight = 0;
+          /* apply window */
           for (size_t i = 0; i < frame.size(); i++)
-            {
-              const double fsize_2 = frame.size() / 2.0;
-              // const double win =  window_cos ((i - fsize_2) / fsize_2);
-              const double win = window_hamming ((i - fsize_2) / fsize_2);
-              //const double win = 1;
-              frame[i] *= win;
-              window_weight += win;
-            }
-
-          /* to get normalized fft output corrected by window weight */
-          for (size_t i = 0; i < frame.size(); i++)
-            frame[i] *= 2.0 / window_weight;
+            frame[i] *= window[i];
 
           /* FFT transform */
           fft_out.push_back (fft (frame));
