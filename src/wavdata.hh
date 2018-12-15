@@ -25,6 +25,8 @@ public:
   int                         bit_depth() const;
   const std::vector<float>&   samples() const;
   const char                 *error_blurb() const;
+
+  void set_samples (const std::vector<float>& samples);
 };
 
 #endif /* AUDIOWMARK_WAV_DATA_HH */

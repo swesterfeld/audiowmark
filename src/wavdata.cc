@@ -203,6 +203,12 @@ WavData::samples() const
   return m_samples;
 }
 
+void
+WavData::set_samples (const vector<float>& samples)
+{
+  m_samples = samples;
+}
+
 size_t
 WavData::n_values() const
 {
