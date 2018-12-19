@@ -76,17 +76,9 @@ conv_decode (const vector<int>& coded_bits)
   };
   vector<vector<StateEntry>> error_count;
   for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
-    {
-      vector<StateEntry> state_table;
-      for (unsigned s = 0; s < state_count; s++)
-        {
-          if (s == 0 && i == 0)
-            state_table.push_back ({0,0});
-          else
-            state_table.push_back ({-1,-1});
-        }
-      error_count.push_back (state_table);
-    }
+    error_count.emplace_back (state_count, StateEntry {0, -1, 0});
+
+  error_count[0][0].delta = 0; /* start state */
 
   /* precompute state -> output bits table */
   vector<uint8_t> state2bits;
