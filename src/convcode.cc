@@ -1,10 +1,12 @@
 #include "utils.hh"
 
 #include <array>
+#include <algorithm>
 #include <assert.h>
 
 using std::vector;
 using std::string;
+using std::min;
 
 int
 parity (unsigned int v)
@@ -22,6 +24,9 @@ parity (unsigned int v)
 constexpr  unsigned int rate        = 3;
 constexpr  unsigned int order       = 9;
 constexpr  auto         generators  = std::array<unsigned,3> { 0557, 0663, 0711 };
+
+constexpr  unsigned int state_count = (1 << order);
+constexpr  unsigned int state_mask  = (1 << order) - 1;
 
 vector<int>
 conv_encode (const vector<int>& in_bits)
@@ -55,32 +60,70 @@ conv_decode (const vector<int>& coded_bits)
 
   assert (coded_bits.size() % rate == 0);
 
-  int state = 0;
+  struct StateEntry
+  {
+    int last_state;
+    int delta;
+    int bit;
+  };
+  vector<vector<StateEntry>> error_count;
+  for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
+    {
+      vector<StateEntry> state_table;
+      for (unsigned s = 0; s < state_count; s++)
+        {
+          if (s == 0 && i == 0)
+            state_table.push_back ({0,0});
+          else
+            state_table.push_back ({-1,-1});
+        }
+      error_count.push_back (state_table);
+    }
 
   for (size_t i = 0; i < coded_bits.size(); i += rate)
     {
-      int best_delta = order;
-      int best_bit = 0;
-      for (int bit = 0; bit < 2; bit++)
-        {
-          int new_state = (state << 1) | bit;
-          int delta = 0;
+      vector<StateEntry>& old_table = error_count[i / rate];
+      vector<StateEntry>& new_table = error_count[i / rate + 1];
 
-          for (size_t p = 0; p < generators.size(); p++)
+      for (unsigned int state = 0; state < state_count; state++)
+        {
+          /* this check enforces that we only consider states reachable from state=0 at time=0*/
+          if (old_table[state].delta >= 0)
             {
-              int out_bit = parity (new_state & generators[p]);
-              if (out_bit != coded_bits[i + p])
-                delta += 1;
-            }
-          if (delta < best_delta)
-            {
-              best_bit = bit;
-              best_delta = delta;
+              for (int bit = 0; bit < 2; bit++)
+                {
+                  int new_state = ((state << 1) | bit) & state_mask;
+
+                  int delta = old_table[state].delta;
+                  for (size_t p = 0; p < generators.size(); p++)
+                    {
+                      int out_bit = parity (new_state & generators[p]);
+                      if (out_bit != coded_bits[i + p])
+                        delta += 1;
+                    }
+                  if (delta < new_table[new_state].delta || new_table[new_state].delta < 0) /* better match with this link? replace entry */
+                    {
+                      new_table[new_state].delta      = delta;
+                      new_table[new_state].last_state = state;
+                      new_table[new_state].bit        = bit;
+                    }
+                }
             }
         }
-      decoded_bits.push_back (best_bit);
-      state = (state << 1) | best_bit;
     }
+
+  size_t idx = error_count.size() - 1;
+  unsigned int state = 0;
+  do
+    {
+      int state = error_count[idx][state].last_state;
+      int bit   = error_count[idx][state].bit;
+      decoded_bits.push_back (bit);
+      idx--;
+    }
+  while (idx > 1);
+  std::reverse (decoded_bits.begin(), decoded_bits.end());
+  decoded_bits.push_back (0);
 
   /* remove termination */
   assert (decoded_bits.size() >= order);
@@ -122,7 +165,6 @@ main (int argc, char **argv)
       for (auto b : coded_bits)
         printf ("%d", b);
       printf ("\n");
-
       printf ("coded hex: %s\n", bit_vec_to_str (coded_bits).c_str());
 
       vector<int> decoded_bits = conv_decode (coded_bits);
@@ -130,6 +172,13 @@ main (int argc, char **argv)
       for (auto b : decoded_bits)
         printf ("%d", b);
       printf ("\n");
+
+      assert (decoded_bits.size() == in_bits.size());
+      int errors = 0;
+      for (size_t i = 0; i < decoded_bits.size(); i++)
+        if (decoded_bits[i] != in_bits[i])
+          errors++;
+      printf ("decoding errors: %d\n", errors);
     }
   if (argc == 2 && string (argv[1]) == "error")
     {
