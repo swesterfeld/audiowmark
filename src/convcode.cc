@@ -123,16 +123,13 @@ conv_decode (const vector<int>& coded_bits)
         }
     }
 
-  size_t idx = error_count.size() - 1;
   unsigned int state = 0;
-  do
+  for (size_t idx = error_count.size() - 1; idx > 0; idx--)
     {
       decoded_bits.push_back (error_count[idx][state].bit);
 
       state = error_count[idx][state].last_state;
-      idx--;
     }
-  while (idx > 0);
   std::reverse (decoded_bits.begin(), decoded_bits.end());
 
   /* remove termination */
