@@ -204,7 +204,7 @@ main (int argc, char **argv)
         {
           size_t coded_bit_count = 0;
           int bad_decode = 0;
-          constexpr int test_size = 1000;
+          constexpr int test_size = 20;
 
           for (int i = 0; i < test_size; i++)
             {
