@@ -704,6 +704,7 @@ get_watermark (const string& infile, const string& orig_pattern)
           if (bit_vec[i] != orig_vec[i % orig_vec.size()])
             bit_errors++;
         }
+      printf ("bit_error_raw %d %d\n", bit_errors, bits);
       printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
     }
   return 0;
@@ -754,6 +755,7 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
           if (bit_vec[i] != orig_vec[i % orig_vec.size()])
             bit_errors++;
         }
+      printf ("bit_error_raw %d %d\n", bit_errors, bits);
       printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
     }
   return 0;
@@ -773,9 +775,9 @@ gentest (const string& infile, const string& outfile)
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
 
-  /* 10 seconds of audio - starting at 30 seconds of the original track */
+  /* 30 seconds of audio - starting at 30 seconds of the original track */
   const size_t offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
-  const size_t n_samples = 10 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t n_samples = 38 * wav_data.n_channels() * int (wav_data.mix_freq());
   if (in_signal.size() < (offset + n_samples))
     {
       fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
