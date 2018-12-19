@@ -22,12 +22,12 @@ parity (unsigned int v)
 }
 
 constexpr  unsigned int rate        = 3;
+/*
 constexpr  unsigned int order       = 9;
 constexpr  auto         generators  = std::array<unsigned,3> { 0557, 0663, 0711 };
-/*
+*/
 constexpr  unsigned int order       = 14;
 constexpr  auto         generators  = std::array<unsigned,3> { 021645, 035661, 037133 };
-*/
 /*
 constexpr  unsigned int order       = 18;
 constexpr  auto         generators  = std::array<unsigned,3> { 0552137, 0614671, 0772233 };
@@ -88,6 +88,17 @@ conv_decode (const vector<int>& coded_bits)
       error_count.push_back (state_table);
     }
 
+  /* precompute state -> output bits table */
+  vector<uint8_t> state2bits;
+  for (unsigned int state = 0; state < state_count; state++)
+    {
+      for (size_t p = 0; p < generators.size(); p++)
+        {
+          int out_bit = parity (state & generators[p]);
+          state2bits.push_back (out_bit);
+        }
+    }
+
   for (size_t i = 0; i < coded_bits.size(); i += rate)
     {
       vector<StateEntry>& old_table = error_count[i / rate];
@@ -103,12 +114,12 @@ conv_decode (const vector<int>& coded_bits)
                   int new_state = ((state << 1) | bit) & state_mask;
 
                   int delta = old_table[state].delta;
+                  int sbit_pos = new_state * rate;
+
+                  /* hamming distance between produced bits and coded bits */
                   for (size_t p = 0; p < generators.size(); p++)
-                    {
-                      int out_bit = parity (new_state & generators[p]);
-                      if (out_bit != coded_bits[i + p])
-                        delta += 1;
-                    }
+                    delta += state2bits[sbit_pos + p] ^ coded_bits[i + p];
+
                   if (delta < new_table[new_state].delta || new_table[new_state].delta < 0) /* better match with this link? replace entry */
                     {
                       new_table[new_state].delta      = delta;
