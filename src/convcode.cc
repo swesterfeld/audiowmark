@@ -104,10 +104,10 @@ conv_decode_soft (const vector<float>& coded_bits)
             {
               for (int bit = 0; bit < 2; bit++)
                 {
-                  int new_state = ((state << 1) | bit) & state_mask;
+                  int   new_state = ((state << 1) | bit) & state_mask;
 
-                  int delta = old_table[state].delta;
-                  int sbit_pos = new_state * rate;
+                  float delta = old_table[state].delta;
+                  int   sbit_pos = new_state * rate;
 
                   for (size_t p = 0; p < generators.size(); p++)
                     {
