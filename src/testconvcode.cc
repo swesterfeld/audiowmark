@@ -41,7 +41,7 @@ main (int argc, char **argv)
       printf ("\n");
       printf ("coded hex: %s\n", bit_vec_to_str (coded_bits).c_str());
 
-      vector<int> decoded_bits = conv_decode (coded_bits);
+      vector<int> decoded_bits = conv_decode_hard (coded_bits);
       printf ("output vector (k=%zd): ", decoded_bits.size());
       for (auto b : decoded_bits)
         printf ("%d", b);
@@ -75,7 +75,7 @@ main (int argc, char **argv)
               for (size_t pos = 0; pos < coded_bits.size(); pos++)
                 coded_bits[pos] ^= error_bits[pos];
 
-              vector<int> decoded_bits = conv_decode (coded_bits);
+              vector<int> decoded_bits = conv_decode_hard (coded_bits);
 
               assert (decoded_bits.size() == 128);
 

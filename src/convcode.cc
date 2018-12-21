@@ -61,8 +61,9 @@ conv_encode (const vector<int>& in_bits)
   return out_vec;
 }
 
+/* decode using viterbi algorithm */
 vector<int>
-conv_decode (const vector<int>& coded_bits)
+conv_decode_soft (const vector<float>& coded_bits)
 {
   vector<int> decoded_bits;
 
@@ -70,9 +71,9 @@ conv_decode (const vector<int>& coded_bits)
 
   struct StateEntry
   {
-    int last_state;
-    int delta;
-    int bit;
+    int   last_state;
+    float delta;
+    int   bit;
   };
   vector<vector<StateEntry>> error_count;
   for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
@@ -108,9 +109,14 @@ conv_decode (const vector<int>& coded_bits)
                   int delta = old_table[state].delta;
                   int sbit_pos = new_state * rate;
 
-                  /* hamming distance between produced bits and coded bits */
                   for (size_t p = 0; p < generators.size(); p++)
-                    delta += state2bits[sbit_pos + p] ^ coded_bits[i + p];
+                    {
+                      const float cbit = coded_bits[i + p];
+                      const float sbit = state2bits[sbit_pos + p];
+
+                      /* decoding error weight for this bit; if input is only 0.0 and 1.0, this is the hamming distance */
+                      delta += (cbit - sbit) * (cbit - sbit);
+                    }
 
                   if (delta < new_table[new_state].delta || new_table[new_state].delta < 0) /* better match with this link? replace entry */
                     {
@@ -137,4 +143,18 @@ conv_decode (const vector<int>& coded_bits)
   decoded_bits.resize (decoded_bits.size() - order);
 
   return decoded_bits;
+}
+
+vector<int>
+conv_decode_hard (const vector<int>& coded_bits)
+{
+  /* for the final application, we always want soft decoding, so we don't
+   * special case hard decoding here, so this will be a little slower than
+   * necessary
+   */
+  vector<float> soft_bits;
+  for (auto b : coded_bits)
+    soft_bits.push_back (b ? 1.0f : 0.0f);
+
+  return conv_decode_soft (soft_bits);
 }
