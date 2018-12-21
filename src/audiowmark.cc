@@ -7,6 +7,7 @@
 #include "fft.hh"
 #include "wavdata.hh"
 #include "utils.hh"
+#include "convcode.hh"
 
 #include <assert.h>
 
@@ -29,6 +30,7 @@ namespace Params
   static bool mix              = true;
   static int block_size        = 32;    // block size for mix step (non-linear bit storage)
   static unsigned int seed     = 0;
+  static size_t payload_size   = 128;  // number of payload bits for the watermark
 }
 
 void
@@ -359,6 +361,21 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: cannot parse bits %s\n", bits.c_str());
       return 1;
     }
+  if (bitvec.size() > Params::payload_size)
+    {
+      fprintf (stderr, "audiowmark: number of bits in message '%s' larger than payload size\n", bits.c_str());
+      return 1;
+    }
+  if (bitvec.size() < Params::payload_size)
+    {
+      /* expand message automatically; good for testing, maybe not so good for the final product */
+      vector<int> expanded_bitvec;
+      for (size_t i = 0; i < Params::payload_size; i++)
+        expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
+      bitvec = expanded_bitvec;
+    }
+  /* add forward error correction, bitvec will now be a lot larger */
+  bitvec = conv_encode (bitvec);
 
   printf ("loading %s\n", infile.c_str());
 
@@ -642,6 +659,17 @@ get_watermark (const string& infile, const string& orig_pattern)
     {
       bit_vec = linear_decode (wav_data, fft_out, fft_orig_out);
     }
+  if (bit_vec.size() < conv_code_size (Params::payload_size))
+    {
+      fprintf (stderr, "audiowmark: input file too short to retrieve watermark\n");
+      fprintf (stderr, " - number of recovered raw bits %zd\n", bit_vec.size());
+      fprintf (stderr, " - need at least %zd raw bits to get watermark\n", conv_code_size (Params::payload_size));
+      return 1;
+    }
+  /* truncate to the required length */
+  bit_vec.resize (conv_code_size (Params::payload_size));
+  bit_vec = conv_decode_hard (bit_vec);
+
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
   if (!orig_pattern.empty())
     {
@@ -725,9 +753,10 @@ gentest (const string& infile, const string& outfile)
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
 
-  /* 30 seconds of audio - starting at 30 seconds of the original track */
+  /* 42 seconds of audio - starting at 30 seconds of the original track */
+  /* this is approximately the minimal amount of audio data required for storing a 128-bit encoded message */
   const size_t offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
-  const size_t n_samples = 38 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t n_samples = 42 * wav_data.n_channels() * int (wav_data.mix_freq());
   if (in_signal.size() < (offset + n_samples))
     {
       fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
