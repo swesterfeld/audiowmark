@@ -36,6 +36,12 @@ constexpr  auto         generators  = std::array<unsigned,3> { 0552137, 0614671,
 constexpr  unsigned int state_count = (1 << order);
 constexpr  unsigned int state_mask  = (1 << order) - 1;
 
+size_t
+conv_code_size (size_t msg_size)
+{
+  return (msg_size + order) * rate;
+}
+
 vector<int>
 conv_encode (const vector<int>& in_bits)
 {

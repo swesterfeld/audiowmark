@@ -43,6 +43,8 @@ main (int argc, char **argv)
       printf ("\n");
       printf ("coded hex: %s\n", bit_vec_to_str (coded_bits).c_str());
 
+      assert (coded_bits.size() == conv_code_size (in_bits.size()));
+
       vector<int> decoded_bits = conv_decode_hard (coded_bits);
       printf ("output vector (k=%zd): ", decoded_bits.size());
       for (auto b : decoded_bits)
