@@ -21,7 +21,7 @@ using std::min;
 namespace Params
 {
   static size_t frame_size      = 1024;
-  static int    frames_per_bit  = 4;
+  static int    frames_per_bit  = 2;
   static size_t bands_per_frame = 30;
   static int max_band          = 100;
   static int min_band          = 20;

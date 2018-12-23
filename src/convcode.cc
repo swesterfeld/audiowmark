@@ -21,14 +21,19 @@ parity (unsigned int v)
   return p;
 }
 
-constexpr  unsigned int rate        = 3;
+// rate 1/6 code generator poynomial from "In search of a 2dB Coding Gain", Yuen and Vo
+// minimum free distance 56
+constexpr  unsigned int rate        = 6;
+constexpr  unsigned int order       = 15;
+constexpr  auto         generators  = std::array<unsigned,6> { 046321, 051271, 070535, 063667, 073277, 076531 };
+
 /*
 constexpr  unsigned int order       = 9;
 constexpr  auto         generators  = std::array<unsigned,3> { 0557, 0663, 0711 };
-*/
+
 constexpr  unsigned int order       = 14;
 constexpr  auto         generators  = std::array<unsigned,3> { 021645, 035661, 037133 };
-/*
+
 constexpr  unsigned int order       = 18;
 constexpr  auto         generators  = std::array<unsigned,3> { 0552137, 0614671, 0772233 };
 */
