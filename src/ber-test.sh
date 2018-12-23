@@ -1,4 +1,4 @@
-# pseudo random pattern
+# pseudo random pattern, 128 bit
 
 PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
 TRANSFORM=$1
@@ -7,6 +7,9 @@ if [ "x$AWM_SET" == "x" ]; then
 fi
 if [ "x$AWM_SEEDS" == "x" ]; then
   AWM_SEEDS=0
+fi
+if [ "x$AWM_REPORT" == "x" ]; then
+  AWM_REPORT=ber
 fi
 
 {
@@ -76,4 +79,13 @@ do
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --seed $SEED
   done
-done | grep bit_error_rate | awk 'BEGIN { max_er = er = n = 0 } { er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
+done | grep bit_error_rate | {
+  if [ "x$AWM_REPORT" == "xber" ]; then
+    awk 'BEGIN { max_er = er = n = 0 } { er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
+  elif [ "x$AWM_REPORT" == "xfer" ]; then
+    awk 'BEGIN { bad = n = 0 } { if ($2 > 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+  else
+    echo "unknown report $AWM_REPORT" >&2
+    exit 1
+  fi
+}

@@ -1,8 +1,9 @@
-MAX_SEED=$1
+SEEDS="$1"
+MAX_SEED=$(($SEEDS - 1))
 P1="$2"
 P2="$3"
 shift 3
-echo "max seed      : $MAX_SEED"
+echo "n seeds       : $SEEDS"
 echo "ber-test args : $@"
 echo "left          : $P1"
 echo "right         : $P2"
