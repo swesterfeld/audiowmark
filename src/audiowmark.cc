@@ -287,6 +287,26 @@ gen_shuffle (vector<T>& result, int seed)
     }
 }
 
+template<class T> vector<T>
+randomize_bit_order (const vector<T>& bit_vec, bool encode)
+{
+  vector<unsigned int> order;
+
+  for (size_t i = 0; i < bit_vec.size(); i++)
+    order.push_back (i);
+
+  gen_shuffle (order, /* seed */ 0);
+
+  vector<T> out_bits (bit_vec.size());
+  for (size_t i = 0; i < bit_vec.size(); i++)
+    {
+      if (encode)
+        out_bits[i] = bit_vec[order[i]];
+      else
+        out_bits[order[i]] = bit_vec[i];
+    }
+  return out_bits;
+}
 
 struct MixEntry
 {
@@ -380,7 +400,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       bitvec = expanded_bitvec;
     }
   /* add forward error correction, bitvec will now be a lot larger */
-  bitvec = conv_encode (bitvec);
+  bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
 
   printf ("loading %s\n", infile.c_str());
 
@@ -688,7 +708,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<v
   /* truncate to the required length */
   soft_bit_vec.resize (conv_code_size (Params::payload_size));
 
-  vector<int> bit_vec = conv_decode_soft (soft_bit_vec);
+  vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
 
   printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
   if (!orig_pattern.empty())
