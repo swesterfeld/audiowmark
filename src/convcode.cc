@@ -93,7 +93,7 @@ conv_decode_soft (const vector<float>& coded_bits)
   error_count[0][0].delta = 0; /* start state */
 
   /* precompute state -> output bits table */
-  vector<uint8_t> state2bits;
+  vector<float> state2bits;
   for (unsigned int state = 0; state < state_count; state++)
     {
       for (size_t p = 0; p < generators.size(); p++)
