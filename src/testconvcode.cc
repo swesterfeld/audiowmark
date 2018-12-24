@@ -4,9 +4,19 @@
 #include <random>
 
 #include <assert.h>
+#include <sys/time.h>
 
 using std::vector;
 using std::string;
+
+static double
+gettime()
+{
+  timeval tv;
+  gettimeofday (&tv, 0);
+
+  return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
 
 vector<int>
 generate_error_vector (size_t n, int errors)
@@ -148,5 +158,20 @@ main (int argc, char **argv)
             }
           printf ("%f %f %f\n", double (100 * local_be) / test_size / coded_bit_count, (100.0 * bad_decode1) / test_size, (100.0 * bad_decode2) / test_size);
         }
+    }
+  if (argc == 2 && string (argv[1]) == "perf")
+    {
+      vector<int> in_bits;
+      while (in_bits.size() != 128)
+        in_bits.push_back (rand() & 1);
+
+      const double start_t = gettime();
+      const size_t runs = 20;
+      for (size_t i = 0; i < runs; i++)
+        {
+          vector<int> out_bits = conv_decode_hard (conv_encode (in_bits));
+          assert (out_bits == in_bits);
+        }
+      printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);
     }
 }
