@@ -11,12 +11,17 @@ fi
 if [ "x$AWM_REPORT" == "x" ]; then
   AWM_REPORT=ber
 fi
+if [ "x$AWM_FILE" == "x" ]; then
+  AWM_FILE=t
+fi
 
 {
   if [ "x$AWM_SET" == "xsmall" ]; then
     ls test/T*
   elif [ "x$AWM_SET" == "xbig" ]; then
     cat test_list
+  elif [ "x$AWM_SET" == "xhuge" ]; then
+    ls huge/T*
   else
     echo "bad AWM_SET $AWM_SET" >&2
     exit 1
@@ -26,20 +31,20 @@ do
   for SEED in $AWM_SEEDS
   do
     echo $i
-    audiowmark add "$i" t.wav $PATTERN $AWM_PARAMS --seed $SEED >/dev/null
+    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --seed $SEED >/dev/null
     if [ "x$TRANSFORM" == "xmp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
         exit 1
       fi
-      lame -b $2 t.wav t.mp3 --quiet
-      rm t.wav
-      ffmpeg -i t.mp3 t.wav -v quiet -nostdin
+      lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
+      rm ${AWM_FILE}.wav
+      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
 
       # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r t.wav)" != "x44100" ]; then
-        sox t.wav tr.wav rate 44100
-        mv tr.wav t.wav
+      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
+        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
+        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
       fi
     elif [ "x$TRANSFORM" == "xdouble-mp3" ]; then
       if [ "x$2" == "x" ]; then
@@ -47,27 +52,27 @@ do
         exit 1
       fi
       # first mp3 step (fixed bitrate)
-      lame -b 128 t.wav t.mp3 --quiet
-      rm t.wav
-      ffmpeg -i t.mp3 t.wav -v quiet -nostdin
+      lame -b 128 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
+      rm ${AWM_FILE}.wav
+      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
 
       # second mp3 step
-      lame -b $2 t.wav t.mp3 --quiet
-      rm t.wav
-      ffmpeg -i t.mp3 t.wav -v quiet -nostdin
+      lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
+      rm ${AWM_FILE}.wav
+      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
 
       # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r t.wav)" != "x44100" ]; then
-        sox t.wav tr.wav rate 44100
-        mv tr.wav t.wav
+      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
+        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
+        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
       fi
     elif [ "x$TRANSFORM" == "xogg" ]; then
       if [ "x$2" == "x" ]; then
         echo "need ogg bitrate" >&2
         exit 1
       fi
-      oggenc -b $2 t.wav -o t.ogg --quiet
-      oggdec t.ogg -o t.wav --quiet
+      oggenc -b $2 ${AWM_FILE}.wav -o ${AWM_FILE}.ogg --quiet
+      oggdec ${AWM_FILE}.ogg -o ${AWM_FILE}.wav --quiet
     elif [ "x$TRANSFORM" == "x" ]; then
       :
     else
@@ -75,7 +80,7 @@ do
       exit 1
     fi
     # blind decoding
-    audiowmark cmp t.wav $PATTERN $AWM_PARAMS --seed $SEED
+    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --seed $SEED
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --seed $SEED
   done
