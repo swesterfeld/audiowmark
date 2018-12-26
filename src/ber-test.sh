@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # pseudo random pattern, 128 bit
 
 PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
