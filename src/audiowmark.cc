@@ -512,34 +512,52 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
 
   /* generate synthesis window */
-  vector<float> synth_window (Params::frame_size);
-  for (size_t i = 0; i < Params::frame_size; i++)
+  // we want overlapping synthesis windows, so the window affects the last, the current and the next frame
+  vector<float> synth_window (Params::frame_size * 3);
+  for (size_t i = 0; i < synth_window.size(); i++)
     {
-      const double threshold = 0.2;
+      const double overlap = 0.1;
 
       // triangular basic window
-      const double tri = min (1.0 - fabs (double (2 * i)/Params::frame_size - 1.0), threshold) / threshold;
+      double tri;
+      double norm_pos = (double (i) - Params::frame_size) / Params::frame_size;
 
+      if (norm_pos > 0.5) /* symmetric window */
+        norm_pos = 1 - norm_pos;
+      if (norm_pos < -overlap)
+        {
+          tri = 0;
+        }
+      else if (norm_pos < overlap)
+        {
+          tri = 0.5 + norm_pos / (2 * overlap);
+        }
+      else
+        {
+          tri = 1;
+        }
       // cosine
       synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
     }
+
+  for (size_t pos = 0; pos < in_signal.size(); pos++)
+    out_signal[pos] = in_signal[pos] * Params::pre_scale;
 
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
-          /* add watermark to output frame */
-          vector<float> frame = get_frame (wav_data, f, ch);
-
           /* mix watermark signal to output frame */
           vector<float> fft_delta_out = ifft (fft_delta_spect[f * wav_data.n_channels() + ch]);
 
-          for (size_t i = 0; i < frame.size(); i++)
-            frame[i] += fft_delta_out[i] * synth_window[i];
+          int last_frame_start = (f - 1) * Params::frame_size;
+          for (int i = 0; i < synth_window.size(); i++)
+            {
+              int pos = (last_frame_start + i) * wav_data.n_channels() + ch;
 
-          /* modify out signal */
-          for (size_t i = 0; i < frame.size(); i++)
-            out_signal[(f * Params::frame_size + i) * wav_data.n_channels() + ch] = frame[i] * Params::pre_scale;
+              if (pos >= 0 && pos < out_signal.size())
+                out_signal[pos] += fft_delta_out[i % Params::frame_size] * synth_window[i] * Params::pre_scale;
+            }
         }
     }
 
