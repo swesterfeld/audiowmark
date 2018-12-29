@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# pseudo random pattern, 128 bit
-
-PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
 TRANSFORM=$1
 if [ "x$AWM_SET" == "x" ]; then
   AWM_SET=small
@@ -33,6 +30,20 @@ do
   for SEED in $AWM_SEEDS
   do
     echo $i
+
+    if [ "x$AWM_RAND_PATTERN" != "x" ]; then
+      # random pattern, 128 bit
+      PATTERN=$(
+        for i in $(seq 16)
+        do
+          printf "%02x" $((RANDOM % 256))
+        done
+      )
+    else
+      # pseudo random pattern, 128 bit
+      PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
+    fi
+
     audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --seed $SEED >/dev/null
     if [ "x$TRANSFORM" == "xmp3" ]; then
       if [ "x$2" == "x" ]; then
