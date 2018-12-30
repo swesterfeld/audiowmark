@@ -70,7 +70,9 @@ main (int argc, char **argv)
     }
   if (argc == 2 && string (argv[1]) == "error")
     {
-      for (size_t bit_errors = 0; bit_errors < 100; bit_errors++)
+      size_t max_bit_errors = conv_code_size (128) * 0.5;
+
+      for (size_t bit_errors = 0; bit_errors < max_bit_errors; bit_errors++)
         {
           size_t coded_bit_count = 0;
           int bad_decode = 0;
