@@ -551,11 +551,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           vector<float> fft_delta_out = ifft (fft_delta_spect[f * wav_data.n_channels() + ch]);
 
           int last_frame_start = (f - 1) * Params::frame_size;
-          for (int i = 0; i < synth_window.size(); i++)
+          for (int i = 0; i < int (synth_window.size()); i++)
             {
               int pos = (last_frame_start + i) * wav_data.n_channels() + ch;
 
-              if (pos >= 0 && pos < out_signal.size())
+              if (pos >= 0 && pos < int (out_signal.size()))
                 out_signal[pos] += fft_delta_out[i % Params::frame_size] * synth_window[i] * Params::pre_scale;
             }
         }
