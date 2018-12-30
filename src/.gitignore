@@ -1,0 +1,6 @@
+*.o
+.deps/
+.libs/
+test/
+audiowmark
+testconvcode
