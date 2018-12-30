@@ -107,7 +107,7 @@ main (int argc, char **argv)
     }
   if (argc == 2 && string (argv[1]) == "soft-error")
     {
-      for (double stddev = 0; stddev < 1; stddev += 0.01)
+      for (double stddev = 0; stddev < 1.5; stddev += 0.01)
         {
           size_t coded_bit_count = 0;
           int bad_decode1 = 0, bad_decode2 = 0;
