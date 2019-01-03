@@ -15,10 +15,7 @@ public:
     bit_order = 3
   };
 private:
-  std::vector<unsigned char> aes_key = std::vector<unsigned char> (16);
   gcry_cipher_hd_t           aes_ctr_cipher;
-
-  static constexpr auto      GCRY_CIPHER = GCRY_CIPHER_AES128;
 
   void
   die_on_error (const char *func, gcry_error_t error)
@@ -35,6 +32,8 @@ public:
   Random (uint64_t seed, Stream stream);
   ~Random();
   uint64_t operator()();
+
+  static void set_global_test_key (uint64_t seed);
 };
 
 #endif /* AUDIOWMARK_RANDOM_HH */

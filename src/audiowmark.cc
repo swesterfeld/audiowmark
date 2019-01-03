@@ -31,7 +31,7 @@ namespace Params
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
   static int block_size        = 32;    // block size for mix step (non-linear bit storage)
-  static unsigned int seed     = 0;
+  static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 }
 
@@ -158,9 +158,10 @@ parse_options (int   *argc_p,
 	{
           Params::hard = true;
 	}
-      else if (check_arg (argc, argv, &i, "--seed", &opt_arg))
+      else if (check_arg (argc, argv, &i, "--test-key", &opt_arg))
 	{
-          Params::seed = atoi (opt_arg);
+          Params::have_key++;
+          Random::set_global_test_key (atoi (opt_arg));
 	}
     }
 
@@ -888,6 +889,11 @@ main (int argc, char **argv)
 {
   parse_options (&argc, &argv);
 
+  if (Params::have_key > 1)
+    {
+      fprintf (stderr, "audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      return 1;
+    }
   string op = (argc >= 2) ? argv[1] : "";
 
   if (op == "add" && argc == 5)

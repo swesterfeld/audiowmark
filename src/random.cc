@@ -1,5 +1,37 @@
 #include "random.hh"
 
+static std::vector<unsigned char> aes_key (16);
+static constexpr auto             GCRY_CIPHER = GCRY_CIPHER_AES128;
+
+static void
+uint64_to_buffer (uint64_t       u,
+                  unsigned char *buffer)
+{
+  /* this has to be endian independent: use big endian order */
+  buffer[0] = u >> 56;
+  buffer[1] = u >> 48;
+  buffer[2] = u >> 40;
+  buffer[3] = u >> 32;
+  buffer[4] = u >> 24;
+  buffer[5] = u >> 16;
+  buffer[6] = u >> 8;
+  buffer[7] = u;
+}
+
+static uint64_t
+uint64_from_buffer (unsigned char *buffer)
+{
+  /* this has to be endian independent: use big endian order */
+  return (uint64_t (buffer[0]) << 56)
+       + (uint64_t (buffer[1]) << 48)
+       + (uint64_t (buffer[2]) << 40)
+       + (uint64_t (buffer[3]) << 32)
+       + (uint64_t (buffer[4]) << 24)
+       + (uint64_t (buffer[5]) << 16)
+       + (uint64_t (buffer[6]) << 8)
+       + buffer[7];
+}
+
 Random::Random (uint64_t seed, Stream stream)
 {
   std::vector<unsigned char> ctr = get_start_counter (seed, stream);
@@ -40,15 +72,7 @@ Random::get_start_counter (uint64_t seed, Stream stream)
   std::vector<unsigned char> cipher_text (16);
   std::vector<unsigned char> plain_text (16);
 
-  /* this has to be endian independent: use big endian order */
-  plain_text[0] = seed >> 56;
-  plain_text[1] = seed >> 48;
-  plain_text[2] = seed >> 40;
-  plain_text[3] = seed >> 32;
-  plain_text[4] = seed >> 24;
-  plain_text[5] = seed >> 16;
-  plain_text[6] = seed >> 8;
-  plain_text[7] = seed;
+  uint64_to_buffer (seed, &plain_text[0]);
 
   plain_text[8] = uint8_t (stream);
 
@@ -91,14 +115,11 @@ Random::operator()()
     printf ("%02x ", ch);
   printf (" ]]\n");
 #endif
-  /* this has to be endian independent: use big endian order */
-  uint64_t result = (uint64_t (cipher_text[0]) << 56)
-                  + (uint64_t (cipher_text[1]) << 48)
-                  + (uint64_t (cipher_text[2]) << 40)
-                  + (uint64_t (cipher_text[3]) << 32)
-                  + (uint64_t (cipher_text[4]) << 24)
-                  + (uint64_t (cipher_text[5]) << 16)
-                  + (uint64_t (cipher_text[6]) << 8)
-                  + cipher_text[7];
-  return result;
+  return uint64_from_buffer (&cipher_text[0]);
+}
+
+void
+Random::set_global_test_key (uint64_t key)
+{
+  uint64_to_buffer (key, &aes_key[0]);
 }

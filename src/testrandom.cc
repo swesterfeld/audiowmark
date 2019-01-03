@@ -24,4 +24,16 @@ main (int argc, char **argv)
       uint64_t x = rng();
       printf ("%016lx\n", x);
     }
+
+  uint64_t s = 0;
+  double t_start = gettime();
+  size_t runs = 1000000;
+  for (size_t i = 0; i < runs; i++)
+    {
+      s += rng();
+    }
+  double t_end = gettime();
+  printf ("s=%016lx\n\n", s);
+
+  printf ("%f Mvalues/sec\n", runs / (t_end - t_start) / 1000000);
 }
