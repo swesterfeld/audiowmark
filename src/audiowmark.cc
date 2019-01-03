@@ -8,6 +8,7 @@
 #include "wavdata.hh"
 #include "utils.hh"
 #include "convcode.hh"
+#include "random.hh"
 
 #include <assert.h>
 
@@ -241,23 +242,12 @@ get_frame (const WavData& wav_data, int f, int ch)
   return result;
 }
 
-std::mt19937_64
-init_rng (uint64_t seed)
-{
-  const uint64_t  prime = 3126986573;
-
-  std::mt19937_64 rng;
-  rng.seed (seed + prime * Params::seed);
-
-  return rng;
-}
-
 void
 get_up_down (int f, vector<int>& up, vector<int>& down)
 {
   vector<int> used (Params::frame_size / 2);
 
-  std::mt19937_64 rng = init_rng (f); // use per frame random seed, may want to have cryptographically secure algorithm
+  Random rng (f, Random::Stream::up_down); // use per frame random seed
 
   auto choose_bands = [&used, &rng] (vector<int>& bands) {
     while (bands.size() < Params::bands_per_frame)
@@ -275,9 +265,9 @@ get_up_down (int f, vector<int>& up, vector<int>& down)
 }
 
 template<class T> void
-gen_shuffle (vector<T>& result, int seed)
+gen_shuffle (vector<T>& result, int seed, Random::Stream stream)
 {
-  std::mt19937_64 rng = init_rng (seed); // should use cryptographically secure generator, properly seeded
+  Random rng (seed, stream);
 
   // Fisher–Yates shuffle
   for (size_t i = 0; i < result.size() - 1; i++)
@@ -295,7 +285,7 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
   for (size_t i = 0; i < bit_vec.size(); i++)
     order.push_back (i);
 
-  gen_shuffle (order, /* seed */ 0);
+  gen_shuffle (order, /* seed */ 0, Random::Stream::bit_order);
 
   vector<T> out_bits (bit_vec.size());
   for (size_t i = 0; i < bit_vec.size(); i++)
@@ -330,7 +320,7 @@ gen_mix_entries (int block)
       for (size_t i = 0; i < up.size(); i++)
         mix_entries.push_back ({ f, up[i], down[i] });
     }
-  gen_shuffle (mix_entries, /* seed */ block);
+  gen_shuffle (mix_entries, /* seed */ block, Random::Stream::mix);
   return mix_entries;
 }
 
