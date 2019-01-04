@@ -35,6 +35,7 @@ public:
   uint64_t operator()();
 
   static void        set_global_test_key (uint64_t seed);
+  static void        load_global_key (const std::string& key_file);
   static std::string gen_key();
 };
 

@@ -65,6 +65,7 @@ print_usage()
   printf ("  --water-delta         set watermarking delta              [%.4f]\n", Params::water_delta);
   printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
   printf ("  --linear              disable non-linear bit storage\n");
+  printf ("  --key <file>          load watermarking key from file\n");
 }
 
 static bool
@@ -166,6 +167,11 @@ parse_options (int   *argc_p,
           Params::have_key++;
           Random::set_global_test_key (atoi (opt_arg));
 	}
+      else if (check_arg (argc, argv, &i, "--key", &opt_arg))
+        {
+          Params::have_key++;
+          Random::load_global_key (opt_arg);
+        }
     }
 
   /* resort argc/argv */

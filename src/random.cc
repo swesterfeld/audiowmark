@@ -1,8 +1,14 @@
 #include "random.hh"
+#include "utils.hh"
+
+#include <regex>
 
 using std::string;
+using std::vector;
+using std::regex;
+using std::regex_match;
 
-static std::vector<unsigned char> aes_key (16);
+static std::vector<unsigned char> aes_key (16); // 128 bits
 static constexpr auto             GCRY_CIPHER = GCRY_CIPHER_AES128;
 
 static void
@@ -126,18 +132,68 @@ Random::set_global_test_key (uint64_t key)
   uint64_to_buffer (key, &aes_key[0]);
 }
 
+void
+Random::load_global_key (const string& key_file)
+{
+  FILE *f = fopen (key_file.c_str(), "r");
+  if (!f)
+    {
+      fprintf (stderr, "audiowmark: error opening key file: '%s'\n", key_file.c_str());
+      exit (1);
+    }
+
+  const regex blank_re (R"(\s*(#.*)?[\r\n]+)");
+  const regex key_re (R"(\s*key\s+([0-9a-f]+)\s*(#.*)?[\r\n]+)");
+
+  char buffer[1024];
+  int line = 1;
+  int keys = 0;
+  while (fgets (buffer, 1024, f))
+    {
+      string s = buffer;
+
+      std::smatch match;
+      if (regex_match (s, blank_re))
+        {
+          /* blank line or comment */
+        }
+      else if (regex_match (s, match, key_re))
+        {
+          /* line containing aes key */
+          vector<unsigned char> key = hex_str_to_vec (match[1].str());
+          if (key.size() != aes_key.size())
+            {
+              fprintf (stderr, "audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
+              exit (1);
+            }
+          aes_key = key;
+          keys++;
+        }
+      else
+        {
+          fprintf (stderr, "audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
+          exit (1);
+        }
+      line++;
+    }
+  fclose (f);
+
+  if (keys > 1)
+    {
+      fprintf (stderr, "audiowmark: key file '%s' contains more than one key\n", key_file.c_str());
+      exit (1);
+    }
+  if (keys == 0)
+    {
+      fprintf (stderr, "audiowmark: key file '%s' contains no key\n", key_file.c_str());
+      exit (1);
+    }
+}
+
 std::string
 Random::gen_key()
 {
-  unsigned char key[16];
-  gcry_randomize (key, 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
-  string s;
-  for (auto k : key)
-    {
-      char buffer[256];
-
-      sprintf (buffer, "%02x", k);
-      s += buffer;
-    }
-  return s;
+  vector<unsigned char> key (16);
+  gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
+  return vec_to_hex_str (key);
 }
