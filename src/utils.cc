@@ -55,3 +55,37 @@ bit_vec_to_str (const vector<int>& bit_vec)
   return bit_str;
 }
 
+vector<unsigned char>
+hex_str_to_vec (const string& str)
+{
+  vector<unsigned char> result;
+
+  if ((str.size() % 2) != 0) // even length
+    return vector<unsigned char>();
+
+  for (size_t i = 0; i < str.size() / 2; i++)
+    {
+      unsigned char h = from_hex_nibble (str[i * 2]);
+      unsigned char l = from_hex_nibble (str[i * 2 + 1]);
+      if (h >= 16 || l >= 16)
+        return vector<unsigned char>();
+
+      result.push_back ((h << 4) + l);
+    }
+
+  return result;
+}
+
+string
+vec_to_hex_str (const vector<unsigned char>& vec)
+{
+  string s;
+  for (auto byte : vec)
+    {
+      char buffer[256];
+
+      sprintf (buffer, "%02x", byte);
+      s += buffer;
+    }
+  return s;
+}
