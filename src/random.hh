@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <vector>
+#include <string>
 
 class Random
 {
@@ -33,7 +34,8 @@ public:
   ~Random();
   uint64_t operator()();
 
-  static void set_global_test_key (uint64_t seed);
+  static void        set_global_test_key (uint64_t seed);
+  static std::string gen_key();
 };
 
 #endif /* AUDIOWMARK_RANDOM_HH */

@@ -1,3 +1,9 @@
+key:
+- --key loading
+- multiple values per block
+- avoid reroll in up_down generation
+- move shuffle function to Random class
+
 possible improvements:
 - dynamic bit strength
 - mp3 support with libmad

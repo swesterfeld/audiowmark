@@ -56,6 +56,9 @@ print_usage()
   printf ("  * compute bit error rate for decoding with original file\n");
   printf ("    audiowmark cmp-delta <input_wav> <watermarked_wav> <message_hex>\n");
   printf ("\n");
+  printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
+  printf ("    audiowmark gen-key <key_file>\n");
+  printf ("\n");
   printf ("Global options:\n");
   printf ("  --frame-size          frame size (must be power of 2)     [%zd]\n", Params::frame_size);
   printf ("  --frames-per-bit      number of frames per bit            [%d]\n",  Params::frames_per_bit);
@@ -885,6 +888,20 @@ get_snr (const string& origfile, const string& wmfile)
 }
 
 int
+gen_key (const string& outfile)
+{
+  FILE *f = fopen (outfile.c_str(), "w");
+  if (!f)
+    {
+      fprintf (stderr, "audiowmark: error writing to file %s\n", outfile.c_str());
+      return 1;
+    }
+  fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
+  fclose (f);
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   parse_options (&argc, &argv);
@@ -928,9 +945,13 @@ main (int argc, char **argv)
     {
       return get_watermark_delta (argv[2], argv[3], argv[4]);
     }
+  else if (op == "gen-key" && argc == 3)
+    {
+      return gen_key (argv[2]);
+    }
   else
     {
-      fprintf (stderr, "audiowmark: error parsing commandline args\n");
+      fprintf (stderr, "audiowmark: error parsing commandline args (use audiowmark -h)\n");
       return 1;
     }
 }

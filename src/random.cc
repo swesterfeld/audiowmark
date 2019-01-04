@@ -1,5 +1,7 @@
 #include "random.hh"
 
+using std::string;
+
 static std::vector<unsigned char> aes_key (16);
 static constexpr auto             GCRY_CIPHER = GCRY_CIPHER_AES128;
 
@@ -122,4 +124,20 @@ void
 Random::set_global_test_key (uint64_t key)
 {
   uint64_to_buffer (key, &aes_key[0]);
+}
+
+std::string
+Random::gen_key()
+{
+  unsigned char key[16];
+  gcry_randomize (key, 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
+  string s;
+  for (auto k : key)
+    {
+      char buffer[256];
+
+      sprintf (buffer, "%02x", k);
+      s += buffer;
+    }
+  return s;
 }
