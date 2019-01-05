@@ -17,6 +17,9 @@ public:
   };
 private:
   gcry_cipher_hd_t           aes_ctr_cipher;
+  std::vector<uint64_t>      buffer;
+  size_t                     buffer_pos = 0;
+
   std::vector<unsigned char> get_start_counter (uint64_t seed, Stream stream);
 
   void die_on_error (const char *func, gcry_error_t error);

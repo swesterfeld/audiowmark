@@ -3,6 +3,8 @@
 
 #include <regex>
 
+#include <assert.h>
+
 using std::string;
 using std::vector;
 using std::regex;
@@ -103,16 +105,25 @@ Random::get_start_counter (uint64_t seed, Stream stream)
 uint64_t
 Random::operator()()
 {
-  const size_t block_size = 8;
-  unsigned char zeros[block_size] = { 0, };
-  unsigned char cipher_text[block_size];
+  if (buffer_pos == buffer.size())
+    {
+      const size_t block_size = 256;
+      unsigned char zeros[block_size] = { 0, };
+      unsigned char cipher_text[block_size];
 
-  gcry_error_t gcry_ret = gcry_cipher_encrypt (aes_ctr_cipher, cipher_text, block_size, zeros, block_size);
-  die_on_error ("gcry_cipher_encrypt", gcry_ret);
+      gcry_error_t gcry_ret = gcry_cipher_encrypt (aes_ctr_cipher, cipher_text, block_size, zeros, block_size);
+      die_on_error ("gcry_cipher_encrypt", gcry_ret);
 
-  // print ("AES OUT", {cipher_text, cipher_text + block_size});
+      // print ("AES OUT", {cipher_text, cipher_text + block_size});
 
-  return uint64_from_buffer (&cipher_text[0]);
+      buffer.clear();
+      for (size_t i = 0; i < block_size; i += 8)
+        buffer.push_back (uint64_from_buffer (cipher_text + i));
+
+      buffer_pos = 0;
+    }
+  assert (buffer_pos < buffer.size());
+  return buffer[buffer_pos++];
 }
 
 void

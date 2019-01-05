@@ -27,7 +27,7 @@ main (int argc, char **argv)
 
   uint64_t s = 0;
   double t_start = gettime();
-  size_t runs = 1000000;
+  size_t runs = 25000000;
   for (size_t i = 0; i < runs; i++)
     {
       s += rng();
