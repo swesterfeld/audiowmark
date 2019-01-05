@@ -40,15 +40,20 @@ uint64_from_buffer (unsigned char *buffer)
        + buffer[7];
 }
 
+static void
+print (const string& label, const vector<unsigned char>& data)
+{
+  printf ("%s: ", label.c_str());
+  for (auto ch : data)
+    printf ("%02x ", ch);
+  printf ("\n");
+}
+
 Random::Random (uint64_t seed, Stream stream)
 {
   std::vector<unsigned char> ctr = get_start_counter (seed, stream);
-#if 0
-  printf ("CTR: ");
-  for (auto ch : ctr)
-    printf ("%02x ", ch);
-  printf ("\n");
-#endif
+
+  // print ("CTR", ctr);
 
   gcry_error_t gcry_ret = gcry_cipher_open (&aes_ctr_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_CTR, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
@@ -84,25 +89,13 @@ Random::get_start_counter (uint64_t seed, Stream stream)
 
   plain_text[8] = uint8_t (stream);
 
-#if 0
-  printf ("[[ ");
-  for (auto ch : plain_text)
-    printf ("%02x ", ch);
-  printf (" ]]\n");
-#endif
+  // print ("SEED", plain_text);
 
   gcry_ret = gcry_cipher_encrypt (cipher_hd, &cipher_text[0], cipher_text.size(),
                                              &plain_text[0],  plain_text.size());
   die_on_error ("gcry_cipher_encrypt", gcry_ret);
 
   gcry_cipher_close (cipher_hd);
-
-#if 0
-  printf ("[[ ");
-  for (auto ch : cipher_text)
-    printf ("%02x ", ch);
-  printf (" ]]\n");
-#endif
 
   return cipher_text;
 }
@@ -117,12 +110,8 @@ Random::operator()()
   gcry_error_t gcry_ret = gcry_cipher_encrypt (aes_ctr_cipher, cipher_text, block_size, zeros, block_size);
   die_on_error ("gcry_cipher_encrypt", gcry_ret);
 
-#if 0
-  printf ("[[ ");
-  for (auto ch : cipher_text)
-    printf ("%02x ", ch);
-  printf (" ]]\n");
-#endif
+  // print ("AES OUT", {cipher_text, cipher_text + block_size});
+
   return uint64_from_buffer (&cipher_text[0]);
 }
 
