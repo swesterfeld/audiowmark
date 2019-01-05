@@ -1,6 +1,5 @@
 key:
 - avoid reroll in up_down generation
-- move shuffle function to Random class
 
 possible improvements:
 - dynamic bit strength

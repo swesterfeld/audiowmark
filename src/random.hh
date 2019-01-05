@@ -37,6 +37,19 @@ public:
   }
   void refill_buffer();
 
+  template<class T> void
+  shuffle (std::vector<T>& result)
+  {
+    // Fisher–Yates shuffle
+    for (size_t i = 0; i < result.size(); i++)
+      {
+        const uint64_t random_number = (*this)();
+
+        size_t j = i + random_number % (result.size() - i);
+        std::swap (result[i], result[j]);
+      }
+  }
+
   static void        set_global_test_key (uint64_t seed);
   static void        load_global_key (const std::string& key_file);
   static std::string gen_key();

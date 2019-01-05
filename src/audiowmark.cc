@@ -274,19 +274,6 @@ get_up_down (int f, vector<int>& up, vector<int>& down)
   choose_bands (down);
 }
 
-template<class T> void
-gen_shuffle (vector<T>& result, int seed, Random::Stream stream)
-{
-  Random rng (seed, stream);
-
-  // Fisher–Yates shuffle
-  for (size_t i = 0; i < result.size() - 1; i++)
-    {
-      size_t j = i + rng() % (result.size() - i);
-      std::swap (result[i], result[j]);
-    }
-}
-
 template<class T> vector<T>
 randomize_bit_order (const vector<T>& bit_vec, bool encode)
 {
@@ -295,7 +282,8 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
   for (size_t i = 0; i < bit_vec.size(); i++)
     order.push_back (i);
 
-  gen_shuffle (order, /* seed */ 0, Random::Stream::bit_order);
+  Random random (/* seed */ 0, Random::Stream::bit_order);
+  random.shuffle (order);
 
   vector<T> out_bits (bit_vec.size());
   for (size_t i = 0; i < bit_vec.size(); i++)
@@ -330,7 +318,9 @@ gen_mix_entries (int block)
       for (size_t i = 0; i < up.size(); i++)
         mix_entries.push_back ({ f, up[i], down[i] });
     }
-  gen_shuffle (mix_entries, /* seed */ block, Random::Stream::mix);
+  Random random (/* seed */ block, Random::Stream::mix);
+  random.shuffle (mix_entries);
+
   return mix_entries;
 }
 
