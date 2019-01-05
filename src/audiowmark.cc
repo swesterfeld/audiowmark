@@ -255,23 +255,19 @@ get_frame (const WavData& wav_data, int f, int ch)
 void
 get_up_down (int f, vector<int>& up, vector<int>& down)
 {
-  vector<int> used (Params::frame_size / 2);
+  vector<int> bands_reorder;
+  for (int i = Params::min_band; i <= Params::max_band; i++)
+    bands_reorder.push_back (i);
 
-  Random rng (f, Random::Stream::up_down); // use per frame random seed
+  Random random (f, Random::Stream::up_down); // use per frame random seed
+  random.shuffle (bands_reorder);
 
-  auto choose_bands = [&used, &rng] (vector<int>& bands) {
-    while (bands.size() < Params::bands_per_frame)
-      {
-        int p = rng() % (Params::max_band - Params::min_band) + Params::min_band;
-        if (!used[p])
-          {
-            bands.push_back (p);
-            used[p] = 1;
-          }
-      }
-  };
-  choose_bands (up);
-  choose_bands (down);
+  assert (2 * Params::bands_per_frame < bands_reorder.size());
+  for (size_t i = 0; i < Params::bands_per_frame; i++)
+    {
+      up.push_back (bands_reorder[i]);
+      down.push_back (bands_reorder[Params::bands_per_frame + i]);
+    }
 }
 
 template<class T> vector<T>

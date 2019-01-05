@@ -1,6 +1,3 @@
-key:
-- avoid reroll in up_down generation
-
 possible improvements:
 - dynamic bit strength
 - mp3 support with libmad
