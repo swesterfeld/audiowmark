@@ -116,6 +116,17 @@ Random::operator()()
 }
 
 void
+Random::die_on_error (const char *func, gcry_error_t error)
+{
+  if (error)
+    {
+      fprintf (stderr, "%s failed: %s/%s\n", func, gcry_strsource (error), gcry_strerror (error));
+
+      exit (1); /* can't recover here */
+    }
+}
+
+void
 Random::set_global_test_key (uint64_t key)
 {
   uint64_to_buffer (key, &aes_key[0]);

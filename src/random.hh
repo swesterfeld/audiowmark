@@ -17,18 +17,9 @@ public:
   };
 private:
   gcry_cipher_hd_t           aes_ctr_cipher;
-
-  void
-  die_on_error (const char *func, gcry_error_t error)
-  {
-    if (error)
-      {
-        fprintf (stderr, "%s failed: %s/%s\n", func, gcry_strsource (error), gcry_strerror (error));
-
-        exit (1); /* can't recover here */
-      }
-  }
   std::vector<unsigned char> get_start_counter (uint64_t seed, Stream stream);
+
+  void die_on_error (const char *func, gcry_error_t error);
 public:
   Random (uint64_t seed, Stream stream);
   ~Random();
