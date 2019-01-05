@@ -8,8 +8,8 @@ using std::vector;
 using std::regex;
 using std::regex_match;
 
-static std::vector<unsigned char> aes_key (16); // 128 bits
-static constexpr auto             GCRY_CIPHER = GCRY_CIPHER_AES128;
+static vector<unsigned char> aes_key (16); // 128 bits
+static constexpr auto        GCRY_CIPHER = GCRY_CIPHER_AES128;
 
 static void
 uint64_to_buffer (uint64_t       u,
@@ -51,7 +51,7 @@ print (const string& label, const vector<unsigned char>& data)
 
 Random::Random (uint64_t seed, Stream stream)
 {
-  std::vector<unsigned char> ctr = get_start_counter (seed, stream);
+  vector<unsigned char> ctr = get_start_counter (seed, stream);
 
   // print ("CTR", ctr);
 
@@ -70,7 +70,7 @@ Random::~Random()
   gcry_cipher_close (aes_ctr_cipher);
 }
 
-std::vector<unsigned char>
+vector<unsigned char>
 Random::get_start_counter (uint64_t seed, Stream stream)
 {
   gcry_error_t     gcry_ret;
@@ -82,8 +82,8 @@ Random::get_start_counter (uint64_t seed, Stream stream)
   gcry_ret = gcry_cipher_setkey (cipher_hd, &aes_key[0], aes_key.size());
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
-  std::vector<unsigned char> cipher_text (16);
-  std::vector<unsigned char> plain_text (16);
+  vector<unsigned char> cipher_text (16);
+  vector<unsigned char> plain_text (16);
 
   uint64_to_buffer (seed, &plain_text[0]);
 
@@ -190,7 +190,7 @@ Random::load_global_key (const string& key_file)
     }
 }
 
-std::string
+string
 Random::gen_key()
 {
   vector<unsigned char> key (16);
