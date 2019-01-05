@@ -44,7 +44,7 @@ do
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
     fi
 
-    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --seed $SEED >/dev/null
+    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED >/dev/null
     if [ "x$TRANSFORM" == "xmp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -93,9 +93,9 @@ do
       exit 1
     fi
     # blind decoding
-    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --seed $SEED
+    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED
     # decoding with original
-    # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --seed $SEED
+    # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
   done
 done | grep bit_error_rate | {
   if [ "x$AWM_REPORT" == "xber" ]; then

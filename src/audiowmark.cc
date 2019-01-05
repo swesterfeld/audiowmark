@@ -8,6 +8,7 @@
 #include "wavdata.hh"
 #include "utils.hh"
 #include "convcode.hh"
+#include "random.hh"
 
 #include <assert.h>
 
@@ -30,7 +31,7 @@ namespace Params
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
   static int block_size        = 32;    // block size for mix step (non-linear bit storage)
-  static unsigned int seed     = 0;
+  static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 }
 
@@ -55,12 +56,16 @@ print_usage()
   printf ("  * compute bit error rate for decoding with original file\n");
   printf ("    audiowmark cmp-delta <input_wav> <watermarked_wav> <message_hex>\n");
   printf ("\n");
+  printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
+  printf ("    audiowmark gen-key <key_file>\n");
+  printf ("\n");
   printf ("Global options:\n");
   printf ("  --frame-size          frame size (must be power of 2)     [%zd]\n", Params::frame_size);
   printf ("  --frames-per-bit      number of frames per bit            [%d]\n",  Params::frames_per_bit);
   printf ("  --water-delta         set watermarking delta              [%.4f]\n", Params::water_delta);
   printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
   printf ("  --linear              disable non-linear bit storage\n");
+  printf ("  --key <file>          load watermarking key from file\n");
 }
 
 static bool
@@ -157,10 +162,16 @@ parse_options (int   *argc_p,
 	{
           Params::hard = true;
 	}
-      else if (check_arg (argc, argv, &i, "--seed", &opt_arg))
+      else if (check_arg (argc, argv, &i, "--test-key", &opt_arg))
 	{
-          Params::seed = atoi (opt_arg);
+          Params::have_key++;
+          Random::set_global_test_key (atoi (opt_arg));
 	}
+      else if (check_arg (argc, argv, &i, "--key", &opt_arg))
+        {
+          Params::have_key++;
+          Random::load_global_key (opt_arg);
+        }
     }
 
   /* resort argc/argv */
@@ -241,49 +252,21 @@ get_frame (const WavData& wav_data, int f, int ch)
   return result;
 }
 
-std::mt19937_64
-init_rng (uint64_t seed)
-{
-  const uint64_t  prime = 3126986573;
-
-  std::mt19937_64 rng;
-  rng.seed (seed + prime * Params::seed);
-
-  return rng;
-}
-
 void
 get_up_down (int f, vector<int>& up, vector<int>& down)
 {
-  vector<int> used (Params::frame_size / 2);
+  vector<int> bands_reorder;
+  for (int i = Params::min_band; i <= Params::max_band; i++)
+    bands_reorder.push_back (i);
 
-  std::mt19937_64 rng = init_rng (f); // use per frame random seed, may want to have cryptographically secure algorithm
+  Random random (f, Random::Stream::up_down); // use per frame random seed
+  random.shuffle (bands_reorder);
 
-  auto choose_bands = [&used, &rng] (vector<int>& bands) {
-    while (bands.size() < Params::bands_per_frame)
-      {
-        int p = rng() % (Params::max_band - Params::min_band) + Params::min_band;
-        if (!used[p])
-          {
-            bands.push_back (p);
-            used[p] = 1;
-          }
-      }
-  };
-  choose_bands (up);
-  choose_bands (down);
-}
-
-template<class T> void
-gen_shuffle (vector<T>& result, int seed)
-{
-  std::mt19937_64 rng = init_rng (seed); // should use cryptographically secure generator, properly seeded
-
-  // Fisher–Yates shuffle
-  for (size_t i = 0; i < result.size() - 1; i++)
+  assert (2 * Params::bands_per_frame < bands_reorder.size());
+  for (size_t i = 0; i < Params::bands_per_frame; i++)
     {
-      size_t j = i + rng() % (result.size() - i);
-      std::swap (result[i], result[j]);
+      up.push_back (bands_reorder[i]);
+      down.push_back (bands_reorder[Params::bands_per_frame + i]);
     }
 }
 
@@ -295,7 +278,8 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
   for (size_t i = 0; i < bit_vec.size(); i++)
     order.push_back (i);
 
-  gen_shuffle (order, /* seed */ 0);
+  Random random (/* seed */ 0, Random::Stream::bit_order);
+  random.shuffle (order);
 
   vector<T> out_bits (bit_vec.size());
   for (size_t i = 0; i < bit_vec.size(); i++)
@@ -330,7 +314,9 @@ gen_mix_entries (int block)
       for (size_t i = 0; i < up.size(); i++)
         mix_entries.push_back ({ f, up[i], down[i] });
     }
-  gen_shuffle (mix_entries, /* seed */ block);
+  Random random (/* seed */ block, Random::Stream::mix);
+  random.shuffle (mix_entries);
+
   return mix_entries;
 }
 
@@ -894,10 +880,29 @@ get_snr (const string& origfile, const string& wmfile)
 }
 
 int
+gen_key (const string& outfile)
+{
+  FILE *f = fopen (outfile.c_str(), "w");
+  if (!f)
+    {
+      fprintf (stderr, "audiowmark: error writing to file %s\n", outfile.c_str());
+      return 1;
+    }
+  fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
+  fclose (f);
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   parse_options (&argc, &argv);
 
+  if (Params::have_key > 1)
+    {
+      fprintf (stderr, "audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      return 1;
+    }
   string op = (argc >= 2) ? argv[1] : "";
 
   if (op == "add" && argc == 5)
@@ -932,9 +937,13 @@ main (int argc, char **argv)
     {
       return get_watermark_delta (argv[2], argv[3], argv[4]);
     }
+  else if (op == "gen-key" && argc == 3)
+    {
+      return gen_key (argv[2]);
+    }
   else
     {
-      fprintf (stderr, "audiowmark: error parsing commandline args\n");
+      fprintf (stderr, "audiowmark: error parsing commandline args (use audiowmark -h)\n");
       return 1;
     }
 }
