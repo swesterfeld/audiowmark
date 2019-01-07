@@ -363,6 +363,122 @@ compute_frame_ffts (const WavData& wav_data)
   return fft_out;
 }
 
+size_t
+mark_data_frame_count()
+{
+  const size_t n_blocks = (conv_code_size (Params::payload_size) + (Params::block_size - 1)) / Params::block_size;
+
+  return n_blocks * Params::block_size * Params::frames_per_bit;
+}
+
+void
+mark_data (const WavData& wav_data, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect,
+           const vector<int>& bitvec)
+{
+  assert (fft_out.size() == mark_data_frame_count() * wav_data.n_channels());
+  assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
+
+  const int frame_count = fft_out.size() / wav_data.n_channels();
+
+  if (Params::mix)
+    {
+      const int block_count = frame_count / (Params::block_size * Params::frames_per_bit);
+
+      for (int block = 0; block < block_count; block++)
+        {
+          vector<MixEntry> mix_entries = gen_mix_entries (block);
+
+          const int block_start = block * Params::block_size * Params::frames_per_bit;
+          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
+            {
+              for (int ch = 0; ch < wav_data.n_channels(); ch++)
+                {
+                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                    {
+                      int b = f * Params::bands_per_frame + frame_b;
+
+                      const int data_bit = bitvec[(block_start + f) / Params::frames_per_bit];
+                      const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+
+                      const int u = mix_entries[b].up;
+                      const int index = (block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                      {
+                        const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+
+                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                      }
+                      const int d = mix_entries[b].down;
+                      {
+                        const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+
+                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                      }
+                    }
+                }
+            }
+        }
+
+    }
+  else
+    {
+      for (int f = 0; f < frame_count; f++)
+        {
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            {
+              size_t index = f * wav_data.n_channels() + ch;
+
+              vector<int> up;
+              vector<int> down;
+              get_up_down (f, up, down);
+
+              const int data_bit = bitvec[f / Params::frames_per_bit];
+              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+              for (auto u : up)
+                {
+                  /*
+                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+                   *
+                   * this actually increases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+
+                  fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                }
+              for (auto d : down)
+                {
+                  /*
+                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+                   *
+                   * this actually decreases the amount of energy because mag is less than 1.0
+                   */
+                  const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+
+                  fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                }
+            }
+        }
+    }
+}
+
+vector<vector<complex<float>>>
+get_frame_range (const WavData& wav_data, const vector<vector<complex<float>>>& src, size_t start, size_t count)
+{
+  start *= wav_data.n_channels();
+  count *= wav_data.n_channels();
+
+  assert (start + count < src.size());
+
+  return vector<vector<complex<float>>> (src.begin() + start, src.begin() + start + count);
+}
+
+void
+copy_frame_range (const WavData& wav_data, const vector<vector<complex<float>>>& src, vector<vector<complex<float>>>& dest, size_t start)
+{
+  start *= wav_data.n_channels();
+
+  std::copy (src.begin(), src.end(), dest.begin() + start);
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -387,6 +503,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
   /* add forward error correction, bitvec will now be a lot larger */
   bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
+
+  /* pad with zeros to match block_size */
+  bitvec.resize (mark_data_frame_count() / Params::frames_per_bit);
 
   printf ("loading %s\n", infile.c_str());
 
@@ -420,82 +539,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
     }
-  if (Params::mix)
-    {
-      for (int block = 0; block < block_count (wav_data); block++)
-        {
-          vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-          const int block_start = block * Params::block_size * Params::frames_per_bit;
-          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-            {
-              for (int ch = 0; ch < wav_data.n_channels(); ch++)
-                {
-                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
-                    {
-                      int b = f * Params::bands_per_frame + frame_b;
-
-                      const int data_bit = bitvec[((block_start + f) / Params::frames_per_bit) % bitvec.size()];
-                      const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-
-                      const int u = mix_entries[b].up;
-                      const int index = (block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                      }
-                      const int d = mix_entries[b].down;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                      }
-                    }
-                }
-            }
-        }
-
-    }
-  else
-    {
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              size_t index = f * wav_data.n_channels() + ch;
-
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const int data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
-              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-              for (auto u : up)
-                {
-                  /*
-                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-                   *
-                   * this actually increases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                }
-              for (auto d : down)
-                {
-                  /*
-                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
-                   *
-                   * this actually decreases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                }
-            }
-        }
-    }
+  vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, 0, mark_data_frame_count());
+  vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, 0, mark_data_frame_count());
+  mark_data (wav_data, fft_out_range, fft_delta_spect_range, bitvec);
+  copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
 
   /* generate synthesis window */
   // we want overlapping synthesis windows, so the window affects the last, the current and the next frame
