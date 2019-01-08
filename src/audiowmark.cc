@@ -33,6 +33,9 @@ namespace Params
   static int block_size        = 32;    // block size for mix step (non-linear bit storage)
   static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
+
+  static int sync_bits           = 6;
+  static int sync_frames_per_bit = 32;
 }
 
 void
@@ -460,6 +463,46 @@ mark_data (const WavData& wav_data, const vector<vector<complex<float>>>& fft_ou
     }
 }
 
+size_t
+mark_sync_frame_count()
+{
+  return Params::sync_bits * Params::sync_frames_per_bit;
+}
+
+void
+mark_sync (const WavData& wav_data, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+{
+  const int frame_count = fft_out.size() / wav_data.n_channels();
+
+  // sync block always written in linear order (no mix)
+  for (int f = 0; f < frame_count; f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          size_t index = f * wav_data.n_channels() + ch;
+
+          vector<int> up;
+          vector<int> down;
+          get_up_down (f, up, down); // FIXME use extra random stream for sync
+
+          const int data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
+          const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+          for (auto u : up)
+            {
+              const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+
+              fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+            }
+          for (auto d : down)
+            {
+              const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+
+              fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+            }
+        }
+    }
+}
+
 vector<vector<complex<float>>>
 get_frame_range (const WavData& wav_data, const vector<vector<complex<float>>>& src, size_t start, size_t count)
 {
@@ -539,9 +582,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
     }
+  /*
   vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, 0, mark_data_frame_count());
   vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, 0, mark_data_frame_count());
   mark_data (wav_data, fft_out_range, fft_delta_spect_range, bitvec);
+  copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
+  */
+  vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, 0, mark_sync_frame_count());
+  vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, 0, mark_sync_frame_count());
+  mark_sync (wav_data, fft_out_range, fft_delta_spect_range);
   copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
 
   /* generate synthesis window */
@@ -737,9 +786,69 @@ linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out,
   return normalize_soft_bits (soft_bit_vec);
 }
 
+void
+sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+{
+  // FIXME: is copypasted
+  const int frame_count = mark_sync_frame_count();
+
+  double umag = 0, dmag = 0;
+  double sync_quality = 0;
+  bool   sync_match = true;
+
+  for (int f = 0; f < frame_count; f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          const size_t index = f * wav_data.n_channels() + ch;
+          vector<int> up;
+          vector<int> down;
+          get_up_down (f, up, down);
+
+          const double min_db = -96;
+          for (auto u : up)
+            {
+              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+
+              if (index < fft_orig_out.size())
+                umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+            }
+          for (auto d : down)
+            {
+              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+
+              if (index < fft_orig_out.size())
+                dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
+            }
+        }
+      if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
+        {
+          const int data_bit = (umag < dmag) ? 0 : 1;
+          const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
+          if (data_bit != expect_data_bit)
+            sync_match = false;
+
+          //const double norm = (1 + Params::water_delta) / (1 - Params::water_delta) - 1;
+          //const double norm = (1 + Params::water_delta) * (1 + Params::water_delta) - 1;
+          const double norm = 1;
+          printf ("%d %f\n", data_bit, /*fabs*/(umag / dmag - 1) / norm);
+          sync_quality += fabs (umag / dmag - 1) / norm;
+          umag = 0;
+          dmag = 0;
+        }
+    }
+  sync_quality /= Params::sync_bits;
+
+  printf ("sync_match   = %d\n", sync_match);
+  printf ("sync_quality = %f\n", sync_quality);
+}
+
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
+  sync_decode (wav_data, fft_out, fft_orig_out);
+  return 0;
+
   vector<float> soft_bit_vec;
   if (Params::mix)
     {
