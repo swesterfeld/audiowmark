@@ -786,6 +786,19 @@ linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out,
   return normalize_soft_bits (soft_bit_vec);
 }
 
+double
+normalize_sync_quality (double raw_quality)
+{
+  /* the quality for a good sync block depends on watermark strength
+   *
+   * this is just an approximation, but it should be good enough to be able to
+   * use one single threshold on the normalized value check if we have a sync
+   * block or not - typical output is 1.0 or more for sync blocks and close
+   * to 0.0 for non-sync blocks
+   */
+  return raw_quality / min (Params::water_delta, 0.080) / 2.9;
+}
+
 void
 sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
@@ -828,17 +841,14 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
           if (data_bit != expect_data_bit)
             sync_match = false;
 
-          //const double norm = (1 + Params::water_delta) / (1 - Params::water_delta) - 1;
-          //const double norm = (1 + Params::water_delta) * (1 + Params::water_delta) - 1;
-          const double norm = 1;
-          printf ("%d %f\n", data_bit, /*fabs*/(umag / dmag - 1) / norm);
-          sync_quality += fabs (umag / dmag - 1) / norm;
+          printf ("%d %f\n", data_bit, normalize_sync_quality (fabs (umag / dmag - 1)));
+          sync_quality += fabs (umag / dmag - 1);
           umag = 0;
           dmag = 0;
         }
     }
   sync_quality /= Params::sync_bits;
-
+  sync_quality = normalize_sync_quality (sync_quality);
   printf ("sync_match   = %d\n", sync_match);
   printf ("sync_quality = %f\n", sync_quality);
 }
