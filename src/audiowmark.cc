@@ -812,7 +812,6 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
 
   double umag = 0, dmag = 0;
   double sync_quality = 0;
-  bool   sync_match = true;
 
   for (int f = 0; f < frame_count; f++)
     {
@@ -844,10 +843,9 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
           const int data_bit = (umag < dmag) ? 0 : 1;
           const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
           if (data_bit != expect_data_bit)
-            sync_match = false;
+            return 0;
 
           const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
-          printf ("%d %f\n", data_bit, normalize_sync_quality (q));
           sync_quality += q;
           umag = 0;
           dmag = 0;
@@ -855,15 +853,13 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
     }
   sync_quality /= Params::sync_bits;
   sync_quality = normalize_sync_quality (sync_quality);
-  printf ("sync_match   = %d\n", sync_match);
-  printf ("sync_quality = %f\n", sync_quality);
   return sync_quality;
 }
 
 vector<vector<complex<float>>>
 sync_fft (const WavData& wav_data, size_t index, size_t count)
 {
-  if (wav_data.n_values() < count * Params::frame_size * wav_data.n_channels())
+  if (wav_data.n_values() < (index + count * Params::frame_size) * wav_data.n_channels())
     return {};
 
   vector<float> part_signal;
@@ -876,17 +872,86 @@ sync_fft (const WavData& wav_data, size_t index, size_t count)
   return compute_frame_ffts (wav_part);
 }
 
+const char*
+find_closest_sync (size_t index)
+{
+  int best_error = 0xffff;
+  int best = 0;
+
+  for (int i = 0; i < 100; i++)
+    {
+      int error = abs (int (index) - int (i * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+      if (error < best_error)
+        {
+          best = i;
+          best_error = error;
+        }
+    }
+  static char buffer[1024]; // this code is for debugging only, so this should be ok
+  sprintf (buffer, "n:%d offset:%d", best, int (index) - int (best * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+  return buffer;
+}
+
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
+  struct SyncScore {
+    size_t index;
+    double quality;
+  };
+  vector<SyncScore> sync_scores;
   for (size_t sync_index = 0;; sync_index += 128)
     {
       vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, sync_index, mark_sync_frame_count());
       if (!fft_out_range.size())
-        return 0; /* eof */
+        break; /* eof */
 
       double q = sync_decode (wav_data, fft_out_range, fft_orig_out);
-      printf ("%zd %f #Q\n", sync_index, q);
+      // printf ("%zd %f #Q\n", sync_index, q);
+      sync_scores.emplace_back (SyncScore { sync_index, q });
+    }
+  for (size_t i = 0; i < sync_scores.size(); i++)
+    {
+      //printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
+      if (sync_scores[i].quality > 0.5)
+        {
+          double q_last = -1;
+          double q_next = -1;
+
+          if (i > 0)
+            q_last = sync_scores[i - 1].quality;
+
+          if (i + 1 < sync_scores.size())
+            q_next = sync_scores[i + 1].quality;
+
+          if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+            {
+              printf ("%zd %s %f\n", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+
+              // refine match
+              double best_quality = sync_scores[i].quality;
+              size_t best_index   = sync_scores[i].index;
+
+              int start = std::max (int (sync_scores[i].index) - 128, 0);
+              int end   = sync_scores[i].index + 128;
+              int step  = 8;
+              for (int fine_index = start; fine_index < end; fine_index += step)
+                {
+                  vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
+                  if (fft_out_range.size())
+                    {
+                      double q = sync_decode (wav_data, fft_out_range, fft_orig_out);
+
+                      if (q > best_quality)
+                        {
+                          best_quality = q;
+                          best_index   = fine_index;
+                        }
+                    }
+                }
+              printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
+            }
+        }
     }
   return 0;
 
