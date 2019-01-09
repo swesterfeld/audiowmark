@@ -588,10 +588,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   mark_data (wav_data, fft_out_range, fft_delta_spect_range, bitvec);
   copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
   */
-  vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, 0, mark_sync_frame_count());
-  vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, 0, mark_sync_frame_count());
-  mark_sync (wav_data, fft_out_range, fft_delta_spect_range);
-  copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
+  size_t sync_index = 0;
+  while (sync_index + mark_sync_frame_count() < fft_out.size() / wav_data.n_channels())
+    {
+      vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, sync_index, mark_sync_frame_count());
+      vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, sync_index, mark_sync_frame_count());
+      mark_sync (wav_data, fft_out_range, fft_delta_spect_range);
+      copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, sync_index);
+      sync_index += mark_sync_frame_count();
+    }
 
   /* generate synthesis window */
   // we want overlapping synthesis windows, so the window affects the last, the current and the next frame
@@ -857,7 +862,13 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
-  sync_decode (wav_data, fft_out, fft_orig_out);
+  size_t sync_index = 0;
+  while (sync_index + mark_sync_frame_count() < fft_out.size() / wav_data.n_channels())
+    {
+      vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, sync_index, mark_sync_frame_count());
+      sync_decode (wav_data, fft_out_range, fft_orig_out);
+      sync_index += 1;
+    }
   return 0;
 
   vector<float> soft_bit_vec;
