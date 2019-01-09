@@ -7,6 +7,7 @@ RUN apt-get install -y automake
 RUN apt-get install -y autoconf
 RUN apt-get install -y libtool
 RUN apt-get install -y autoconf-archive
+RUN apt-get install -y libgcrypt20-dev
 
 ADD . /audiowmark
 WORKDIR /audiowmark
@@ -14,5 +15,8 @@ WORKDIR /audiowmark
 RUN ./autogen.sh
 RUN make
 RUN make install
+
+VOLUME ["/data"]
+WORKDIR /data
 
 ENTRYPOINT ["/usr/local/bin/audiowmark"]
