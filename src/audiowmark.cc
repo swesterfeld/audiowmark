@@ -804,7 +804,7 @@ normalize_sync_quality (double raw_quality)
   return raw_quality / min (Params::water_delta, 0.080) / 2.9;
 }
 
-void
+double
 sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
   // FIXME: is copypasted
@@ -857,17 +857,36 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
   sync_quality = normalize_sync_quality (sync_quality);
   printf ("sync_match   = %d\n", sync_match);
   printf ("sync_quality = %f\n", sync_quality);
+  return sync_quality;
+}
+
+vector<vector<complex<float>>>
+sync_fft (const WavData& wav_data, size_t index, size_t count)
+{
+  if (wav_data.n_values() < count * Params::frame_size * wav_data.n_channels())
+    return {};
+
+  vector<float> part_signal;
+  for (size_t i = 0; i < count * Params::frame_size; i++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        part_signal.push_back (wav_data.samples()[(index + i) * wav_data.n_channels() + ch]);
+    }
+  WavData wav_part (part_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  return compute_frame_ffts (wav_part);
 }
 
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
-  size_t sync_index = 0;
-  while (sync_index + mark_sync_frame_count() < fft_out.size() / wav_data.n_channels())
+  for (size_t sync_index = 0;; sync_index += 128)
     {
-      vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, sync_index, mark_sync_frame_count());
-      sync_decode (wav_data, fft_out_range, fft_orig_out);
-      sync_index += 1;
+      vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, sync_index, mark_sync_frame_count());
+      if (!fft_out_range.size())
+        return 0; /* eof */
+
+      double q = sync_decode (wav_data, fft_out_range, fft_orig_out);
+      printf ("%zd %f #Q\n", sync_index, q);
     }
   return 0;
 
@@ -1017,6 +1036,32 @@ scale (const string& infile, const string& outfile)
 }
 
 int
+cut_start (const string& infile, const string& outfile, const string& start_str)
+{
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+
+  size_t start = atoi (start_str.c_str());
+
+  const vector<float>& in_signal = wav_data.samples();
+  vector<float> out_signal;
+  for (size_t i = start * wav_data.n_channels(); i < in_signal.size(); i++)
+    out_signal.push_back (in_signal[i]);
+
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  if (!out_wav_data.save (outfile))
+    {
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      return 1;
+    }
+  return 0;
+}
+
+int
 get_snr (const string& origfile, const string& wmfile)
 {
   WavData orig_wav_data;
@@ -1106,6 +1151,10 @@ main (int argc, char **argv)
   else if (op == "scale" && argc == 4)
     {
       scale (argv[2], argv[3]);
+    }
+  else if (op == "cut-start" && argc == 5)
+    {
+      cut_start (argv[2], argv[3], argv[4]);
     }
   else if (op == "get-delta" && argc == 4)
     {
