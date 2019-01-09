@@ -841,8 +841,9 @@ sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, v
           if (data_bit != expect_data_bit)
             sync_match = false;
 
-          printf ("%d %f\n", data_bit, normalize_sync_quality (fabs (umag / dmag - 1)));
-          sync_quality += fabs (umag / dmag - 1);
+          const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
+          printf ("%d %f\n", data_bit, normalize_sync_quality (q));
+          sync_quality += q;
           umag = 0;
           dmag = 0;
         }
