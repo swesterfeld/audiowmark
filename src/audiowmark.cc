@@ -900,15 +900,26 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<v
     double quality;
   };
   vector<SyncScore> sync_scores;
-  for (size_t sync_index = 0;; sync_index += 128)
-    {
-      vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, sync_index, mark_sync_frame_count());
-      if (!fft_out_range.size())
-        break; /* eof */
 
-      double q = sync_decode (wav_data, fft_out_range, fft_orig_out);
-      // printf ("%zd %f #Q\n", sync_index, q);
-      sync_scores.emplace_back (SyncScore { sync_index, q });
+  // compute multiple time-shifted fft vectors
+  vector<vector<vector<complex<float>>>> fft_sync_shift_out;
+  for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += 128)
+    fft_sync_shift_out.push_back (sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1));
+
+  for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+    {
+      for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += 128)
+        {
+          const size_t sync_index = start_frame * Params::frame_size + sync_shift;
+          if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / 128].size())
+            {
+              vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_sync_shift_out[sync_shift / 128], start_frame, mark_sync_frame_count());
+
+              double quality = sync_decode (wav_data, fft_out_range, /* FIXME: non-blind */ fft_orig_out);
+              // printf ("%zd %f\n", sync_index, quality);
+              sync_scores.emplace_back (SyncScore { sync_index, quality });
+            }
+        }
     }
   for (size_t i = 0; i < sync_scores.size(); i++)
     {
