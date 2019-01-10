@@ -346,10 +346,10 @@ compute_frame_ffts (const WavData& wav_data)
           /* FFT transform */
           fftar_float (Params::frame_size, frame, frame_fft);
 
-          /* complex<float> vector and fft_out have the same layout in memory */
-          vector<complex<float>> out (Params::frame_size / 2 + 1);
-          std::copy (frame_fft, frame_fft + out.size() * 2, reinterpret_cast<float *> (&out[0]));
-          fft_out.emplace_back (out);
+          /* complex<float> and frame_fft have the same layout in memory */
+          const complex<float> *first = (complex<float> *) frame_fft;
+          const complex<float> *last  = first + Params::frame_size / 2 + 1;
+          fft_out.emplace_back (first, last);
         }
     }
   free_array_float (frame);
