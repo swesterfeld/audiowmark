@@ -242,13 +242,13 @@ get_frame (const WavData& wav_data, int f, int ch)
 {
   auto& samples = wav_data.samples();
 
-  vector<float> result;
-
   size_t pos = (f * Params::frame_size) * wav_data.n_channels() + ch;
+  assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
+
+  vector<float> result (Params::frame_size);
   for (size_t x = 0; x < Params::frame_size; x++)
     {
-      if (pos < samples.size())
-        result.push_back (samples[pos]);
+      result[x] = samples[pos];
 
       pos += wav_data.n_channels();
     }
