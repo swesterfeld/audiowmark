@@ -818,7 +818,7 @@ public:
       get_up_down (i, up[i], down[i]);
   }
   double
-  sync_decode (const WavData& wav_data, const vector<vector<complex<float>>>& fft_out, const vector<vector<complex<float>>>& fft_orig_out)
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<vector<complex<float>>>& fft_out, const vector<vector<complex<float>>>& fft_orig_out)
   {
     // FIXME: is copypasted
     const int frame_count = mark_sync_frame_count();
@@ -830,7 +830,7 @@ public:
       {
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
-            const size_t index = f * wav_data.n_channels() + ch;
+            const size_t index = (f + start_frame) * wav_data.n_channels() + ch;
 
             const double min_db = -96;
             for (auto u : up[f])
@@ -886,9 +886,7 @@ public:
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
             if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / 128].size())
               {
-                vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_sync_shift_out[sync_shift / 128], start_frame, mark_sync_frame_count());
-
-                double quality = sync_decode (wav_data, fft_out_range, /* FIXME: non-blind */ {});
+                double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / 128], /* FIXME: non-blind */ {});
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (SyncScore { sync_index, quality });
               }
@@ -924,7 +922,7 @@ public:
                     vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
                     if (fft_out_range.size())
                       {
-                        double q = sync_decode (wav_data, fft_out_range, {});
+                        double q = sync_decode (wav_data, 0, fft_out_range, {});
 
                         if (q > best_quality)
                           {
