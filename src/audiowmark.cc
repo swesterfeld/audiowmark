@@ -232,29 +232,6 @@ block_count (const WavData& wav_data)
   return frame_count (wav_data) / (Params::block_size * Params::frames_per_bit);
 }
 
-/*
- * get one audio frame, Params::frame_size samples if available
- *
- * in case of stereo: deinterleave
- */
-vector<float>
-get_frame (const WavData& wav_data, int f, int ch)
-{
-  auto& samples = wav_data.samples();
-
-  size_t pos = (f * Params::frame_size) * wav_data.n_channels() + ch;
-  assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
-
-  vector<float> result (Params::frame_size);
-  for (size_t x = 0; x < Params::frame_size; x++)
-    {
-      result[x] = samples[pos];
-
-      pos += wav_data.n_channels();
-    }
-  return result;
-}
-
 void
 get_up_down (int f, vector<int>& up, vector<int>& down)
 {
@@ -348,21 +325,35 @@ compute_frame_ffts (const WavData& wav_data)
       window[i] *= 2.0 / window_weight;
     }
 
+  float *frame  = new_array_float (Params::frame_size);
+  float *frame_fft = new_array_float (Params::frame_size);
 
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
-          vector<float> frame = get_frame (wav_data, f, ch);
+          const auto& samples = wav_data.samples();
 
-          /* apply window */
-          for (size_t i = 0; i < frame.size(); i++)
-            frame[i] *= window[i];
+          size_t pos = (f * Params::frame_size) * wav_data.n_channels() + ch;
+          assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
 
+          /* deinterleave frame data and apply window */
+          for (size_t x = 0; x < Params::frame_size; x++)
+            {
+              frame[x] = samples[pos] * window[x];
+              pos += wav_data.n_channels();
+            }
           /* FFT transform */
-          fft_out.push_back (fft (frame));
+          fftar_float (Params::frame_size, frame, frame_fft);
+
+          /* complex<float> vector and fft_out have the same layout in memory */
+          vector<complex<float>> out (Params::frame_size / 2 + 1);
+          std::copy (frame_fft, frame_fft + out.size() * 2, reinterpret_cast<float *> (&out[0]));
+          fft_out.emplace_back (out);
         }
     }
+  free_array_float (frame);
+  free_array_float (frame_fft);
   return fft_out;
 }
 
@@ -947,7 +938,7 @@ public:
         const double min_db = -96;
 
         vector<float> db_spect (spect.size());
-        for (size_t i = Params::min_band; i <= Params::max_band; i++)
+        for (int i = Params::min_band; i <= Params::max_band; i++)
           db_spect[i] = db_from_factor (abs (spect[i]), min_db);
 
         fft_out_db.push_back (db_spect);
