@@ -818,7 +818,7 @@ public:
       get_up_down (i, up[i], down[i]);
   }
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<vector<complex<float>>>& fft_out, const vector<vector<complex<float>>>& fft_orig_out)
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<vector<float>>& fft_out_db)
   {
     // FIXME: is copypasted
     const int frame_count = mark_sync_frame_count();
@@ -832,21 +832,11 @@ public:
           {
             const size_t index = (f + start_frame) * wav_data.n_channels() + ch;
 
-            const double min_db = -96;
             for (auto u : up[f])
-              {
-                umag += db_from_factor (abs (fft_out[index][u]), min_db);
+              umag += fft_out_db[index][u];
 
-                if (index < fft_orig_out.size())
-                  umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-              }
             for (auto d : down[f])
-              {
-                dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-                if (index < fft_orig_out.size())
-                  dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-              }
+              dmag += fft_out_db[index][d];
           }
         if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
           {
@@ -875,7 +865,7 @@ public:
     vector<SyncScore> sync_scores;
 
     // compute multiple time-shifted fft vectors
-    vector<vector<vector<complex<float>>>> fft_sync_shift_out;
+    vector<vector<vector<float>>> fft_sync_shift_out;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += 128)
       fft_sync_shift_out.push_back (sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1));
 
@@ -886,7 +876,7 @@ public:
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
             if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / 128].size())
               {
-                double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / 128], /* FIXME: non-blind */ {});
+                double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / 128]);
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (SyncScore { sync_index, quality });
               }
@@ -919,10 +909,10 @@ public:
                 int step  = 8;
                 for (int fine_index = start; fine_index < end; fine_index += step)
                   {
-                    vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
+                    vector<vector<float>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
                     if (fft_out_range.size())
                       {
-                        double q = sync_decode (wav_data, 0, fft_out_range, {});
+                        double q = sync_decode (wav_data, 0, fft_out_range);
 
                         if (q > best_quality)
                           {
@@ -936,7 +926,7 @@ public:
           }
       }
   }
-  vector<vector<complex<float>>>
+  vector<vector<float>>
   sync_fft (const WavData& wav_data, size_t index, size_t count)
   {
     if (wav_data.n_values() < (index + count * Params::frame_size) * wav_data.n_channels())
@@ -949,7 +939,20 @@ public:
           part_signal.push_back (wav_data.samples()[(index + i) * wav_data.n_channels() + ch]);
       }
     WavData wav_part (part_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
-    return compute_frame_ffts (wav_part);
+
+    /* computing db-magnitude is expensive, so we better do it here */
+    vector<vector<float>> fft_out_db;
+    for (auto spect : compute_frame_ffts (wav_part))
+      {
+        const double min_db = -96;
+
+        vector<float> db_spect (spect.size());
+        for (size_t i = Params::min_band; i <= Params::max_band; i++)
+          db_spect[i] = db_from_factor (abs (spect[i]), min_db);
+
+        fft_out_db.push_back (db_spect);
+      }
+    return fft_out_db;
   }
 
   const char*
