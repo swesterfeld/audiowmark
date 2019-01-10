@@ -804,57 +804,68 @@ normalize_sync_quality (double raw_quality)
   return raw_quality / min (Params::water_delta, 0.080) / 2.9;
 }
 
-double
-sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+class SyncFinder
 {
-  // FIXME: is copypasted
-  const int frame_count = mark_sync_frame_count();
+  vector<vector<int>> up;
+  vector<vector<int>> down;
+public:
+  SyncFinder()
+  {
+    up.resize (mark_sync_frame_count());
+    down.resize (mark_sync_frame_count());
 
-  double umag = 0, dmag = 0;
-  double sync_quality = 0;
+    for (size_t i = 0; i < mark_sync_frame_count(); i++)
+      get_up_down (i, up[i], down[i]);
+  }
+  double
+  sync_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+  {
+    // FIXME: is copypasted
+    const int frame_count = mark_sync_frame_count();
 
-  for (int f = 0; f < frame_count; f++)
-    {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
-        {
-          const size_t index = f * wav_data.n_channels() + ch;
-          vector<int> up;
-          vector<int> down;
-          get_up_down (f, up, down);
+    double umag = 0, dmag = 0;
+    double sync_quality = 0;
 
-          const double min_db = -96;
-          for (auto u : up)
-            {
-              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+    for (int f = 0; f < frame_count; f++)
+      {
+        for (int ch = 0; ch < wav_data.n_channels(); ch++)
+          {
+            const size_t index = f * wav_data.n_channels() + ch;
 
-              if (index < fft_orig_out.size())
-                umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-            }
-          for (auto d : down)
-            {
-              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+            const double min_db = -96;
+            for (auto u : up[f])
+              {
+                umag += db_from_factor (abs (fft_out[index][u]), min_db);
 
-              if (index < fft_orig_out.size())
-                dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-            }
-        }
-      if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
-        {
-          const int data_bit = (umag < dmag) ? 0 : 1;
-          const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
-          if (data_bit != expect_data_bit)
-            return 0;
+                if (index < fft_orig_out.size())
+                  umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+              }
+            for (auto d : down[f])
+              {
+                dmag += db_from_factor (abs (fft_out[index][d]), min_db);
 
-          const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
-          sync_quality += q;
-          umag = 0;
-          dmag = 0;
-        }
-    }
-  sync_quality /= Params::sync_bits;
-  sync_quality = normalize_sync_quality (sync_quality);
-  return sync_quality;
-}
+                if (index < fft_orig_out.size())
+                  dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
+              }
+          }
+        if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
+          {
+            const int data_bit = (umag < dmag) ? 0 : 1;
+            const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
+            if (data_bit != expect_data_bit)
+              return 0;
+
+            const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
+            sync_quality += q;
+            umag = 0;
+            dmag = 0;
+          }
+      }
+    sync_quality /= Params::sync_bits;
+    sync_quality = normalize_sync_quality (sync_quality);
+    return sync_quality;
+  }
+};
 
 vector<vector<complex<float>>>
 sync_fft (const WavData& wav_data, size_t index, size_t count)
@@ -895,6 +906,8 @@ find_closest_sync (size_t index)
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
 {
+  SyncFinder sync_finder;
+
   struct SyncScore {
     size_t index;
     double quality;
@@ -915,7 +928,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<v
             {
               vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_sync_shift_out[sync_shift / 128], start_frame, mark_sync_frame_count());
 
-              double quality = sync_decode (wav_data, fft_out_range, /* FIXME: non-blind */ fft_orig_out);
+              double quality = sync_finder.sync_decode (wav_data, fft_out_range, /* FIXME: non-blind */ fft_orig_out);
               // printf ("%zd %f\n", sync_index, quality);
               sync_scores.emplace_back (SyncScore { sync_index, quality });
             }
@@ -937,7 +950,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<v
 
           if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
             {
-              printf ("%zd %s %f\n", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+              printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
 
               // refine match
               double best_quality = sync_scores[i].quality;
@@ -951,7 +964,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<v
                   vector<vector<complex<float>>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
                   if (fft_out_range.size())
                     {
-                      double q = sync_decode (wav_data, fft_out_range, fft_orig_out);
+                      double q = sync_finder.sync_decode (wav_data, fft_out_range, fft_orig_out);
 
                       if (q > best_quality)
                         {
