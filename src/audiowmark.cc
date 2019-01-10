@@ -933,7 +933,7 @@ public:
 
     /* computing db-magnitude is expensive, so we better do it here */
     vector<vector<float>> fft_out_db;
-    for (auto spect : compute_frame_ffts (wav_part))
+    for (const vector<complex<float>>& spect : compute_frame_ffts (wav_part))
       {
         const double min_db = -96;
 
