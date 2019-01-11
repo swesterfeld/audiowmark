@@ -305,7 +305,7 @@ gen_mix_entries (int block)
 }
 
 vector<vector<complex<float>>>
-compute_frame_ffts (const WavData& wav_data)
+compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count)
 {
   vector<vector<complex<float>>> fft_out;
 
@@ -332,13 +332,13 @@ compute_frame_ffts (const WavData& wav_data)
   float *frame  = new_array_float (Params::frame_size);
   float *frame_fft = new_array_float (Params::frame_size);
 
-  for (int f = 0; f < frame_count (wav_data); f++)
+  for (size_t f = 0; f < frame_count; f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           const auto& samples = wav_data.samples();
 
-          size_t pos = (f * Params::frame_size) * wav_data.n_channels() + ch;
+          size_t pos = (start_index + f * Params::frame_size) * wav_data.n_channels() + ch;
           assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
 
           /* deinterleave frame data and apply window */
@@ -568,7 +568,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data));
   vector<vector<complex<float>>> fft_delta_spect;
   for (int f = 0; f < frame_count (wav_data); f++)
     {
@@ -938,17 +938,9 @@ public:
     if (wav_data.n_values() < (index + count * Params::frame_size) * wav_data.n_channels())
       return {};
 
-    vector<float> part_signal;
-    for (size_t i = 0; i < count * Params::frame_size; i++)
-      {
-        for (int ch = 0; ch < wav_data.n_channels(); ch++)
-          part_signal.push_back (wav_data.samples()[(index + i) * wav_data.n_channels() + ch]);
-      }
-    WavData wav_part (part_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
-
     /* computing db-magnitude is expensive, so we better do it here */
     vector<vector<float>> fft_out_db;
-    for (const vector<complex<float>>& spect : compute_frame_ffts (wav_part))
+    for (const vector<complex<float>>& spect : compute_frame_ffts (wav_data, index, count))
       {
         const double min_db = -96;
 
@@ -1000,7 +992,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
         }
       WavData wav_part (part_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
 
-      auto fft_range_out = compute_frame_ffts (wav_part);
+      auto fft_range_out = compute_frame_ffts (wav_part, 0, frame_count (wav_part));
 
       vector<vector<complex<float>>> junk;
 
