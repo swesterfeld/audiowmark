@@ -36,6 +36,8 @@ namespace Params
 
   static int sync_bits           = 6;
   static int sync_frames_per_bit = 32;
+  static int sync_search_step    = 256;
+  static int sync_search_fine    = 8;
 }
 
 void
@@ -857,17 +859,17 @@ public:
 
     // compute multiple time-shifted fft vectors
     vector<vector<vector<float>>> fft_sync_shift_out;
-    for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += 128)
+    for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       fft_sync_shift_out.push_back (sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1));
 
     for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
       {
-        for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += 128)
+        for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / 128].size())
+            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / Params::sync_search_step].size())
               {
-                double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / 128]);
+                double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / Params::sync_search_step]);
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (SyncScore { sync_index, quality });
               }
@@ -895,10 +897,9 @@ public:
                 double best_quality = sync_scores[i].quality;
                 size_t best_index   = sync_scores[i].index;
 
-                int start = std::max (int (sync_scores[i].index) - 128, 0);
-                int end   = sync_scores[i].index + 128;
-                int step  = 8;
-                for (int fine_index = start; fine_index < end; fine_index += step)
+                int start = std::max (int (sync_scores[i].index) - Params::sync_search_step, 0);
+                int end   = sync_scores[i].index + Params::sync_search_step;
+                for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
                   {
                     vector<vector<float>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
                     if (fft_out_range.size())
