@@ -307,6 +307,8 @@ gen_mix_entries (int block)
 vector<vector<complex<float>>>
 compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count)
 {
+  assert (wav_data.n_values() >= (start_index + frame_count * Params::frame_size) * wav_data.n_channels());
+
   vector<vector<complex<float>>> fft_out;
 
   /* generate analysis window */
