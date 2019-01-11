@@ -983,7 +983,7 @@ public:
 };
 
 int
-decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
   SyncFinder sync_finder;
 
@@ -1060,10 +1060,7 @@ get_watermark (const string& infile, const string& orig_pattern)
   // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
   truncate_to_block_size (wav_data);
 
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
-  vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
-
-  return decode_and_report (wav_data, orig_pattern, fft_out, fft_orig_out);
+  return decode_and_report (wav_data, orig_pattern);
 }
 
 int
@@ -1087,10 +1084,15 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
   truncate_to_block_size (wav_data);
   truncate_to_block_size (orig_wav_data);
 
+  /*
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
 
   return decode_and_report (wav_data, orig_pattern, fft_out, fft_orig_out);
+  */
+  /* FIXME? */
+  printf ("delta decoding currently not supported\n");
+  return 1;
 }
 
 int
