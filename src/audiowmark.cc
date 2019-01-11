@@ -711,25 +711,26 @@ normalize_soft_bits (const vector<float>& soft_bits)
 }
 
 vector<float>
-mix_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
   vector<float> soft_bit_vec;
 
-  for (int block = 0; block < block_count (wav_data); block++)
+  const int n_blocks = fft_out.size() / (Params::block_size * Params::frames_per_bit) / n_channels;
+  for (int block = 0; block < n_blocks; block++)
     {
       vector<MixEntry> mix_entries = gen_mix_entries (block);
 
       double umag = 0, dmag = 0;
       for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
         {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+          for (int ch = 0; ch < n_channels; ch++)
             {
               for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
                 {
                   int b = f * Params::bands_per_frame + frame_b;
                   const double min_db = -96;
 
-                  const size_t index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                  const size_t index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * n_channels + ch;
                   const int u = mix_entries[b].up;
                   const int d = mix_entries[b].down;
 
@@ -755,16 +756,17 @@ mix_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, ve
 }
 
 vector<float>
-linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
   vector<float> soft_bit_vec;
 
   double umag = 0, dmag = 0;
-  for (int f = 0; f < frame_count (wav_data); f++)
+  const int frame_count = fft_out.size() / n_channels;
+  for (int f = 0; f < frame_count; f++)
     {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
-          const size_t index = f * wav_data.n_channels() + ch;
+          const size_t index = f * n_channels + ch;
           vector<int> up;
           vector<int> down;
           get_up_down (f, up, down);
@@ -984,26 +986,18 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       const size_t count = mark_data_frame_count();
       const size_t index = pos + (mark_sync_frame_count() * Params::frame_size);
 
-      vector<float> part_signal;
-      for (size_t i = 0; i < count * Params::frame_size; i++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            part_signal.push_back (wav_data.samples()[(index + i) * wav_data.n_channels() + ch]);
-        }
-      WavData wav_part (part_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
-
-      auto fft_range_out = compute_frame_ffts (wav_part, 0, frame_count (wav_part));
+      auto fft_range_out = compute_frame_ffts (wav_data, index, count);
 
       vector<vector<complex<float>>> junk;
 
       vector<float> soft_bit_vec;
       if (Params::mix)
         {
-          soft_bit_vec = mix_decode (wav_part, fft_range_out, junk);
+          soft_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
         }
       else
         {
-          soft_bit_vec = linear_decode (wav_part, fft_range_out, junk);
+          soft_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
         }
       if (soft_bit_vec.size() < conv_code_size (Params::payload_size))
         {
