@@ -981,6 +981,8 @@ public:
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
+  int match_count = 0, total_count = 0;
+
   SyncFinder sync_finder;
 
   for (auto pos : sync_finder.search (wav_data))
@@ -1014,26 +1016,24 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
 
       const int seconds = lrint (pos / wav_data.mix_freq());
-
       printf ("pattern %2d:%02d %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str());
-    }
 
-#if 0 /* TODO */
-  if (!orig_pattern.empty())
-    {
-      int bits = 0, bit_errors = 0;
-
-      vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-      for (size_t i = 0; i < bit_vec.size(); i++)
+      if (!orig_pattern.empty())
         {
-          bits++;
-          if (bit_vec[i] != orig_vec[i % orig_vec.size()])
-            bit_errors++;
+          bool        match = true;
+          vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+
+          for (size_t i = 0; i < bit_vec.size(); i++)
+            match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+
+          if (match)
+            match_count++;
         }
-      printf ("bit_error_raw %d %d\n", bit_errors, bits);
-      printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
+      total_count++;
     }
-#endif
+
+  if (!orig_pattern.empty())
+    printf ("match_count %d %d\n", match_count, total_count);
   return 0;
 }
 
