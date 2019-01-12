@@ -1013,7 +1013,9 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
       vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
 
-      printf ("pattern %d %s\n", int (pos / wav_data.mix_freq()), bit_vec_to_str (bit_vec).c_str());
+      const int seconds = lrint (pos / wav_data.mix_freq());
+
+      printf ("pattern %2d:%02d %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str());
     }
 
 #if 0 /* TODO */
