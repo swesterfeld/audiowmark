@@ -307,9 +307,11 @@ gen_mix_entries (int block)
 vector<vector<complex<float>>>
 compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count)
 {
-  assert (wav_data.n_values() >= (start_index + frame_count * Params::frame_size) * wav_data.n_channels());
-
   vector<vector<complex<float>>> fft_out;
+
+  /* if there is not enough space for frame_count values, return an error (empty vector) */
+  if (wav_data.n_values() < (start_index + frame_count * Params::frame_size) * wav_data.n_channels())
+    return fft_out;
 
   /* generate analysis window */
   vector<float> window (Params::frame_size);
@@ -939,9 +941,6 @@ public:
   vector<vector<float>>
   sync_fft (const WavData& wav_data, size_t index, size_t count)
   {
-    if (wav_data.n_values() < (index + count * Params::frame_size) * wav_data.n_channels())
-      return {};
-
     /* computing db-magnitude is expensive, so we better do it here */
     vector<vector<float>> fft_out_db;
     for (const vector<complex<float>>& spect : compute_frame_ffts (wav_data, index, count))
@@ -991,45 +990,42 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       const size_t index = pos + (mark_sync_frame_count() * Params::frame_size);
 
       auto fft_range_out = compute_frame_ffts (wav_data, index, count);
-
-      vector<vector<complex<float>>> junk;
-
-      vector<float> soft_bit_vec;
-      if (Params::mix)
+      if (fft_range_out.size())
         {
-          soft_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
+          vector<vector<complex<float>>> junk;
+
+          vector<float> soft_bit_vec;
+          if (Params::mix)
+            {
+              soft_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
+            }
+          else
+            {
+              soft_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
+            }
+
+          /* truncate to the required length */
+          assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
+          soft_bit_vec.resize (conv_code_size (Params::payload_size));
+
+          vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
+
+          const int seconds = lrint (pos / wav_data.mix_freq());
+          printf ("pattern %2d:%02d %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str());
+
+          if (!orig_pattern.empty())
+            {
+              bool        match = true;
+              vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+
+              for (size_t i = 0; i < bit_vec.size(); i++)
+                match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+
+              if (match)
+                match_count++;
+            }
+          total_count++;
         }
-      else
-        {
-          soft_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
-        }
-      if (soft_bit_vec.size() < conv_code_size (Params::payload_size))
-        {
-          fprintf (stderr, "audiowmark: input file too short to retrieve watermark\n");
-          fprintf (stderr, " - number of recovered raw bits %zd\n", soft_bit_vec.size());
-          fprintf (stderr, " - need at least %zd raw bits to get watermark\n", conv_code_size (Params::payload_size));
-          return 1;
-        }
-      /* truncate to the required length */
-      soft_bit_vec.resize (conv_code_size (Params::payload_size));
-
-      vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
-
-      const int seconds = lrint (pos / wav_data.mix_freq());
-      printf ("pattern %2d:%02d %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str());
-
-      if (!orig_pattern.empty())
-        {
-          bool        match = true;
-          vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-
-          for (size_t i = 0; i < bit_vec.size(); i++)
-            match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
-
-          if (match)
-            match_count++;
-        }
-      total_count++;
     }
 
   if (!orig_pattern.empty())
