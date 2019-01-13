@@ -980,7 +980,7 @@ public:
 int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
-  int match_count = 0, total_count = 0;
+  int match_count = 0, total_count = 0, sync_match = 0;
 
   SyncFinder sync_finder;
 
@@ -1023,13 +1023,25 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
               if (match)
                 match_count++;
+
+              int expect_index = Params::frames_pad_start * Params::frame_size;
+              while (sync_score.index + Params::frame_size > expect_index)
+                {
+                  if (abs (int (sync_score.index) - expect_index) < Params::frame_size)
+                    sync_match++;
+
+                  expect_index += (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+                }
             }
           total_count++;
         }
     }
 
   if (!orig_pattern.empty())
-    printf ("match_count %d %d\n", match_count, total_count);
+    {
+      printf ("match_count %d %d\n", match_count, total_count);
+      printf ("sync_match %d\n", sync_match);
+    }
   return 0;
 }
 

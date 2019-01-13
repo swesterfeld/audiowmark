@@ -97,9 +97,11 @@ do
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
   done
-done | grep match_count | {
+done | {
   if [ "x$AWM_REPORT" == "xfer" ]; then
-    awk 'BEGIN { bad = n = 0 } { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+    awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+  elif [ "x$AWM_REPORT" == "xsync" ]; then
+    awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / n; }'
   else
     echo "unknown report $AWM_REPORT" >&2
     exit 1
