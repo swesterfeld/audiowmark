@@ -865,15 +865,15 @@ public:
     sync_quality = normalize_sync_quality (sync_quality);
     return sync_quality;
   }
-  vector<size_t>
+  struct Score {
+    size_t index;
+    double quality;
+  };
+  vector<Score>
   search (const WavData& wav_data)
   {
-    vector<size_t> sync_positions;
-    struct SyncScore {
-      size_t index;
-      double quality;
-    };
-    vector<SyncScore> sync_scores;
+    vector<Score> result_scores;
+    vector<Score> sync_scores;
 
     // compute multiple time-shifted fft vectors
     vector<vector<vector<float>>> fft_sync_shift_out;
@@ -889,7 +889,7 @@ public:
               {
                 double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / Params::sync_search_step]);
                 // printf ("%zd %f\n", sync_index, quality);
-                sync_scores.emplace_back (SyncScore { sync_index, quality });
+                sync_scores.emplace_back (Score { sync_index, quality });
               }
           }
       }
@@ -932,11 +932,11 @@ public:
                       }
                   }
                 //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
-                sync_positions.push_back (best_index);
+                result_scores.push_back (Score { best_index, best_quality });
               }
           }
       }
-    return sync_positions;
+    return result_scores;
   }
   vector<vector<float>>
   sync_fft (const WavData& wav_data, size_t index, size_t count)
@@ -984,10 +984,10 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   SyncFinder sync_finder;
 
-  for (auto pos : sync_finder.search (wav_data))
+  for (auto sync_score : sync_finder.search (wav_data))
     {
       const size_t count = mark_data_frame_count();
-      const size_t index = pos + (mark_sync_frame_count() * Params::frame_size);
+      const size_t index = sync_score.index + (mark_sync_frame_count() * Params::frame_size);
 
       auto fft_range_out = compute_frame_ffts (wav_data, index, count);
       if (fft_range_out.size())
@@ -1010,8 +1010,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
           vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
 
-          const int seconds = lrint (pos / wav_data.mix_freq());
-          printf ("pattern %2d:%02d %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str());
+          const int seconds = lrint (sync_score.index / wav_data.mix_freq());
+          printf ("pattern %2d:%02d %s %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
 
           if (!orig_pattern.empty())
             {
