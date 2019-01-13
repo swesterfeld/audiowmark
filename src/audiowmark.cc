@@ -982,9 +982,10 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
   int match_count = 0, total_count = 0, sync_match = 0;
 
-  SyncFinder sync_finder;
+  SyncFinder                sync_finder;
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
 
-  for (auto sync_score : sync_finder.search (wav_data))
+  for (auto sync_score : sync_scores)
     {
       const size_t count = mark_data_frame_count();
       const size_t index = sync_score.index + (mark_sync_frame_count() * Params::frame_size);
@@ -1024,14 +1025,6 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
               if (match)
                 match_count++;
 
-              int expect_index = Params::frames_pad_start * Params::frame_size;
-              while (sync_score.index + Params::frame_size > expect_index)
-                {
-                  if (abs (int (sync_score.index) - expect_index) < Params::frame_size)
-                    sync_match++;
-
-                  expect_index += (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
-                }
             }
           total_count++;
         }
@@ -1040,6 +1033,23 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   if (!orig_pattern.empty())
     {
       printf ("match_count %d %d\n", match_count, total_count);
+
+      /* search sync markers at typical positions */
+      const int expect0 = Params::frames_pad_start * Params::frame_size;
+      const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+      const int expect_end = frame_count (wav_data) * Params::frame_size;
+
+      for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
+        {
+          for (auto sync_score : sync_scores)
+            {
+              if (abs (int (sync_score.index) - expect_index) < Params::frame_size)
+                {
+                  sync_match++;
+                  break;
+                }
+            }
+        }
       printf ("sync_match %d\n", sync_match);
     }
   return 0;
