@@ -35,7 +35,7 @@ namespace Params
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 
   static int sync_bits           = 6;
-  static int sync_frames_per_bit = 32;
+  static int sync_frames_per_bit = 85;
   static int sync_search_step    = 256;
   static int sync_search_fine    = 8;
 
