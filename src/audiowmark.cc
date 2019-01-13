@@ -852,8 +852,6 @@ public:
           {
             const int data_bit = (umag < dmag) ? 0 : 1;
             const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
-            if (data_bit != expect_data_bit)
-              return 0;
 
             const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
             sync_quality += q;
