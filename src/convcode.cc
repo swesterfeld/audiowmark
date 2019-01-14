@@ -1,4 +1,5 @@
 #include "utils.hh"
+#include "convcode.hh"
 
 #include <array>
 #include <algorithm>
@@ -74,7 +75,7 @@ conv_encode (const vector<int>& in_bits)
 
 /* decode using viterbi algorithm */
 vector<int>
-conv_decode_soft (const vector<float>& coded_bits)
+conv_decode_soft (const vector<float>& coded_bits, float *error_out)
 {
   vector<int> decoded_bits;
 
@@ -141,6 +142,8 @@ conv_decode_soft (const vector<float>& coded_bits)
     }
 
   unsigned int state = 0;
+  if (error_out)
+    *error_out = error_count.back()[state].delta / coded_bits.size();
   for (size_t idx = error_count.size() - 1; idx > 0; idx--)
     {
       decoded_bits.push_back (error_count[idx][state].bit);

@@ -988,16 +988,17 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
     soft_bit_vec.resize (conv_code_size (Params::payload_size));
 
-    vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
+    float decode_error = 0;
+    vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
 
     if (sync_score.index)
       {
         const int seconds = lrint (sync_score.index / wav_data.mix_freq());
-        printf ("pattern %2d:%02d %s %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
+        printf ("pattern %2d:%02d %s %.3f %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
       }
     else /* this is the combined pattern "all" */
       {
-        printf ("pattern   all %s %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
+        printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
       }
 
     if (!orig_pattern.empty())
