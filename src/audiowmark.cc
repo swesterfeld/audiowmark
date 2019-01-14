@@ -982,6 +982,42 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   SyncFinder                sync_finder;
   vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
 
+  auto decode_single = [&] (vector<float> soft_bit_vec, SyncFinder::Score sync_score)
+  {
+    /* truncate to the required length */
+    assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
+    soft_bit_vec.resize (conv_code_size (Params::payload_size));
+
+    vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
+
+    if (sync_score.index)
+      {
+        const int seconds = lrint (sync_score.index / wav_data.mix_freq());
+        printf ("pattern %2d:%02d %s %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
+      }
+    else /* this is the combined pattern "all" */
+      {
+        printf ("pattern   all %s %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
+      }
+
+    if (!orig_pattern.empty())
+      {
+        bool        match = true;
+        vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+
+        for (size_t i = 0; i < bit_vec.size(); i++)
+          match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+
+        if (match)
+          match_count++;
+
+      }
+    total_count++;
+  };
+
+  vector<float> soft_bit_vec_all (conv_code_size (Params::payload_size));
+  SyncFinder::Score score_all { 0, 0 };
+
   for (auto sync_score : sync_scores)
     {
       const size_t count = mark_data_frame_count();
@@ -1001,30 +1037,20 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             {
               soft_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
             }
+          decode_single (soft_bit_vec, sync_score);
 
-          /* truncate to the required length */
-          assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
-          soft_bit_vec.resize (conv_code_size (Params::payload_size));
-
-          vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
-
-          const int seconds = lrint (sync_score.index / wav_data.mix_freq());
-          printf ("pattern %2d:%02d %s %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality);
-
-          if (!orig_pattern.empty())
-            {
-              bool        match = true;
-              vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-
-              for (size_t i = 0; i < bit_vec.size(); i++)
-                match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
-
-              if (match)
-                match_count++;
-
-            }
-          total_count++;
+          score_all.quality += sync_score.quality;
+          for (size_t i = 0; i < soft_bit_vec_all.size(); i++)
+            soft_bit_vec_all[i] += soft_bit_vec[i];
         }
+    }
+  if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
+    {
+      score_all.quality /= total_count;
+      for (auto& sbit : soft_bit_vec_all)
+        sbit /= total_count;
+
+      decode_single (soft_bit_vec_all, score_all);
     }
 
   if (!orig_pattern.empty())
