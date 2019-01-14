@@ -42,6 +42,7 @@ uint64_from_buffer (unsigned char *buffer)
        + buffer[7];
 }
 
+#if 0 /* debugging only */
 static void
 print (const string& label, const vector<unsigned char>& data)
 {
@@ -50,6 +51,7 @@ print (const string& label, const vector<unsigned char>& data)
     printf ("%02x ", ch);
   printf ("\n");
 }
+#endif
 
 Random::Random (uint64_t seed, Stream stream)
 {
