@@ -374,13 +374,13 @@ mark_data_frame_count()
 }
 
 void
-mark_data (const WavData& wav_data, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect,
+mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect,
            const vector<int>& bitvec)
 {
-  assert (fft_out.size() == mark_data_frame_count() * wav_data.n_channels());
+  assert (fft_out.size() >= (start_frame + mark_data_frame_count()) * wav_data.n_channels());
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
 
-  const int frame_count = fft_out.size() / wav_data.n_channels();
+  const int frame_count = mark_data_frame_count();
 
   if (Params::mix)
     {
@@ -403,7 +403,7 @@ mark_data (const WavData& wav_data, const vector<vector<complex<float>>>& fft_ou
                       const double  data_bit_sign = data_bit > 0 ? 1 : -1;
 
                       const int u = mix_entries[b].up;
-                      const int index = (block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                      const int index = (start_frame + block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
                       {
                         const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
 
@@ -427,7 +427,7 @@ mark_data (const WavData& wav_data, const vector<vector<complex<float>>>& fft_ou
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              size_t index = f * wav_data.n_channels() + ch;
+              size_t index = (start_frame + f) * wav_data.n_channels() + ch;
 
               vector<int> up;
               vector<int> down;
@@ -469,16 +469,18 @@ mark_sync_frame_count()
 }
 
 void
-mark_sync (const WavData& wav_data, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
 {
-  const int frame_count = fft_out.size() / wav_data.n_channels();
+  assert (fft_out.size() >= (start_frame + mark_sync_frame_count()) * wav_data.n_channels());
+
+  const int frame_count = mark_sync_frame_count();
 
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
-          size_t index = f * wav_data.n_channels() + ch;
+          size_t index = (start_frame + f) * wav_data.n_channels() + ch;
 
           vector<int> up;
           vector<int> down;
@@ -581,29 +583,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
     }
-  /*
-  vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, 0, mark_data_frame_count());
-  vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, 0, mark_data_frame_count());
-  mark_data (wav_data, fft_out_range, fft_delta_spect_range, bitvec);
-  copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, 0);
-  */
   size_t frame_index = Params::frames_pad_start; // FIXME: should really pad here
   while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
     {
-      {
-        vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, frame_index, mark_sync_frame_count());
-        vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, frame_index, mark_sync_frame_count());
-        mark_sync (wav_data, fft_out_range, fft_delta_spect_range);
-        copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, frame_index);
-        frame_index += mark_sync_frame_count();
-      }
-      {
-        vector<vector<complex<float>>> fft_out_range = get_frame_range (wav_data, fft_out, frame_index, mark_data_frame_count());
-        vector<vector<complex<float>>> fft_delta_spect_range = get_frame_range (wav_data, fft_delta_spect, frame_index, mark_data_frame_count());
-        mark_data (wav_data, fft_out_range, fft_delta_spect_range, bitvec);
-        copy_frame_range (wav_data, fft_delta_spect_range, fft_delta_spect, frame_index);
-        frame_index += mark_data_frame_count();
-      }
+      mark_sync (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index += mark_sync_frame_count();
+
+      mark_data (wav_data, frame_index, fft_out, fft_delta_spect, bitvec);
+      frame_index += mark_data_frame_count();
     }
 
   /* generate synthesis window */
