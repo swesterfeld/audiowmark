@@ -230,12 +230,6 @@ frame_count (const WavData& wav_data)
   return (wav_data.n_values() / wav_data.n_channels() + (Params::frame_size - 1)) / Params::frame_size;
 }
 
-int
-block_count (const WavData& wav_data)
-{
-  return frame_count (wav_data) / (Params::block_size * Params::frames_per_bit);
-}
-
 void
 get_up_down (int f, vector<int>& up, vector<int>& down)
 {
@@ -502,25 +496,6 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
             }
         }
     }
-}
-
-vector<vector<complex<float>>>
-get_frame_range (const WavData& wav_data, const vector<vector<complex<float>>>& src, size_t start, size_t count)
-{
-  start *= wav_data.n_channels();
-  count *= wav_data.n_channels();
-
-  assert (start + count < src.size());
-
-  return vector<vector<complex<float>>> (src.begin() + start, src.begin() + start + count);
-}
-
-void
-copy_frame_range (const WavData& wav_data, const vector<vector<complex<float>>>& src, vector<vector<complex<float>>>& dest, size_t start)
-{
-  start *= wav_data.n_channels();
-
-  std::copy (src.begin(), src.end(), dest.begin() + start);
 }
 
 int
