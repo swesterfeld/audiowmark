@@ -39,7 +39,7 @@ namespace Params
   static int sync_search_step    = 256;
   static int sync_search_fine    = 8;
 
-  static int frames_pad_start    = 100; // padding at start, in case track starts with silence
+  static size_t frames_pad_start = 100; // padding at start, in case track starts with silence
 }
 
 void
@@ -486,6 +486,19 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
     }
 }
 
+void
+mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+{
+  assert (fft_out.size() >= (frame + 1) * wav_data.n_channels());
+
+  for (int ch = 0; ch < wav_data.n_channels(); ch++)
+    {
+      size_t index = frame * wav_data.n_channels() + ch;
+
+      mark_bit_linear (frame, fft_out[index], fft_delta_spect[index], 0);
+    }
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -546,7 +559,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
     }
-  size_t frame_index = Params::frames_pad_start; // FIXME: should really pad here
+  size_t frame_index = 0;
+  /* padding at start */
+  while (frame_index < Params::frames_pad_start)
+    {
+      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index++;
+    }
+  /* embed sync|data|sync|data|... */
   while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
     {
       mark_sync (wav_data, frame_index, fft_out, fft_delta_spect);
@@ -554,6 +574,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
       mark_data (wav_data, frame_index, fft_out, fft_delta_spect, bitvec);
       frame_index += mark_data_frame_count();
+    }
+  /* padding at end */
+  while (frame_index < size_t (frame_count (wav_data)))
+    {
+      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index++;
     }
 
   /* generate synthesis window */
@@ -584,7 +610,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       // cosine
       synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
     }
-
   for (size_t pos = 0; pos < in_signal.size(); pos++)
     out_signal[pos] = in_signal[pos] * Params::pre_scale;
 
