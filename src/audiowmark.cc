@@ -231,13 +231,13 @@ frame_count (const WavData& wav_data)
 }
 
 void
-get_up_down (int f, vector<int>& up, vector<int>& down)
+get_up_down (int f, vector<int>& up, vector<int>& down, Random::Stream random_stream)
 {
   vector<int> bands_reorder;
   for (int i = Params::min_band; i <= Params::max_band; i++)
     bands_reorder.push_back (i);
 
-  Random random (f, Random::Stream::up_down); // use per frame random seed
+  Random random (f, random_stream); // use per frame random seed
   random.shuffle (bands_reorder);
 
   assert (2 * Params::bands_per_frame < bands_reorder.size());
@@ -286,7 +286,7 @@ gen_mix_entries (int block)
     {
       vector<int> up;
       vector<int> down;
-      get_up_down (f, up, down);
+      get_up_down (f, up, down, Random::Stream::data_up_down);
 
       assert (up.size() == down.size());
       for (size_t i = 0; i < up.size(); i++)
@@ -360,11 +360,11 @@ compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_co
 }
 
 void
-mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect, int data_bit)
+mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect, int data_bit, Random::Stream random_stream)
 {
   vector<int> up;
   vector<int> down;
-  get_up_down (f, up, down);
+  get_up_down (f, up, down, random_stream);
   const double  data_bit_sign = data_bit > 0 ? 1 : -1;
   for (auto u : up)
     {
@@ -454,7 +454,7 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
             {
               size_t index = (start_frame + f) * wav_data.n_channels() + ch;
 
-              mark_bit_linear (f, fft_out[index], fft_delta_spect[index], bitvec[f / Params::frames_per_bit]);
+              mark_bit_linear (f, fft_out[index], fft_delta_spect[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down);
             }
         }
     }
@@ -481,7 +481,7 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
           size_t index = (start_frame + f) * wav_data.n_channels() + ch;
           int    data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
 
-          mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit);
+          mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit, Random::Stream::sync_up_down);
         }
     }
 }
@@ -495,7 +495,7 @@ mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<flo
     {
       size_t index = frame * wav_data.n_channels() + ch;
 
-      mark_bit_linear (frame, fft_out[index], fft_delta_spect[index], 0);
+      mark_bit_linear (frame, fft_out[index], fft_delta_spect[index], 0, Random::Stream::pad_up_down);
     }
 }
 
@@ -748,7 +748,7 @@ linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<fl
           const size_t index = f * n_channels + ch;
           vector<int> up;
           vector<int> down;
-          get_up_down (f, up, down);
+          get_up_down (f, up, down, Random::Stream::data_up_down);
 
           const double min_db = -96;
           for (auto u : up)
@@ -800,7 +800,7 @@ public:
     down.resize (mark_sync_frame_count());
 
     for (size_t i = 0; i < mark_sync_frame_count(); i++)
-      get_up_down (i, up[i], down[i]);
+      get_up_down (i, up[i], down[i], Random::Stream::sync_up_down);
   }
   double
   sync_decode (const WavData& wav_data, const size_t start_frame, const vector<vector<float>>& fft_out_db)
