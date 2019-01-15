@@ -359,6 +359,37 @@ compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_co
   return fft_out;
 }
 
+void
+mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect, int data_bit)
+{
+  vector<int> up;
+  vector<int> down;
+  get_up_down (f, up, down);
+  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+  for (auto u : up)
+    {
+      /*
+       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       *
+       * this actually increases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+    }
+  for (auto d : down)
+    {
+      /*
+       * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+       *
+       * this actually decreases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+    }
+}
+
 size_t
 mark_data_frame_count()
 {
@@ -423,34 +454,7 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
             {
               size_t index = (start_frame + f) * wav_data.n_channels() + ch;
 
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const int data_bit = bitvec[f / Params::frames_per_bit];
-              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-              for (auto u : up)
-                {
-                  /*
-                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-                   *
-                   * this actually increases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                }
-              for (auto d : down)
-                {
-                  /*
-                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
-                   *
-                   * this actually decreases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                }
+              mark_bit_linear (f, fft_out[index], fft_delta_spect[index], bitvec[f / Params::frames_per_bit]);
             }
         }
     }
@@ -475,25 +479,9 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           size_t index = (start_frame + f) * wav_data.n_channels() + ch;
+          int    data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
 
-          vector<int> up;
-          vector<int> down;
-          get_up_down (f, up, down); // FIXME use extra random stream for sync
-
-          const int data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
-          const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-          for (auto u : up)
-            {
-              const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-              fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-            }
-          for (auto d : down)
-            {
-              const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-              fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-            }
+          mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit);
         }
     }
 }
