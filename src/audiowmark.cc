@@ -30,7 +30,6 @@ namespace Params
   static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
-  static int block_size        = 32;    // block size for mix step (non-linear bit storage)
   static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 
@@ -227,7 +226,7 @@ db_from_factor (double factor, double min_dB)
 int
 frame_count (const WavData& wav_data)
 {
-  return (wav_data.n_values() / wav_data.n_channels() + (Params::frame_size - 1)) / Params::frame_size;
+  return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
 }
 
 void
@@ -268,34 +267,6 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
         out_bits[order[i]] = bit_vec[i];
     }
   return out_bits;
-}
-
-struct MixEntry
-{
-  int  frame;
-  int  up;
-  int  down;
-};
-
-vector<MixEntry>
-gen_mix_entries (int block)
-{
-  vector<MixEntry> mix_entries;
-
-  for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-    {
-      vector<int> up;
-      vector<int> down;
-      get_up_down (f, up, down, Random::Stream::data_up_down);
-
-      assert (up.size() == down.size());
-      for (size_t i = 0; i < up.size(); i++)
-        mix_entries.push_back ({ f, up[i], down[i] });
-    }
-  Random random (/* seed */ block, Random::Stream::mix);
-  random.shuffle (mix_entries);
-
-  return mix_entries;
 }
 
 vector<vector<complex<float>>>
@@ -393,9 +364,35 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
 size_t
 mark_data_frame_count()
 {
-  const size_t n_blocks = (conv_code_size (Params::payload_size) + (Params::block_size - 1)) / Params::block_size;
+  return conv_code_size (Params::payload_size) * Params::frames_per_bit;
+}
 
-  return n_blocks * Params::block_size * Params::frames_per_bit;
+struct MixEntry
+{
+  int  frame;
+  int  up;
+  int  down;
+};
+
+vector<MixEntry>
+gen_mix_entries()
+{
+  vector<MixEntry> mix_entries;
+
+  for (int f = 0; f < int (mark_data_frame_count()); f++)
+    {
+      vector<int> up;
+      vector<int> down;
+      get_up_down (f, up, down, Random::Stream::data_up_down);
+
+      assert (up.size() == down.size());
+      for (size_t i = 0; i < up.size(); i++)
+        mix_entries.push_back ({ f, up[i], down[i] });
+    }
+  Random random (/* seed */ 0, Random::Stream::mix);
+  random.shuffle (mix_entries);
+
+  return mix_entries;
 }
 
 void
@@ -409,42 +406,35 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
 
   if (Params::mix)
     {
-      const int block_count = frame_count / (Params::block_size * Params::frames_per_bit);
+      vector<MixEntry> mix_entries = gen_mix_entries();
 
-      for (int block = 0; block < block_count; block++)
+      for (int f = 0; f < frame_count; f++)
         {
-          vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-          const int block_start = block * Params::block_size * Params::frames_per_bit;
-          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
                 {
-                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
-                    {
-                      int b = f * Params::bands_per_frame + frame_b;
+                  int b = f * Params::bands_per_frame + frame_b;
 
-                      const int data_bit = bitvec[(block_start + f) / Params::frames_per_bit];
-                      const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+                  const int data_bit = bitvec[f / Params::frames_per_bit];
+                  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
 
-                      const int u = mix_entries[b].up;
-                      const int index = (start_frame + block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+                  const int u = mix_entries[b].up;
+                  const int index = (start_frame + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                  {
+                    const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
 
-                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                      }
-                      const int d = mix_entries[b].down;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+                    fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                  }
+                  const int d = mix_entries[b].down;
+                  {
+                    const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
 
-                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                      }
-                    }
+                    fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                  }
                 }
             }
         }
-
     }
   else
     {
@@ -538,10 +528,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   /*
    * to keep the watermarking code simpler, we pad the wave data with zeros
-   * to avoid processing a partly filled block
+   * to avoid processing a partly filled frame
    */
   vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
+  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size))
     in_signal.push_back (0);
 
   WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
@@ -652,16 +642,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   return 0;
 }
 
-void
-truncate_to_block_size (WavData& wav_data)
-{
-  vector<float> in_signal (wav_data.samples());
-  while (in_signal.size() % (wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
-    in_signal.pop_back();
-
-  wav_data.set_samples (in_signal);
-}
-
 vector<float>
 normalize_soft_bits (const vector<float>& soft_bits)
 {
@@ -694,41 +674,39 @@ mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float
 {
   vector<float> raw_bit_vec;
 
-  const int n_blocks = fft_out.size() / (Params::block_size * Params::frames_per_bit) / n_channels;
-  for (int block = 0; block < n_blocks; block++)
+  const int frame_count = fft_out.size() / n_channels;
+
+  vector<MixEntry> mix_entries = gen_mix_entries();
+
+  double umag = 0, dmag = 0;
+  for (int f = 0; f < frame_count; f++)
     {
-      vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-      double umag = 0, dmag = 0;
-      for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
-          for (int ch = 0; ch < n_channels; ch++)
+          for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
             {
-              for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+              int b = f * Params::bands_per_frame + frame_b;
+              const double min_db = -96;
+
+              const size_t index = mix_entries[b].frame * n_channels + ch;
+              const int u = mix_entries[b].up;
+              const int d = mix_entries[b].down;
+
+              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+
+              if (index < fft_orig_out.size()) /* non-blind decode? */
                 {
-                  int b = f * Params::bands_per_frame + frame_b;
-                  const double min_db = -96;
-
-                  const size_t index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * n_channels + ch;
-                  const int u = mix_entries[b].up;
-                  const int d = mix_entries[b].down;
-
-                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
-                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-                  if (index < fft_orig_out.size()) /* non-blind decode? */
-                    {
-                      umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-                      dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-                    }
+                  umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+                  dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
                 }
             }
-          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-            {
-              raw_bit_vec.push_back (umag - dmag);
-              umag = 0;
-              dmag = 0;
-            }
+        }
+      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+        {
+          raw_bit_vec.push_back (umag - dmag);
+          umag = 0;
+          dmag = 0;
         }
     }
   return raw_bit_vec;
@@ -959,11 +937,9 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   auto decode_single = [&] (const vector<float>& raw_bit_vec, SyncFinder::Score sync_score)
   {
-    vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
+    assert (raw_bit_vec.size() == conv_code_size (Params::payload_size));
 
-    /* truncate to the required length */
-    assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
-    soft_bit_vec.resize (conv_code_size (Params::payload_size));
+    vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
 
     float decode_error = 0;
     vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
@@ -1062,10 +1038,6 @@ get_watermark (const string& infile, const string& orig_pattern)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-
-  // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  truncate_to_block_size (wav_data);
-
   return decode_and_report (wav_data, orig_pattern);
 }
 
@@ -1085,10 +1057,6 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-
-  // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  truncate_to_block_size (wav_data);
-  truncate_to_block_size (orig_wav_data);
 
   /*
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
