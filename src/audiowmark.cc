@@ -692,7 +692,7 @@ normalize_soft_bits (const vector<float>& soft_bits)
 vector<float>
 mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
-  vector<float> soft_bit_vec;
+  vector<float> raw_bit_vec;
 
   const int n_blocks = fft_out.size() / (Params::block_size * Params::frames_per_bit) / n_channels;
   for (int block = 0; block < n_blocks; block++)
@@ -725,19 +725,19 @@ mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float
             }
           if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
             {
-              soft_bit_vec.push_back (umag - dmag);
+              raw_bit_vec.push_back (umag - dmag);
               umag = 0;
               dmag = 0;
             }
         }
     }
-  return normalize_soft_bits (soft_bit_vec);
+  return raw_bit_vec;
 }
 
 vector<float>
 linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
-  vector<float> soft_bit_vec;
+  vector<float> raw_bit_vec;
 
   double umag = 0, dmag = 0;
   const int frame_count = fft_out.size() / n_channels;
@@ -768,12 +768,12 @@ linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<fl
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
         {
-          soft_bit_vec.push_back (umag - dmag);
+          raw_bit_vec.push_back (umag - dmag);
           umag = 0;
           dmag = 0;
         }
     }
-  return normalize_soft_bits (soft_bit_vec);
+  return raw_bit_vec;
 }
 
 double
@@ -957,8 +957,10 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   SyncFinder                sync_finder;
   vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
 
-  auto decode_single = [&] (vector<float> soft_bit_vec, SyncFinder::Score sync_score)
+  auto decode_single = [&] (const vector<float>& raw_bit_vec, SyncFinder::Score sync_score)
   {
+    vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
+
     /* truncate to the required length */
     assert (soft_bit_vec.size() >= conv_code_size (Params::payload_size));
     soft_bit_vec.resize (conv_code_size (Params::payload_size));
@@ -991,7 +993,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     total_count++;
   };
 
-  vector<float> soft_bit_vec_all (conv_code_size (Params::payload_size));
+  vector<float> raw_bit_vec_all (conv_code_size (Params::payload_size));
   SyncFinder::Score score_all { 0, 0 };
 
   for (auto sync_score : sync_scores)
@@ -1004,29 +1006,26 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
         {
           vector<vector<complex<float>>> junk;
 
-          vector<float> soft_bit_vec;
+          vector<float> raw_bit_vec;
           if (Params::mix)
             {
-              soft_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
+              raw_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
             }
           else
             {
-              soft_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
+              raw_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
             }
-          decode_single (soft_bit_vec, sync_score);
+          decode_single (raw_bit_vec, sync_score);
 
           score_all.quality += sync_score.quality;
-          for (size_t i = 0; i < soft_bit_vec_all.size(); i++)
-            soft_bit_vec_all[i] += soft_bit_vec[i];
+          for (size_t i = 0; i < raw_bit_vec_all.size(); i++)
+            raw_bit_vec_all[i] += raw_bit_vec[i];
         }
     }
   if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
     {
       score_all.quality /= total_count;
-      for (auto& sbit : soft_bit_vec_all)
-        sbit /= total_count;
-
-      decode_single (soft_bit_vec_all, score_all);
+      decode_single (raw_bit_vec_all, score_all);
     }
 
   if (!orig_pattern.empty())
