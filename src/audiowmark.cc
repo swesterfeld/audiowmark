@@ -781,25 +781,25 @@ public:
       get_up_down (i, up[i], down[i], Random::Stream::sync_up_down);
   }
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<vector<float>>& fft_out_db)
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db)
   {
-    // FIXME: is copypasted
     const int frame_count = mark_sync_frame_count();
 
     double umag = 0, dmag = 0;
     double sync_quality = 0;
 
+    size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int f = 0; f < frame_count; f++)
       {
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
-            const size_t index = (f + start_frame) * wav_data.n_channels() + ch;
+            const int index = ((f + start_frame) * wav_data.n_channels() + ch) * n_bands - Params::min_band;
 
             for (auto u : up[f])
-              umag += fft_out_db[index][u];
+              umag += fft_out_db[index + u];
 
             for (auto d : down[f])
-              dmag += fft_out_db[index][d];
+              dmag += fft_out_db[index + d];
           }
         if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
           {
@@ -826,16 +826,17 @@ public:
     vector<Score> sync_scores;
 
     // compute multiple time-shifted fft vectors
-    vector<vector<vector<float>>> fft_sync_shift_out;
+    vector<vector<float>> fft_sync_shift_out;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       fft_sync_shift_out.push_back (sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1));
 
+    size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
       {
         for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() < fft_sync_shift_out[sync_shift / Params::sync_search_step].size())
+            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() * n_bands < fft_sync_shift_out[sync_shift / Params::sync_search_step].size())
               {
                 double quality = sync_decode (wav_data, start_frame, fft_sync_shift_out[sync_shift / Params::sync_search_step]);
                 // printf ("%zd %f\n", sync_index, quality);
@@ -845,7 +846,7 @@ public:
       }
     for (size_t i = 0; i < sync_scores.size(); i++)
       {
-        //printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
+        // printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
         if (sync_scores[i].quality > 0.5)
           {
             double q_last = -1;
@@ -869,7 +870,7 @@ public:
                 int end   = sync_scores[i].index + Params::sync_search_step;
                 for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
                   {
-                    vector<vector<float>> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
+                    vector<float> fft_out_range = sync_fft (wav_data, fine_index, mark_sync_frame_count());
                     if (fft_out_range.size())
                       {
                         double q = sync_decode (wav_data, 0, fft_out_range);
@@ -888,20 +889,17 @@ public:
       }
     return result_scores;
   }
-  vector<vector<float>>
+  vector<float>
   sync_fft (const WavData& wav_data, size_t index, size_t count)
   {
     /* computing db-magnitude is expensive, so we better do it here */
-    vector<vector<float>> fft_out_db;
+    vector<float> fft_out_db;
     for (const vector<complex<float>>& spect : compute_frame_ffts (wav_data, index, count))
       {
         const double min_db = -96;
 
-        vector<float> db_spect (spect.size());
         for (int i = Params::min_band; i <= Params::max_band; i++)
-          db_spect[i] = db_from_factor (abs (spect[i]), min_db);
-
-        fft_out_db.push_back (db_spect);
+          fft_out_db.push_back (db_from_factor (abs (spect[i]), min_db));
       }
     return fft_out_db;
   }
