@@ -795,11 +795,11 @@ public:
           {
             const int index = ((f + start_frame) * wav_data.n_channels() + ch) * n_bands - Params::min_band;
 
-            for (auto u : up[f])
-              umag += fft_out_db[index + u];
-
-            for (auto d : down[f])
-              dmag += fft_out_db[index + d];
+            for (int i = 0; i < Params::bands_per_frame; i++)
+              {
+                umag += fft_out_db[index + up[f][i]];
+                dmag += fft_out_db[index + down[f][i]];
+              }
           }
         if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
           {
