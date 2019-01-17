@@ -791,11 +791,14 @@ public:
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int f = 0; f < frame_count; f++)
       {
+        assert (up[f].size() == Params::bands_per_frame);
+        assert (down[f].size() == Params::bands_per_frame);
+
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
             const int index = ((f + start_frame) * wav_data.n_channels() + ch) * n_bands - Params::min_band;
 
-            for (int i = 0; i < Params::bands_per_frame; i++)
+            for (size_t i = 0; i < Params::bands_per_frame; i++)
               {
                 umag += fft_out_db[index + up[f][i]];
                 dmag += fft_out_db[index + down[f][i]];
