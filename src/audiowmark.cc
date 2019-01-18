@@ -3,6 +3,7 @@
 #include <string>
 #include <random>
 #include <complex>
+#include <algorithm>
 
 #include "fft.hh"
 #include "wavdata.hh"
@@ -771,53 +772,66 @@ class SyncFinder
 {
   vector<vector<int>> up;
   vector<vector<int>> down;
-public:
-  SyncFinder()
-  {
-    up.resize (mark_sync_frame_count());
-    down.resize (mark_sync_frame_count());
 
-    for (size_t i = 0; i < mark_sync_frame_count(); i++)
-      get_up_down (i, up[i], down[i], Random::Stream::sync_up_down);
+  void
+  init_up_down (const WavData& wav_data)
+  {
+    up.clear();
+    down.clear();
+
+    up.resize (Params::sync_bits);
+    down.resize (Params::sync_bits);
+
+    size_t n_bands = Params::max_band - Params::min_band + 1;
+    for (int bit = 0; bit < Params::sync_bits; bit++)
+      {
+        for (int f = 0; f < Params::sync_frames_per_bit; f++)
+          {
+            vector<int> frame_up, frame_down;
+            get_up_down (f + bit * Params::sync_frames_per_bit, frame_up, frame_down, Random::Stream::sync_up_down);
+
+            for (auto u : frame_up)
+              up[bit].push_back (u - Params::min_band + f * n_bands * wav_data.n_channels());
+
+            for (auto d : frame_down)
+              down[bit].push_back (d - Params::min_band + f * n_bands * wav_data.n_channels());
+          }
+        sort (up[bit].begin(), up[bit].end());
+        sort (down[bit].begin(), down[bit].end());
+      }
   }
   double
   sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db)
   {
-    const int frame_count = mark_sync_frame_count();
-
-    double umag = 0, dmag = 0;
     double sync_quality = 0;
 
     size_t n_bands = Params::max_band - Params::min_band + 1;
-    for (int f = 0; f < frame_count; f++)
+    for (int bit = 0; bit < Params::sync_bits; bit++)
       {
-        assert (up[f].size() == Params::bands_per_frame);
-        assert (down[f].size() == Params::bands_per_frame);
+        double umag = 0, dmag = 0;
 
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
-            const int index = ((f + start_frame) * wav_data.n_channels() + ch) * n_bands - Params::min_band;
+            const int index = (((bit * Params::sync_frames_per_bit) + start_frame) * wav_data.n_channels() + ch) * n_bands;
 
-            for (size_t i = 0; i < Params::bands_per_frame; i++)
+            for (size_t i = 0; i < up[bit].size(); i++)
               {
-                umag += fft_out_db[index + up[f][i]];
-                dmag += fft_out_db[index + down[f][i]];
+                umag += fft_out_db[index + up[bit][i]];
+                dmag += fft_out_db[index + down[bit][i]];
               }
           }
-        if ((f % Params::sync_frames_per_bit) == (Params::sync_frames_per_bit - 1))
-          {
-            const int expect_data_bit = (f / Params::sync_frames_per_bit) & 1; /* expect 010101 */
+        const int expect_data_bit = bit & 1; /* expect 010101 */
 
-            const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
-            sync_quality += q;
-            umag = 0;
-            dmag = 0;
-          }
+        const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
+        sync_quality += q;
+        umag = 0;
+        dmag = 0;
       }
     sync_quality /= Params::sync_bits;
     sync_quality = normalize_sync_quality (sync_quality);
     return sync_quality;
   }
+public:
   struct Score {
     size_t index;
     double quality;
@@ -827,6 +841,8 @@ public:
   {
     vector<Score> result_scores;
     vector<Score> sync_scores;
+
+    init_up_down (wav_data);
 
     // compute multiple time-shifted fft vectors
     vector<vector<float>> fft_sync_shift_out;
@@ -892,6 +908,7 @@ public:
       }
     return result_scores;
   }
+private:
   vector<float>
   sync_fft (const WavData& wav_data, size_t index, size_t count)
   {
