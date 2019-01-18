@@ -808,7 +808,7 @@ class SyncFinder
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int bit = 0; bit < Params::sync_bits; bit++)
       {
-        double umag = 0, dmag = 0;
+        float umag = 0, dmag = 0;
 
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
@@ -824,8 +824,6 @@ class SyncFinder
 
         const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
         sync_quality += q;
-        umag = 0;
-        dmag = 0;
       }
     sync_quality /= Params::sync_bits;
     sync_quality = normalize_sync_quality (sync_quality);
