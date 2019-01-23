@@ -820,9 +820,19 @@ class SyncFinder
                 dmag += fft_out_db[index + down[bit][i]];
               }
           }
-        const int expect_data_bit = bit & 1; /* expect 010101 */
+        /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
+        double raw_bit;
+        if (umag < dmag)
+          {
+            raw_bit = 1 - umag / dmag;
+          }
+        else
+          {
+            raw_bit = dmag / umag - 1;
+          }
 
-        const double q = expect_data_bit ? (1 - umag / dmag) : (umag / dmag - 1);
+        const int expect_data_bit = bit & 1; /* expect 010101 */
+        const double q = expect_data_bit ? raw_bit : -raw_bit;
         sync_quality += q;
       }
     sync_quality /= Params::sync_bits;
