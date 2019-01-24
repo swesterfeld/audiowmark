@@ -38,8 +38,12 @@ namespace Params
   static int sync_frames_per_bit = 85;
   static int sync_search_step    = 256;
   static int sync_search_fine    = 8;
+  static double sync_threshold1  = 0.5; // minimum grid quality value (search_step grid)
+  static double sync_threshold2  = 0.7; // minimum refined quality
 
   static size_t frames_pad_start = 100; // padding at start, in case track starts with silence
+
+  static int test_cut            = 0; // for sync test
 }
 
 void
@@ -179,6 +183,10 @@ parse_options (int   *argc_p,
           Params::have_key++;
           Random::load_global_key (opt_arg);
         }
+      else if (check_arg (argc, argv, &i, "--test-cut", &opt_arg))
+	{
+          Params::test_cut = atoi (opt_arg);
+	}
     }
 
   /* resort argc/argv */
@@ -874,7 +882,7 @@ public:
     for (size_t i = 0; i < sync_scores.size(); i++)
       {
         // printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
-        if (sync_scores[i].quality > 0.5)
+        if (sync_scores[i].quality > Params::sync_threshold1)
           {
             double q_last = -1;
             double q_next = -1;
@@ -910,7 +918,8 @@ public:
                       }
                   }
                 //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
-                result_scores.push_back (Score { best_index, best_quality });
+                if (best_quality > Params::sync_threshold2)
+                  result_scores.push_back (Score { best_index, best_quality });
               }
           }
       }
@@ -1043,14 +1052,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
         {
           for (auto sync_score : sync_scores)
             {
-              if (abs (int (sync_score.index) - expect_index) < Params::frame_size)
+              if (abs (int (sync_score.index + Params::test_cut) - expect_index) < Params::frame_size / 2)
                 {
                   sync_match++;
                   break;
                 }
             }
         }
-      printf ("sync_match %d\n", sync_match);
+      printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
     }
   return 0;
 }
