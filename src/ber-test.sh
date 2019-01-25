@@ -21,6 +21,8 @@ fi
     cat test_list
   elif [ "x$AWM_SET" == "xhuge" ]; then
     ls huge/T*
+  elif [ "x$AWM_SET" == "xhuge2" ]; then
+    ls huge2/T*
   else
     echo "bad AWM_SET $AWM_SET" >&2
     exit 1
