@@ -1121,7 +1121,7 @@ gentest (const string& infile, const string& outfile)
   /* 160 seconds of audio - this is approximately the minimal amount of audio data required
    * for storing three separate watermarks with a 128-bit encoded message */
   const size_t offset = 0 * wav_data.n_channels() * int (wav_data.mix_freq());
-  const size_t n_samples = 160 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t n_samples = 165 * wav_data.n_channels() * int (wav_data.mix_freq());
   if (in_signal.size() < (offset + n_samples))
     {
       fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
