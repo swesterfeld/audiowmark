@@ -41,7 +41,7 @@ namespace Params
   static double sync_threshold1  = 0.5; // minimum grid quality value (search_step grid)
   static double sync_threshold2  = 0.7; // minimum refined quality
 
-  static size_t frames_pad_start = 100; // padding at start, in case track starts with silence
+  static size_t frames_pad_start = 250; // padding at start, in case track starts with silence
 
   static int test_cut            = 0; // for sync test
 }
