@@ -27,7 +27,7 @@ namespace Params
   static size_t bands_per_frame = 30;
   static int max_band          = 100;
   static int min_band          = 20;
-  static double water_delta    = 0.015; // strength of the watermark
+  static double water_delta    = 0.01;  // strength of the watermark
   static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
