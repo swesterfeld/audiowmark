@@ -17,11 +17,11 @@ WavData::WavData()
 {
 }
 
-WavData::WavData (const vector<float>& samples, int n_channels, float mix_freq, int bit_depth)
+WavData::WavData (const vector<float>& samples, int n_channels, int sample_rate, int bit_depth)
 {
   m_samples     = samples;
   m_n_channels  = n_channels;
-  m_mix_freq    = mix_freq;
+  m_sample_rate = sample_rate;
   m_bit_depth   = bit_depth;
 }
 
@@ -76,7 +76,7 @@ WavData::load (const string& filename)
   for (size_t i = 0; i < m_samples.size(); i++)
     m_samples[i] = isamples[i] * norm;
 
-  m_mix_freq    = sfinfo.samplerate;
+  m_sample_rate = sfinfo.samplerate;
   m_n_channels  = sfinfo.channels;
 
   switch (sfinfo.format & SF_FORMAT_SUBMASK)
@@ -121,7 +121,7 @@ WavData::save (const string& filename)
 {
   SF_INFO sfinfo = {0,};
 
-  sfinfo.samplerate = lrint (m_mix_freq);
+  sfinfo.samplerate = m_sample_rate;
   sfinfo.channels   = m_n_channels;
 
   if (m_bit_depth > 16)
@@ -179,10 +179,10 @@ WavData::save (const string& filename)
   return true;
 }
 
-float
-WavData::mix_freq() const
+int
+WavData::sample_rate() const
 {
-  return m_mix_freq;
+  return m_sample_rate;
 }
 
 int

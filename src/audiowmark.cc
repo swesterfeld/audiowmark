@@ -504,10 +504,10 @@ mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<flo
 WavData
 resample (const WavData& wav_data, int rate)
 {
-  if (fabs (double (rate) - wav_data.mix_freq()) < 0.1)
+  if (rate == wav_data.sample_rate())
     return wav_data;
 
-  double ratio = double (rate) / wav_data.mix_freq();
+  double ratio = double (rate) / wav_data.sample_rate();
 
   const vector<float>& in = wav_data.samples();
   vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
@@ -574,11 +574,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size))
     in_signal.push_back (0);
 
-  WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
+  WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.sample_rate(), in_wav_data.bit_depth());
 
   /* we have extra space for the padded wave data -> truncated before save */
   vector<float> out_signal (wav_data.n_values());
-  printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
+  printf ("channels: %d, samples: %zd, mix_freq: %d\n", wav_data.n_channels(), wav_data.n_values(), wav_data.sample_rate());
 
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data));
   vector<vector<complex<float>>> fft_delta_spect;
@@ -661,8 +661,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
 
   /* last step: resample the watermark to the original sample rate, and then add mark and original audio */
-  WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
-  mark_wav_data = resample (mark_wav_data, orig_wav_data.mix_freq());
+  WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
+  mark_wav_data = resample (mark_wav_data, orig_wav_data.sample_rate());
 
   vector<float> mark_samples = mark_wav_data.samples();
   vector<float> samples = orig_wav_data.samples();
@@ -681,7 +681,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
 
-  WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.mix_freq(), orig_wav_data.bit_depth());
+  WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.sample_rate(), orig_wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
@@ -1020,7 +1020,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
     if (sync_score.index)
       {
-        const int seconds = lrint (sync_score.index / wav_data.mix_freq());
+        const int seconds = sync_score.index / wav_data.sample_rate();
         printf ("pattern %2d:%02d %s %.3f %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
       }
     else /* this is the combined pattern "all" */
@@ -1157,10 +1157,10 @@ gentest (const string& infile, const string& outfile)
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
 
-  /* 160 seconds of audio - this is approximately the minimal amount of audio data required
+  /* 2:45 of audio - this is approximately the minimal amount of audio data required
    * for storing three separate watermarks with a 128-bit encoded message */
-  const size_t offset = 0 * wav_data.n_channels() * int (wav_data.mix_freq());
-  const size_t n_samples = 165 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t offset = 0 * wav_data.n_channels() * wav_data.sample_rate();
+  const size_t n_samples = 165 * wav_data.n_channels() * wav_data.sample_rate();
   if (in_signal.size() < (offset + n_samples))
     {
       fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
@@ -1170,7 +1170,7 @@ gentest (const string& infile, const string& outfile)
     {
       out_signal.push_back (in_signal[i + offset]);
     }
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
@@ -1194,7 +1194,7 @@ scale (const string& infile, const string& outfile)
   for (size_t i = 0; i < in_signal.size(); i++)
     out_signal.push_back (in_signal[i] * Params::pre_scale);
 
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
@@ -1220,7 +1220,7 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
   for (size_t i = start * wav_data.n_channels(); i < in_signal.size(); i++)
     out_signal.push_back (in_signal[i]);
 
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
