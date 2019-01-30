@@ -62,12 +62,6 @@ do
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
       rm ${AWM_FILE}.wav
       ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
-
-      # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
-        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
-        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
-      fi
     elif [ "x$TRANSFORM" == "xdouble-mp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -82,12 +76,6 @@ do
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
       rm ${AWM_FILE}.wav
       ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
-
-      # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
-        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
-        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
-      fi
     elif [ "x$TRANSFORM" == "xogg" ]; then
       if [ "x$2" == "x" ]; then
         echo "need ogg bitrate" >&2
