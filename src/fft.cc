@@ -2,8 +2,11 @@
 
 #include <fftw3.h>
 
+#include <map>
+
 using std::vector;
 using std::complex;
+using std::map;
 
 float *
 new_array_float (size_t N)
@@ -22,8 +25,9 @@ free_array_float (float *f)
 void
 fftar_float (size_t N, float *in, float *out)
 {
-  static fftwf_plan plan = nullptr; // FIXME: should be one plan per fft size
+  static map<int, fftwf_plan> plan_for_size;
 
+  fftwf_plan& plan = plan_for_size[N];
   if (!plan)
     {
       float *plan_in = new_array_float (N);
@@ -38,8 +42,9 @@ fftar_float (size_t N, float *in, float *out)
 void
 fftsr_float (size_t N, float *in, float *out)
 {
-  static fftwf_plan plan = nullptr; // FIXME: should be one plan per fft size
+  static map<int, fftwf_plan> plan_for_size;
 
+  fftwf_plan& plan = plan_for_size[N];
   if (!plan)
     {
       float *plan_in = new_array_float (N);
