@@ -20,11 +20,24 @@ public:
   bool save (const std::string& filename);
 
   float                       mix_freq() const;
-  int                         n_channels() const;
-  size_t                      n_values() const;
   int                         bit_depth() const;
-  const std::vector<float>&   samples() const;
   const char                 *error_blurb() const;
+
+  int
+  n_channels() const
+  {
+    return m_n_channels;
+  }
+  size_t
+  n_values() const
+  {
+    return m_samples.size();
+  }
+  const std::vector<float>&
+  samples() const
+  {
+    return m_samples;
+  }
 
   void set_samples (const std::vector<float>& samples);
 };

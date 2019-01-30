@@ -8,7 +8,7 @@ if [ "x$AWM_SEEDS" == "x" ]; then
   AWM_SEEDS=0
 fi
 if [ "x$AWM_REPORT" == "x" ]; then
-  AWM_REPORT=ber
+  AWM_REPORT=fer
 fi
 if [ "x$AWM_FILE" == "x" ]; then
   AWM_FILE=t
@@ -21,6 +21,8 @@ fi
     cat test_list
   elif [ "x$AWM_SET" == "xhuge" ]; then
     ls huge/T*
+  elif [ "x$AWM_SET" == "xhuge2" ]; then
+    ls huge2/T*
   else
     echo "bad AWM_SET $AWM_SET" >&2
     exit 1
@@ -45,6 +47,13 @@ do
     fi
 
     audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED >/dev/null
+    if [ "x$AWM_RAND_CUT" != x ]; then
+      CUT=$RANDOM
+      audiowmark cut-start "${AWM_FILE}.wav" "${AWM_FILE}.wav" $CUT
+      TEST_CUT_ARGS="--test-cut $CUT"
+    else
+      TEST_CUT_ARGS=""
+    fi
     if [ "x$TRANSFORM" == "xmp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -93,15 +102,17 @@ do
       exit 1
     fi
     # blind decoding
-    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED
+    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
   done
-done | grep bit_error_rate | {
-  if [ "x$AWM_REPORT" == "xber" ]; then
-    awk 'BEGIN { max_er = er = n = 0 } { er += $2; n++; if ($2 > max_er) max_er = $2;} END { print er / n, max_er; }'
-  elif [ "x$AWM_REPORT" == "xfer" ]; then
-    awk 'BEGIN { bad = n = 0 } { if ($2 > 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+done | {
+  if [ "x$AWM_REPORT" == "xfer" ]; then
+    awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+  elif [ "x$AWM_REPORT" == "xsync" ]; then
+    awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / n; }'
+  elif [ "x$AWM_REPORT" == "xsyncv" ]; then
+    awk '{ print "###", $0; } $1 == "sync_match" { correct += $2; missing += 3 - $2; incorrect += $3-$2; print "correct:", correct, "missing:", missing, "incorrect:", incorrect; }'
   else
     echo "unknown report $AWM_REPORT" >&2
     exit 1

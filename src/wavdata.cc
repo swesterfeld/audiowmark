@@ -186,33 +186,15 @@ WavData::mix_freq() const
 }
 
 int
-WavData::n_channels() const
-{
-  return m_n_channels;
-}
-
-int
 WavData::bit_depth() const
 {
   return m_bit_depth;
-}
-
-const vector<float>&
-WavData::samples() const
-{
-  return m_samples;
 }
 
 void
 WavData::set_samples (const vector<float>& samples)
 {
   m_samples = samples;
-}
-
-size_t
-WavData::n_values() const
-{
-  return m_samples.size();
 }
 
 const char *

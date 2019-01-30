@@ -11,9 +11,11 @@ class Random
 {
 public:
   enum class Stream {
-    up_down = 1,
-    mix = 2,
-    bit_order = 3
+    data_up_down = 1,
+    sync_up_down = 2,
+    pad_up_down = 3,
+    mix = 4,
+    bit_order = 5
   };
 private:
   gcry_cipher_hd_t           aes_ctr_cipher;

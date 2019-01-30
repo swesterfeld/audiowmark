@@ -3,6 +3,7 @@
 #include <string>
 #include <random>
 #include <complex>
+#include <algorithm>
 
 #include "fft.hh"
 #include "wavdata.hh"
@@ -26,13 +27,23 @@ namespace Params
   static size_t bands_per_frame = 30;
   static int max_band          = 100;
   static int min_band          = 20;
-  static double water_delta    = 0.015; // strength of the watermark
+  static double water_delta    = 0.01;  // strength of the watermark
   static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
-  static int block_size        = 32;    // block size for mix step (non-linear bit storage)
   static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
+
+  static int sync_bits           = 6;
+  static int sync_frames_per_bit = 85;
+  static int sync_search_step    = 256;
+  static int sync_search_fine    = 8;
+  static double sync_threshold1  = 0.5; // minimum grid quality value (search_step grid)
+  static double sync_threshold2  = 0.7; // minimum refined quality
+
+  static size_t frames_pad_start = 250; // padding at start, in case track starts with silence
+
+  static int test_cut            = 0; // for sync test
 }
 
 void
@@ -172,6 +183,10 @@ parse_options (int   *argc_p,
           Params::have_key++;
           Random::load_global_key (opt_arg);
         }
+      else if (check_arg (argc, argv, &i, "--test-cut", &opt_arg))
+	{
+          Params::test_cut = atoi (opt_arg);
+	}
     }
 
   /* resort argc/argv */
@@ -220,46 +235,17 @@ db_from_factor (double factor, double min_dB)
 int
 frame_count (const WavData& wav_data)
 {
-  return (wav_data.n_values() / wav_data.n_channels() + (Params::frame_size - 1)) / Params::frame_size;
-}
-
-int
-block_count (const WavData& wav_data)
-{
-  return frame_count (wav_data) / (Params::block_size * Params::frames_per_bit);
-}
-
-/*
- * get one audio frame, Params::frame_size samples if available
- *
- * in case of stereo: deinterleave
- */
-vector<float>
-get_frame (const WavData& wav_data, int f, int ch)
-{
-  auto& samples = wav_data.samples();
-
-  vector<float> result;
-
-  size_t pos = (f * Params::frame_size) * wav_data.n_channels() + ch;
-  for (size_t x = 0; x < Params::frame_size; x++)
-    {
-      if (pos < samples.size())
-        result.push_back (samples[pos]);
-
-      pos += wav_data.n_channels();
-    }
-  return result;
+  return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
 }
 
 void
-get_up_down (int f, vector<int>& up, vector<int>& down)
+get_up_down (int f, vector<int>& up, vector<int>& down, Random::Stream random_stream)
 {
   vector<int> bands_reorder;
   for (int i = Params::min_band; i <= Params::max_band; i++)
     bands_reorder.push_back (i);
 
-  Random random (f, Random::Stream::up_down); // use per frame random seed
+  Random random (f, random_stream); // use per frame random seed
   random.shuffle (bands_reorder);
 
   assert (2 * Params::bands_per_frame < bands_reorder.size());
@@ -292,38 +278,14 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
   return out_bits;
 }
 
-struct MixEntry
-{
-  int  frame;
-  int  up;
-  int  down;
-};
-
-vector<MixEntry>
-gen_mix_entries (int block)
-{
-  vector<MixEntry> mix_entries;
-
-  for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-    {
-      vector<int> up;
-      vector<int> down;
-      get_up_down (f, up, down);
-
-      assert (up.size() == down.size());
-      for (size_t i = 0; i < up.size(); i++)
-        mix_entries.push_back ({ f, up[i], down[i] });
-    }
-  Random random (/* seed */ block, Random::Stream::mix);
-  random.shuffle (mix_entries);
-
-  return mix_entries;
-}
-
 vector<vector<complex<float>>>
-compute_frame_ffts (const WavData& wav_data)
+compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count)
 {
   vector<vector<complex<float>>> fft_out;
+
+  /* if there is not enough space for frame_count values, return an error (empty vector) */
+  if (wav_data.n_values() < (start_index + frame_count * Params::frame_size) * wav_data.n_channels())
+    return fft_out;
 
   /* generate analysis window */
   vector<float> window (Params::frame_size);
@@ -345,22 +307,195 @@ compute_frame_ffts (const WavData& wav_data)
       window[i] *= 2.0 / window_weight;
     }
 
+  float *frame  = new_array_float (Params::frame_size);
+  float *frame_fft = new_array_float (Params::frame_size);
 
-  for (int f = 0; f < frame_count (wav_data); f++)
+  for (size_t f = 0; f < frame_count; f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
-          vector<float> frame = get_frame (wav_data, f, ch);
+          const auto& samples = wav_data.samples();
 
-          /* apply window */
-          for (size_t i = 0; i < frame.size(); i++)
-            frame[i] *= window[i];
+          size_t pos = (start_index + f * Params::frame_size) * wav_data.n_channels() + ch;
+          assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
 
+          /* deinterleave frame data and apply window */
+          for (size_t x = 0; x < Params::frame_size; x++)
+            {
+              frame[x] = samples[pos] * window[x];
+              pos += wav_data.n_channels();
+            }
           /* FFT transform */
-          fft_out.push_back (fft (frame));
+          fftar_float (Params::frame_size, frame, frame_fft);
+
+          /* complex<float> and frame_fft have the same layout in memory */
+          const complex<float> *first = (complex<float> *) frame_fft;
+          const complex<float> *last  = first + Params::frame_size / 2 + 1;
+          fft_out.emplace_back (first, last);
         }
     }
+  free_array_float (frame);
+  free_array_float (frame_fft);
   return fft_out;
+}
+
+void
+mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect, int data_bit, Random::Stream random_stream)
+{
+  vector<int> up;
+  vector<int> down;
+  get_up_down (f, up, down, random_stream);
+  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+  for (auto u : up)
+    {
+      /*
+       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       *
+       * this actually increases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+    }
+  for (auto d : down)
+    {
+      /*
+       * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
+       *
+       * this actually decreases the amount of energy because mag is less than 1.0
+       */
+      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
+
+      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+    }
+}
+
+size_t
+mark_data_frame_count()
+{
+  return conv_code_size (Params::payload_size) * Params::frames_per_bit;
+}
+
+struct MixEntry
+{
+  int  frame;
+  int  up;
+  int  down;
+};
+
+vector<MixEntry>
+gen_mix_entries()
+{
+  vector<MixEntry> mix_entries;
+
+  for (int f = 0; f < int (mark_data_frame_count()); f++)
+    {
+      vector<int> up;
+      vector<int> down;
+      get_up_down (f, up, down, Random::Stream::data_up_down);
+
+      assert (up.size() == down.size());
+      for (size_t i = 0; i < up.size(); i++)
+        mix_entries.push_back ({ f, up[i], down[i] });
+    }
+  Random random (/* seed */ 0, Random::Stream::mix);
+  random.shuffle (mix_entries);
+
+  return mix_entries;
+}
+
+void
+mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect,
+           const vector<int>& bitvec)
+{
+  assert (fft_out.size() >= (start_frame + mark_data_frame_count()) * wav_data.n_channels());
+  assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
+
+  const int frame_count = mark_data_frame_count();
+
+  if (Params::mix)
+    {
+      vector<MixEntry> mix_entries = gen_mix_entries();
+
+      for (int f = 0; f < frame_count; f++)
+        {
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            {
+              for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+                {
+                  int b = f * Params::bands_per_frame + frame_b;
+
+                  const int data_bit = bitvec[f / Params::frames_per_bit];
+                  const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+
+                  const int u = mix_entries[b].up;
+                  const int index = (start_frame + mix_entries[b].frame) * wav_data.n_channels() + ch;
+                  {
+                    const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+
+                    fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                  }
+                  const int d = mix_entries[b].down;
+                  {
+                    const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+
+                    fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                  }
+                }
+            }
+        }
+    }
+  else
+    {
+      for (int f = 0; f < frame_count; f++)
+        {
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            {
+              size_t index = (start_frame + f) * wav_data.n_channels() + ch;
+
+              mark_bit_linear (f, fft_out[index], fft_delta_spect[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down);
+            }
+        }
+    }
+}
+
+size_t
+mark_sync_frame_count()
+{
+  return Params::sync_bits * Params::sync_frames_per_bit;
+}
+
+void
+mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+{
+  assert (fft_out.size() >= (start_frame + mark_sync_frame_count()) * wav_data.n_channels());
+
+  const int frame_count = mark_sync_frame_count();
+
+  // sync block always written in linear order (no mix)
+  for (int f = 0; f < frame_count; f++)
+    {
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          size_t index = (start_frame + f) * wav_data.n_channels() + ch;
+          int    data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
+
+          mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit, Random::Stream::sync_up_down);
+        }
+    }
+}
+
+void
+mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+{
+  assert (fft_out.size() >= (frame + 1) * wav_data.n_channels());
+
+  for (int ch = 0; ch < wav_data.n_channels(); ch++)
+    {
+      size_t index = frame * wav_data.n_channels() + ch;
+
+      mark_bit_linear (frame, fft_out[index], fft_delta_spect[index], 0, Random::Stream::pad_up_down);
+    }
 }
 
 int
@@ -388,6 +523,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   /* add forward error correction, bitvec will now be a lot larger */
   bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
 
+  /* pad with zeros to match block_size */
+  bitvec.resize (mark_data_frame_count() / Params::frames_per_bit);
+
   printf ("loading %s\n", infile.c_str());
 
   WavData in_wav_data;
@@ -399,10 +537,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   /*
    * to keep the watermarking code simpler, we pad the wave data with zeros
-   * to avoid processing a partly filled block
+   * to avoid processing a partly filled frame
    */
   vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
+  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size))
     in_signal.push_back (0);
 
   WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.mix_freq(), in_wav_data.bit_depth());
@@ -411,7 +549,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> out_signal (wav_data.n_values());
   printf ("channels: %d, samples: %zd, mix_freq: %f\n", wav_data.n_channels(), wav_data.n_values(), wav_data.mix_freq());
 
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data));
   vector<vector<complex<float>>> fft_delta_spect;
   for (int f = 0; f < frame_count (wav_data); f++)
     {
@@ -420,81 +558,27 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
     }
-  if (Params::mix)
+  size_t frame_index = 0;
+  /* padding at start */
+  while (frame_index < Params::frames_pad_start)
     {
-      for (int block = 0; block < block_count (wav_data); block++)
-        {
-          vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-          const int block_start = block * Params::block_size * Params::frames_per_bit;
-          for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
-            {
-              for (int ch = 0; ch < wav_data.n_channels(); ch++)
-                {
-                  for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
-                    {
-                      int b = f * Params::bands_per_frame + frame_b;
-
-                      const int data_bit = bitvec[((block_start + f) / Params::frames_per_bit) % bitvec.size()];
-                      const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-
-                      const int u = mix_entries[b].up;
-                      const int index = (block_start + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                      }
-                      const int d = mix_entries[b].down;
-                      {
-                        const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                      }
-                    }
-                }
-            }
-        }
-
+      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index++;
     }
-  else
+  /* embed sync|data|sync|data|... */
+  while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
     {
-      for (int f = 0; f < frame_count (wav_data); f++)
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              size_t index = f * wav_data.n_channels() + ch;
+      mark_sync (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index += mark_sync_frame_count();
 
-              vector<int> up;
-              vector<int> down;
-              get_up_down (f, up, down);
-
-              const int data_bit = bitvec[(f / Params::frames_per_bit) % bitvec.size()];
-              const double  data_bit_sign = data_bit > 0 ? 1 : -1;
-              for (auto u : up)
-                {
-                  /*
-                   * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-                   *
-                   * this actually increases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
-                }
-              for (auto d : down)
-                {
-                  /*
-                   * for down bands, we want do use [for a 1 bit]   (pow (mag, 1 + water_delta))
-                   *
-                   * this actually decreases the amount of energy because mag is less than 1.0
-                   */
-                  const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
-
-                  fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
-                }
-            }
-        }
+      mark_data (wav_data, frame_index, fft_out, fft_delta_spect, bitvec);
+      frame_index += mark_data_frame_count();
+    }
+  /* padding at end */
+  while (frame_index < size_t (frame_count (wav_data)))
+    {
+      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
+      frame_index++;
     }
 
   /* generate synthesis window */
@@ -525,7 +609,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       // cosine
       synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
     }
-
   for (size_t pos = 0; pos < in_signal.size(); pos++)
     out_signal[pos] = in_signal[pos] * Params::pre_scale;
 
@@ -568,16 +651,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   return 0;
 }
 
-void
-truncate_to_block_size (WavData& wav_data)
-{
-  vector<float> in_signal (wav_data.samples());
-  while (in_signal.size() % (wav_data.n_channels() * Params::frame_size * Params::block_size * Params::frames_per_bit))
-    in_signal.pop_back();
-
-  wav_data.set_samples (in_signal);
-}
-
 vector<float>
 normalize_soft_bits (const vector<float>& soft_bits)
 {
@@ -606,63 +679,63 @@ normalize_soft_bits (const vector<float>& soft_bits)
 }
 
 vector<float>
-mix_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
-  vector<float> soft_bit_vec;
+  vector<float> raw_bit_vec;
 
-  for (int block = 0; block < block_count (wav_data); block++)
+  const int frame_count = fft_out.size() / n_channels;
+
+  vector<MixEntry> mix_entries = gen_mix_entries();
+
+  double umag = 0, dmag = 0;
+  for (int f = 0; f < frame_count; f++)
     {
-      vector<MixEntry> mix_entries = gen_mix_entries (block);
-
-      double umag = 0, dmag = 0;
-      for (int f = 0; f < Params::block_size * Params::frames_per_bit; f++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
+          for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
             {
-              for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+              int b = f * Params::bands_per_frame + frame_b;
+              const double min_db = -96;
+
+              const size_t index = mix_entries[b].frame * n_channels + ch;
+              const int u = mix_entries[b].up;
+              const int d = mix_entries[b].down;
+
+              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+
+              if (index < fft_orig_out.size()) /* non-blind decode? */
                 {
-                  int b = f * Params::bands_per_frame + frame_b;
-                  const double min_db = -96;
-
-                  const size_t index = (block * (Params::block_size * Params::frames_per_bit) + mix_entries[b].frame) * wav_data.n_channels() + ch;
-                  const int u = mix_entries[b].up;
-                  const int d = mix_entries[b].down;
-
-                  umag += db_from_factor (abs (fft_out[index][u]), min_db);
-                  dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-                  if (index < fft_orig_out.size()) /* non-blind decode? */
-                    {
-                      umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-                      dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-                    }
+                  umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
+                  dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
                 }
             }
-          if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
-            {
-              soft_bit_vec.push_back (umag - dmag);
-              umag = 0;
-              dmag = 0;
-            }
+        }
+      if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
+        {
+          raw_bit_vec.push_back (umag - dmag);
+          umag = 0;
+          dmag = 0;
         }
     }
-  return normalize_soft_bits (soft_bit_vec);
+  return raw_bit_vec;
 }
 
 vector<float>
-linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
 {
-  vector<float> soft_bit_vec;
+  vector<float> raw_bit_vec;
 
   double umag = 0, dmag = 0;
-  for (int f = 0; f < frame_count (wav_data); f++)
+  const int frame_count = fft_out.size() / n_channels;
+  for (int f = 0; f < frame_count; f++)
     {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
-          const size_t index = f * wav_data.n_channels() + ch;
+          const size_t index = f * n_channels + ch;
           vector<int> up;
           vector<int> down;
-          get_up_down (f, up, down);
+          get_up_down (f, up, down, Random::Stream::data_up_down);
 
           const double min_db = -96;
           for (auto u : up)
@@ -682,52 +755,311 @@ linear_decode (const WavData& wav_data, vector<vector<complex<float>>>& fft_out,
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
         {
-          soft_bit_vec.push_back (umag - dmag);
+          raw_bit_vec.push_back (umag - dmag);
           umag = 0;
           dmag = 0;
         }
     }
-  return normalize_soft_bits (soft_bit_vec);
+  return raw_bit_vec;
 }
 
-int
-decode_and_report (const WavData& wav_data, const string& orig_pattern, vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out)
+double
+normalize_sync_quality (double raw_quality)
 {
-  vector<float> soft_bit_vec;
-  if (Params::mix)
-    {
-      soft_bit_vec = mix_decode (wav_data, fft_out, fft_orig_out);
-    }
-  else
-    {
-      soft_bit_vec = linear_decode (wav_data, fft_out, fft_orig_out);
-    }
-  if (soft_bit_vec.size() < conv_code_size (Params::payload_size))
-    {
-      fprintf (stderr, "audiowmark: input file too short to retrieve watermark\n");
-      fprintf (stderr, " - number of recovered raw bits %zd\n", soft_bit_vec.size());
-      fprintf (stderr, " - need at least %zd raw bits to get watermark\n", conv_code_size (Params::payload_size));
-      return 1;
-    }
-  /* truncate to the required length */
-  soft_bit_vec.resize (conv_code_size (Params::payload_size));
+  /* the quality for a good sync block depends on watermark strength
+   *
+   * this is just an approximation, but it should be good enough to be able to
+   * use one single threshold on the normalized value check if we have a sync
+   * block or not - typical output is 1.0 or more for sync blocks and close
+   * to 0.0 for non-sync blocks
+   */
+  return raw_quality / min (Params::water_delta, 0.080) / 2.9;
+}
 
-  vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false));
+class SyncFinder
+{
+  vector<vector<int>> up;
+  vector<vector<int>> down;
 
-  printf ("pattern %s\n", bit_vec_to_str (bit_vec).c_str());
+  void
+  init_up_down (const WavData& wav_data)
+  {
+    up.clear();
+    down.clear();
+
+    up.resize (Params::sync_bits);
+    down.resize (Params::sync_bits);
+
+    size_t n_bands = Params::max_band - Params::min_band + 1;
+    for (int bit = 0; bit < Params::sync_bits; bit++)
+      {
+        for (int f = 0; f < Params::sync_frames_per_bit; f++)
+          {
+            vector<int> frame_up, frame_down;
+            get_up_down (f + bit * Params::sync_frames_per_bit, frame_up, frame_down, Random::Stream::sync_up_down);
+
+            for (auto u : frame_up)
+              up[bit].push_back (u - Params::min_band + f * n_bands * wav_data.n_channels());
+
+            for (auto d : frame_down)
+              down[bit].push_back (d - Params::min_band + f * n_bands * wav_data.n_channels());
+          }
+        sort (up[bit].begin(), up[bit].end());
+        sort (down[bit].begin(), down[bit].end());
+      }
+  }
+  double
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db)
+  {
+    double sync_quality = 0;
+
+    size_t n_bands = Params::max_band - Params::min_band + 1;
+    for (int bit = 0; bit < Params::sync_bits; bit++)
+      {
+        float umag = 0, dmag = 0;
+
+        for (int ch = 0; ch < wav_data.n_channels(); ch++)
+          {
+            const int index = (((bit * Params::sync_frames_per_bit) + start_frame) * wav_data.n_channels() + ch) * n_bands;
+
+            for (size_t i = 0; i < up[bit].size(); i++)
+              {
+                umag += fft_out_db[index + up[bit][i]];
+                dmag += fft_out_db[index + down[bit][i]];
+              }
+          }
+        /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
+        double raw_bit;
+        if (umag < dmag)
+          {
+            raw_bit = 1 - umag / dmag;
+          }
+        else
+          {
+            raw_bit = dmag / umag - 1;
+          }
+
+        const int expect_data_bit = bit & 1; /* expect 010101 */
+        const double q = expect_data_bit ? raw_bit : -raw_bit;
+        sync_quality += q;
+      }
+    sync_quality /= Params::sync_bits;
+    sync_quality = normalize_sync_quality (sync_quality);
+    return sync_quality;
+  }
+public:
+  struct Score {
+    size_t index;
+    double quality;
+  };
+  vector<Score>
+  search (const WavData& wav_data)
+  {
+    vector<Score> result_scores;
+    vector<Score> sync_scores;
+
+    init_up_down (wav_data);
+
+    vector<float> fft_db;
+
+    // compute multiple time-shifted fft vectors
+    size_t n_bands = Params::max_band - Params::min_band + 1;
+    for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
+      {
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db);
+        for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+          {
+            const size_t sync_index = start_frame * Params::frame_size + sync_shift;
+            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
+              {
+                double quality = sync_decode (wav_data, start_frame, fft_db);
+                // printf ("%zd %f\n", sync_index, quality);
+                sync_scores.emplace_back (Score { sync_index, quality });
+              }
+          }
+      }
+    sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
+    for (size_t i = 0; i < sync_scores.size(); i++)
+      {
+        // printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
+        if (sync_scores[i].quality > Params::sync_threshold1)
+          {
+            double q_last = -1;
+            double q_next = -1;
+
+            if (i > 0)
+              q_last = sync_scores[i - 1].quality;
+
+            if (i + 1 < sync_scores.size())
+              q_next = sync_scores[i + 1].quality;
+
+            if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+              {
+                //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+
+                // refine match
+                double best_quality = sync_scores[i].quality;
+                size_t best_index   = sync_scores[i].index;
+
+                int start = std::max (int (sync_scores[i].index) - Params::sync_search_step, 0);
+                int end   = sync_scores[i].index + Params::sync_search_step;
+                for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+                  {
+                    sync_fft (wav_data, fine_index, mark_sync_frame_count(), fft_db);
+                    if (fft_db.size())
+                      {
+                        double q = sync_decode (wav_data, 0, fft_db);
+
+                        if (q > best_quality)
+                          {
+                            best_quality = q;
+                            best_index   = fine_index;
+                          }
+                      }
+                  }
+                //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
+                if (best_quality > Params::sync_threshold2)
+                  result_scores.push_back (Score { best_index, best_quality });
+              }
+          }
+      }
+    return result_scores;
+  }
+private:
+  void
+  sync_fft (const WavData& wav_data, size_t index, size_t count, vector<float>& fft_out_db)
+  {
+    fft_out_db.clear();
+
+    /* computing db-magnitude is expensive, so we better do it here */
+    for (const vector<complex<float>>& spect : compute_frame_ffts (wav_data, index, count))
+      {
+        const double min_db = -96;
+
+        for (int i = Params::min_band; i <= Params::max_band; i++)
+          fft_out_db.push_back (db_from_factor (abs (spect[i]), min_db));
+      }
+  }
+
+  const char*
+  find_closest_sync (size_t index)
+  {
+    int best_error = 0xffff;
+    int best = 0;
+
+    for (int i = 0; i < 100; i++)
+      {
+        int error = abs (int (index) - int (i * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+        if (error < best_error)
+          {
+            best = i;
+            best_error = error;
+          }
+      }
+    static char buffer[1024]; // this code is for debugging only, so this should be ok
+    sprintf (buffer, "n:%d offset:%d", best, int (index) - int (best * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+    return buffer;
+  }
+};
+
+int
+decode_and_report (const WavData& wav_data, const string& orig_pattern)
+{
+  int match_count = 0, total_count = 0, sync_match = 0;
+
+  SyncFinder                sync_finder;
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
+
+  auto decode_single = [&] (const vector<float>& raw_bit_vec, SyncFinder::Score sync_score)
+  {
+    assert (raw_bit_vec.size() == conv_code_size (Params::payload_size));
+
+    vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
+
+    float decode_error = 0;
+    vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
+
+    if (sync_score.index)
+      {
+        const int seconds = lrint (sync_score.index / wav_data.mix_freq());
+        printf ("pattern %2d:%02d %s %.3f %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
+      }
+    else /* this is the combined pattern "all" */
+      {
+        printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
+      }
+
+    if (!orig_pattern.empty())
+      {
+        bool        match = true;
+        vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+
+        for (size_t i = 0; i < bit_vec.size(); i++)
+          match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+
+        if (match)
+          match_count++;
+
+      }
+    total_count++;
+  };
+
+  vector<float> raw_bit_vec_all (conv_code_size (Params::payload_size));
+  SyncFinder::Score score_all { 0, 0 };
+
+  for (auto sync_score : sync_scores)
+    {
+      const size_t count = mark_data_frame_count();
+      const size_t index = sync_score.index + (mark_sync_frame_count() * Params::frame_size);
+
+      auto fft_range_out = compute_frame_ffts (wav_data, index, count);
+      if (fft_range_out.size())
+        {
+          vector<vector<complex<float>>> junk;
+
+          vector<float> raw_bit_vec;
+          if (Params::mix)
+            {
+              raw_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
+            }
+          else
+            {
+              raw_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
+            }
+          decode_single (raw_bit_vec, sync_score);
+
+          score_all.quality += sync_score.quality;
+          for (size_t i = 0; i < raw_bit_vec_all.size(); i++)
+            raw_bit_vec_all[i] += raw_bit_vec[i];
+        }
+    }
+  if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
+    {
+      score_all.quality /= total_count;
+      decode_single (raw_bit_vec_all, score_all);
+    }
+
   if (!orig_pattern.empty())
     {
-      int bits = 0, bit_errors = 0;
+      printf ("match_count %d %d\n", match_count, total_count);
 
-      vector<int> orig_vec = bit_str_to_vec (orig_pattern);
-      for (size_t i = 0; i < bit_vec.size(); i++)
+      /* search sync markers at typical positions */
+      const int expect0 = Params::frames_pad_start * Params::frame_size;
+      const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+      const int expect_end = frame_count (wav_data) * Params::frame_size;
+
+      for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
         {
-          bits++;
-          if (bit_vec[i] != orig_vec[i % orig_vec.size()])
-            bit_errors++;
+          for (auto sync_score : sync_scores)
+            {
+              if (abs (int (sync_score.index + Params::test_cut) - expect_index) < Params::frame_size / 2)
+                {
+                  sync_match++;
+                  break;
+                }
+            }
         }
-      printf ("bit_error_raw %d %d\n", bit_errors, bits);
-      printf ("bit_error_rate %.5f %%\n", double (100.0 * bit_errors) / bits);
+      printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
     }
   return 0;
 }
@@ -741,14 +1073,7 @@ get_watermark (const string& infile, const string& orig_pattern)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-
-  // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  truncate_to_block_size (wav_data);
-
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
-  vector<vector<complex<float>>> fft_orig_out; /* no original data -> blind decode */
-
-  return decode_and_report (wav_data, orig_pattern, fft_out, fft_orig_out);
+  return decode_and_report (wav_data, orig_pattern);
 }
 
 int
@@ -768,14 +1093,15 @@ get_watermark_delta (const string& origfile, const string& infile, const string&
       return 1;
     }
 
-  // to keep the watermark detection code simpler, we truncate samples to avoid partial filled blocks
-  truncate_to_block_size (wav_data);
-  truncate_to_block_size (orig_wav_data);
-
+  /*
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
   vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
 
   return decode_and_report (wav_data, orig_pattern, fft_out, fft_orig_out);
+  */
+  /* FIXME? */
+  printf ("delta decoding currently not supported\n");
+  return 1;
 }
 
 int
@@ -792,10 +1118,10 @@ gentest (const string& infile, const string& outfile)
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
 
-  /* 42 seconds of audio - starting at 30 seconds of the original track */
-  /* this is approximately the minimal amount of audio data required for storing a 128-bit encoded message */
-  const size_t offset = 30 * wav_data.n_channels() * int (wav_data.mix_freq());
-  const size_t n_samples = 42 * wav_data.n_channels() * int (wav_data.mix_freq());
+  /* 160 seconds of audio - this is approximately the minimal amount of audio data required
+   * for storing three separate watermarks with a 128-bit encoded message */
+  const size_t offset = 0 * wav_data.n_channels() * int (wav_data.mix_freq());
+  const size_t n_samples = 165 * wav_data.n_channels() * int (wav_data.mix_freq());
   if (in_signal.size() < (offset + n_samples))
     {
       fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
@@ -828,6 +1154,32 @@ scale (const string& infile, const string& outfile)
   vector<float> out_signal;
   for (size_t i = 0; i < in_signal.size(); i++)
     out_signal.push_back (in_signal[i] * Params::pre_scale);
+
+  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  if (!out_wav_data.save (outfile))
+    {
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      return 1;
+    }
+  return 0;
+}
+
+int
+cut_start (const string& infile, const string& outfile, const string& start_str)
+{
+  WavData wav_data;
+  if (!wav_data.load (infile))
+    {
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      return 1;
+    }
+
+  size_t start = atoi (start_str.c_str());
+
+  const vector<float>& in_signal = wav_data.samples();
+  vector<float> out_signal;
+  for (size_t i = start * wav_data.n_channels(); i < in_signal.size(); i++)
+    out_signal.push_back (in_signal[i]);
 
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
@@ -928,6 +1280,10 @@ main (int argc, char **argv)
   else if (op == "scale" && argc == 4)
     {
       scale (argv[2], argv[3]);
+    }
+  else if (op == "cut-start" && argc == 5)
+    {
+      cut_start (argv[2], argv[3], argv[4]);
     }
   else if (op == "get-delta" && argc == 4)
     {
