@@ -501,6 +501,32 @@ mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<flo
     }
 }
 
+WavData
+resample (const WavData& wav_data, int rate)
+{
+  if (fabs (double (rate) - wav_data.mix_freq()) < 0.1)
+    return wav_data;
+
+  double ratio = double (rate) / wav_data.mix_freq();
+
+  const vector<float>& in = wav_data.samples();
+  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+
+  SRC_DATA data;
+  data.data_in = &in[0];
+  data.data_out = &out[0];
+  data.input_frames = in.size() / wav_data.n_channels();
+  data.output_frames = out.size() / wav_data.n_channels();
+  data.src_ratio = ratio;
+  if (src_simple (&data, SRC_SINC_MEDIUM_QUALITY, wav_data.n_channels()) != 0)
+    {
+      fprintf (stderr, "audiowmark: resampling error occurred\n");
+      exit (1);
+    }
+
+  return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -531,12 +557,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   printf ("loading %s\n", infile.c_str());
 
-  WavData in_wav_data;
-  if (!in_wav_data.load (infile))
+  WavData orig_wav_data;
+  if (!orig_wav_data.load (infile))
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), in_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), orig_wav_data.error_blurb());
       return 1;
     }
+
+  WavData in_wav_data = resample (orig_wav_data, Params::mark_sample_rate);
 
   /*
    * to keep the watermarking code simpler, we pad the wave data with zeros
@@ -1076,35 +1104,7 @@ get_watermark (const string& infile, const string& orig_pattern)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-  if (fabs (wav_data.mix_freq() - Params::mark_sample_rate) > 0.1)
-    {
-      printf ("sample rate: %f -> autoconvert\n", wav_data.mix_freq());
-
-      double ratio = double (Params::mark_sample_rate) / wav_data.mix_freq();
-
-      const vector<float>& in = wav_data.samples();
-      vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
-
-      SRC_DATA data;
-      data.data_in = &in[0];
-      data.data_out = &out[0];
-      data.input_frames = in.size() / wav_data.n_channels();
-      data.output_frames = out.size() / wav_data.n_channels();
-      data.src_ratio = ratio;
-      if (src_simple (&data, SRC_SINC_MEDIUM_QUALITY, wav_data.n_channels()) != 0)
-        {
-          fprintf (stderr, "audiowmark: resampling error occurred\n");
-          return 1;
-        }
-
-      WavData resampled_data (out, wav_data.n_channels(), Params::mark_sample_rate, wav_data.bit_depth());
-
-      return decode_and_report (resampled_data, orig_pattern);
-    }
-  else
-    {
-      return decode_and_report (wav_data, orig_pattern);
-    }
+  return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
 }
 
 int
