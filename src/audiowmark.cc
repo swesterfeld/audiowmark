@@ -640,9 +640,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       // cosine
       synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
     }
-  for (size_t pos = 0; pos < in_signal.size(); pos++)
-    out_signal[pos] = in_signal[pos] * Params::pre_scale;
-
   for (int f = 0; f < frame_count (wav_data); f++)
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -656,13 +653,27 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
               int pos = (last_frame_start + i) * wav_data.n_channels() + ch;
 
               if (pos >= 0 && pos < int (out_signal.size()))
-                out_signal[pos] += fft_delta_out[i % Params::frame_size] * synth_window[i] * Params::pre_scale;
+                {
+                  // FIXME: for some reason (nan) we need += here; fix this...
+                  out_signal[pos] += fft_delta_out[i % Params::frame_size] * synth_window[i];
+                }
             }
         }
     }
 
+  /* last step: resample the watermark to the original sample rate, and then add mark and original audio */
+  WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  mark_wav_data = resample (mark_wav_data, orig_wav_data.mix_freq());
+
+  vector<float> mark_samples = mark_wav_data.samples();
+  vector<float> samples = orig_wav_data.samples();
+  mark_samples.resize (samples.size());
+
+  for (size_t i = 0; i < samples.size(); i++)
+    samples[i] = (samples[i] + mark_samples[i]) * Params::pre_scale;
+
   bool clipping_warning = false;
-  for (auto value : out_signal)
+  for (auto value : samples)
     {
       if (fabs (value) >= 1.0 && !clipping_warning)
         {
@@ -671,9 +682,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
 
-  out_signal.resize (in_wav_data.n_values()); /* undo zero padding after load */
-
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.mix_freq(), wav_data.bit_depth());
+  WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.mix_freq(), orig_wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
     {
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
