@@ -654,7 +654,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
               if (pos >= 0 && pos < int (out_signal.size()))
                 {
-                  // FIXME: for some reason (nan) we need += here; fix this...
                   out_signal[pos] += fft_delta_out[i % Params::frame_size] * synth_window[i];
                 }
             }
