@@ -19,10 +19,8 @@ fi
     ls test/T*
   elif [ "x$AWM_SET" == "xbig" ]; then
     cat test_list
-  elif [ "x$AWM_SET" == "xhuge" ]; then
-    ls huge/T*
-  elif [ "x$AWM_SET" == "xhuge2" ]; then
-    ls huge2/T*
+  elif [ "x$AWM_SET" != "x" ] && [ -d "$AWM_SET" ] && [ -f "$AWM_SET/T001"*wav ]; then
+    ls $AWM_SET/T*
   else
     echo "bad AWM_SET $AWM_SET" >&2
     exit 1
