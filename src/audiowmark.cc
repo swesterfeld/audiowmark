@@ -1150,7 +1150,15 @@ get_watermark (const string& infile, const string& orig_pattern)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
       return 1;
     }
-  return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
+
+  if (wav_data.sample_rate() == Params::mark_sample_rate)
+    {
+      return decode_and_report (wav_data, orig_pattern);
+    }
+  else
+    {
+      return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
+    }
 }
 
 int
