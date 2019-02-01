@@ -11,7 +11,7 @@
 #include "convcode.hh"
 #include "random.hh"
 
-#include "samplerate.h"
+#include <zita-resampler/resampler.h>
 
 #include <assert.h>
 
@@ -507,22 +507,32 @@ resample (const WavData& wav_data, int rate)
   if (rate == wav_data.sample_rate())
     return wav_data;
 
-  double ratio = double (rate) / wav_data.sample_rate();
+  Resampler resampler;
+
+  const int n_channels = wav_data.n_channels();
+  const int hlen = 16;
+  const double ratio = double (rate) / wav_data.sample_rate();
 
   const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+  vector<float> out (lrint (in.size() / n_channels * ratio) * n_channels);
 
-  SRC_DATA data;
-  data.data_in = &in[0];
-  data.data_out = &out[0];
-  data.input_frames = in.size() / wav_data.n_channels();
-  data.output_frames = out.size() / wav_data.n_channels();
-  data.src_ratio = ratio;
-  if (src_simple (&data, SRC_SINC_MEDIUM_QUALITY, wav_data.n_channels()) != 0)
-    {
-      fprintf (stderr, "audiowmark: resampling error occurred\n");
-      exit (1);
-    }
+  resampler.setup (wav_data.sample_rate(), rate, n_channels, hlen);
+  resampler.out_count = out.size() / n_channels;
+  resampler.out_data = &out[0];
+
+  /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
+  resampler.inp_count = resampler.inpsize () / 2 - 1;
+  resampler.inp_data  = nullptr;
+  resampler.process();
+
+  resampler.inp_count = in.size() / n_channels;
+  resampler.inp_data = (float *) &in[0];
+  resampler.process();
+
+  /* zita needs k/2 samples after the actual input */
+  resampler.inp_count = resampler.inpsize() / 2;
+  resampler.inp_data  = nullptr;
+  resampler.process();
 
   return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
 }
