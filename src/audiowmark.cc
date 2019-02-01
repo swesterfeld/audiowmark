@@ -527,8 +527,10 @@ process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
 WavData
 resample (const WavData& wav_data, int rate)
 {
-  if (rate == wav_data.sample_rate())
-    return wav_data;
+  /* in our application, resampling should only be called if it is necessary
+   * since using the resampler with input rate == output rate would be slow
+   */
+  assert (rate != wav_data.sample_rate());
 
   const int n_channels = wav_data.n_channels();
   const int hlen = 16;
