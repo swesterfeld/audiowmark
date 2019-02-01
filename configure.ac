@@ -22,7 +22,11 @@ dnl zita resampler
 dnl
 AC_DEFUN([AC_ZITA_REQUIREMENTS],
 [
-    AC_CHECK_LIB(zita-resampler, _Z28zita_resampler_major_versionv)
+    AC_CHECK_LIB(zita-resampler, _Z28zita_resampler_major_versionv,[],
+      [
+        AC_MSG_ERROR([You need to install libzita-resampler to build this package.])
+      ]
+    )
 ])
 
 dnl FFTW3
