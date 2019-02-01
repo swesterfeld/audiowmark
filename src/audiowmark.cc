@@ -12,6 +12,7 @@
 #include "random.hh"
 
 #include <zita-resampler/resampler.h>
+#include <zita-resampler/vresampler.h>
 
 #include <assert.h>
 
@@ -501,13 +502,33 @@ mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<flo
     }
 }
 
+template<class R>
+static void
+process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
+{
+  resampler.out_count = out.size() / resampler.nchan();
+  resampler.out_data = &out[0];
+
+  /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
+  resampler.inp_count = resampler.inpsize () / 2 - 1;
+  resampler.inp_data  = nullptr;
+  resampler.process();
+
+  resampler.inp_count = in.size() / resampler.nchan();
+  resampler.inp_data = (float *) &in[0];
+  resampler.process();
+
+  /* zita needs k/2 samples after the actual input */
+  resampler.inp_count = resampler.inpsize() / 2;
+  resampler.inp_data  = nullptr;
+  resampler.process();
+}
+
 WavData
 resample (const WavData& wav_data, int rate)
 {
   if (rate == wav_data.sample_rate())
     return wav_data;
-
-  Resampler resampler;
 
   const int n_channels = wav_data.n_channels();
   const int hlen = 16;
@@ -516,25 +537,21 @@ resample (const WavData& wav_data, int rate)
   const vector<float>& in = wav_data.samples();
   vector<float> out (lrint (in.size() / n_channels * ratio) * n_channels);
 
-  resampler.setup (wav_data.sample_rate(), rate, n_channels, hlen);
-  resampler.out_count = out.size() / n_channels;
-  resampler.out_data = &out[0];
+  Resampler resampler;
+  if (resampler.setup (wav_data.sample_rate(), rate, n_channels, hlen) == 0)
+    {
+      process_resampler (resampler, in, out);
+      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+    }
 
-  /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
-  resampler.inp_count = resampler.inpsize () / 2 - 1;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-
-  resampler.inp_count = in.size() / n_channels;
-  resampler.inp_data = (float *) &in[0];
-  resampler.process();
-
-  /* zita needs k/2 samples after the actual input */
-  resampler.inp_count = resampler.inpsize() / 2;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-
-  return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+  VResampler vresampler;
+  if (vresampler.setup (ratio, n_channels, hlen) == 0)
+    {
+      process_resampler (vresampler, in, out);
+      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+    }
+  fprintf (stderr, "audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
+  exit (1);
 }
 
 int
