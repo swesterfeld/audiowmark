@@ -591,17 +591,25 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
 
-  WavData in_wav_data = resample (orig_wav_data, Params::mark_sample_rate);
+  vector<float> in_signal;
+  if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
+    {
+      WavData in_wav_data = resample (orig_wav_data, Params::mark_sample_rate);
+      in_signal = in_wav_data.samples();
+    }
+  else
+    {
+      in_signal = orig_wav_data.samples();
+    }
 
   /*
    * to keep the watermarking code simpler, we pad the wave data with zeros
    * to avoid processing a partly filled frame
    */
-  vector<float> in_signal (in_wav_data.samples());
-  while (in_signal.size() % (in_wav_data.n_channels() * Params::frame_size))
+  while (in_signal.size() % (orig_wav_data.n_channels() * Params::frame_size))
     in_signal.push_back (0);
 
-  WavData wav_data (in_signal, in_wav_data.n_channels(), in_wav_data.sample_rate(), in_wav_data.bit_depth());
+  WavData wav_data (in_signal, orig_wav_data.n_channels(), Params::mark_sample_rate, orig_wav_data.bit_depth());
 
   /* we have extra space for the padded wave data -> truncated before save */
   vector<float> out_signal (wav_data.n_values());
@@ -687,16 +695,19 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
 
-  /* last step: resample the watermark to the original sample rate, and then add mark and original audio */
-  WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-  mark_wav_data = resample (mark_wav_data, orig_wav_data.sample_rate());
+  if (wav_data.sample_rate() != orig_wav_data.sample_rate())
+    {
+      /* resample the watermark to the original sample rate */
+      WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
+      mark_wav_data = resample (mark_wav_data, orig_wav_data.sample_rate());
 
-  vector<float> mark_samples = mark_wav_data.samples();
+      out_signal = mark_wav_data.samples();
+    }
   vector<float> samples = orig_wav_data.samples();
-  mark_samples.resize (samples.size());
+  out_signal.resize (samples.size());
 
   for (size_t i = 0; i < samples.size(); i++)
-    samples[i] = (samples[i] + mark_samples[i]) * Params::pre_scale;
+    samples[i] = (samples[i] + out_signal[i]) * Params::pre_scale;
 
   bool clipping_warning = false;
   for (auto value : samples)
