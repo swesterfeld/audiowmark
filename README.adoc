@@ -1,8 +1,8 @@
-Audio Watermarking
+= audiowmark - Audio Watermarking
 
 (TODO)
 
-Building fftw
+== Building fftw
 
 audiowmark needs the single prevision variant of fftw3.
 
@@ -21,7 +21,7 @@ or, when building from git
 	make && \
 	sudo make install
 
-Docker Build
+== Docker Build
 
 You should be able to execute audiowmark via Docker.
 Example that outputs the usage message:
