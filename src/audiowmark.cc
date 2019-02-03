@@ -532,22 +532,32 @@ resample (const WavData& wav_data, int rate)
    */
   assert (rate != wav_data.sample_rate());
 
-  const int n_channels = wav_data.n_channels();
   const int hlen = 16;
   const double ratio = double (rate) / wav_data.sample_rate();
 
   const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / n_channels * ratio) * n_channels);
+  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
 
+  /* zita-resampler provides two resampling algorithms
+   *
+   * a fast optimized version: Resampler
+   *   this is an optimized version, which works for many common cases,
+   *   like resampling between 22050, 32000, 44100, 48000, 96000 Hz
+   *
+   * a slower version: VResampler
+   *   this works for arbitary rates (like 33333 -> 44100 resampling)
+   *
+   * so we try using Resampler, and if that fails fall back to VResampler
+   */
   Resampler resampler;
-  if (resampler.setup (wav_data.sample_rate(), rate, n_channels, hlen) == 0)
+  if (resampler.setup (wav_data.sample_rate(), rate, wav_data.n_channels(), hlen) == 0)
     {
       process_resampler (resampler, in, out);
       return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
     }
 
   VResampler vresampler;
-  if (vresampler.setup (ratio, n_channels, hlen) == 0)
+  if (vresampler.setup (ratio, wav_data.n_channels(), hlen) == 0)
     {
       process_resampler (vresampler, in, out);
       return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
