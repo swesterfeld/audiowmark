@@ -65,17 +65,18 @@ print_usage()
   printf ("  * compute bit error rate for blind decoding\n");
   printf ("    audiowmark cmp <watermarked_wav> <message_hex>\n");
   printf ("\n");
+#if 0
   printf ("  * retrieve message with original file\n");
   printf ("    audiowmark get-delta <input_wav> <watermarked_wav>\n");
   printf ("\n");
   printf ("  * compute bit error rate for decoding with original file\n");
   printf ("    audiowmark cmp-delta <input_wav> <watermarked_wav> <message_hex>\n");
   printf ("\n");
+#endif
   printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
   printf ("Global options:\n");
-  printf ("  --frame-size          frame size (must be power of 2)     [%zd]\n", Params::frame_size);
   printf ("  --frames-per-bit      number of frames per bit            [%d]\n",  Params::frames_per_bit);
   printf ("  --water-delta         set watermarking delta              [%.4f]\n", Params::water_delta);
   printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
@@ -152,10 +153,6 @@ parse_options (int   *argc_p,
 	{
 	  printf ("audiowmark %s\n", VERSION);
 	  exit (0);
-	}
-      else if (check_arg (argc, argv, &i, "--frame-size", &opt_arg))
-	{
-          Params::frame_size = atoi (opt_arg);
 	}
       else if (check_arg (argc, argv, &i, "--frames-per-bit", &opt_arg))
 	{
