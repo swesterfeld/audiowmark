@@ -108,7 +108,7 @@ void
 Random::refill_buffer()
 {
   const size_t block_size = 256;
-  unsigned char zeros[block_size] = { 0, };
+  static unsigned char zeros[block_size] = { 0, };
   unsigned char cipher_text[block_size];
 
   gcry_error_t gcry_ret = gcry_cipher_encrypt (aes_ctr_cipher, cipher_text, block_size, zeros, block_size);
