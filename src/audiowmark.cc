@@ -641,7 +641,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   size_t frame_index = 0;
   int    data_blocks = 0;
   /* padding at start */
-  while (frame_index < Params::frames_pad_start)
+  while (frame_index < Params::frames_pad_start && frame_index < size_t (frame_count (wav_data)))
     {
       mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
       frame_index++;
