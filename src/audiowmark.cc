@@ -585,13 +585,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
       bitvec = expanded_bitvec;
     }
+  printf ("Input:        %s\n", infile.c_str());
+  printf ("Output:       %s\n", outfile.c_str());
+  printf ("Message:      %s\n\n", bit_vec_to_str (bitvec).c_str());
+
   /* add forward error correction, bitvec will now be a lot larger */
   bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
 
   /* pad with zeros to match block_size */
   bitvec.resize (mark_data_frame_count() / Params::frames_per_bit);
-
-  printf ("loading %s\n", infile.c_str());
 
   WavData orig_wav_data;
   if (!orig_wav_data.load (infile))
@@ -599,6 +601,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), orig_wav_data.error_blurb());
       return 1;
     }
+  int orig_seconds = orig_wav_data.n_values() / orig_wav_data.sample_rate() / orig_wav_data.n_channels();
+  printf ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
+  printf ("Sample Rate:  %d\n", orig_wav_data.sample_rate());
+  printf ("Channels:     %d\n", orig_wav_data.n_channels());
 
   vector<float> in_signal;
   if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
@@ -622,7 +628,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   /* we have extra space for the padded wave data -> truncated before save */
   vector<float> out_signal (wav_data.n_values());
-  printf ("channels: %d, samples: %zd, mix_freq: %d\n", wav_data.n_channels(), wav_data.n_values(), wav_data.sample_rate());
 
   vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data));
   vector<vector<complex<float>>> fft_delta_spect;
@@ -634,6 +639,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
   size_t frame_index = 0;
+  int    data_blocks = 0;
   /* padding at start */
   while (frame_index < Params::frames_pad_start)
     {
@@ -645,6 +651,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       mark_sync (wav_data, frame_index, fft_out, fft_delta_spect);
       frame_index += mark_sync_frame_count();
+
+      data_blocks++;
 
       mark_data (wav_data, frame_index, fft_out, fft_delta_spect, bitvec);
       frame_index += mark_data_frame_count();
@@ -732,6 +740,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           clipping_warning = true;
         }
     }
+  printf ("Data Blocks:  %d\n", data_blocks);
 
   WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.sample_rate(), orig_wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
