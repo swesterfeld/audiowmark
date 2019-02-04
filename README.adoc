@@ -51,6 +51,15 @@ and can be used for the add/get commands as follows:
   audiowmark add --key test.key in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --key test.key out.wav
 
+== Dependencies
+
+If you compile from source, audiowmark needs the follwing libraries:
+
+* libfftw3
+* libsndfile
+* libgcrypt
+* libzita-resampler
+
 == Building fftw
 
 audiowmark needs the single prevision variant of fftw3.
