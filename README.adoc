@@ -1,0 +1,88 @@
+= audiowmark - Audio Watermarking
+
+== Description
+
+`audiowmark` is an Open Source solution for audio watermarking. A sound file
+(typically wav) is read by the software, and a 128-bit message is stored in a
+watermark in the output sound file. For human listeners, the files typically
+sound the same.
+
+However, the 128-bit message can be retrieved from the output sound file. Our
+tests show, that even if the file is converted to mp3 or ogg (with bitrates
+higher than 128 kbit/s), the watermark usually can be retrieved without
+problems. The process of retrieving the message does not need the original
+audio file (blind decoding).
+
+Internally, audiowmark is using the patchwork algorithm to hide the data in the
+spectrum of the audio file. Some pseoudo-randomly selected amplitudes of the
+frequency bands of a 1024-value FFTs are increased or decreased slightly, which
+can be detected later. The algorithm used here is inspired by
+
+  Martin Steinebach: Digitale Wasserzeichen für Audiodaten.
+  Darmstadt University of Technology 2004, ISBN 3-8322-2507-2
+
+== Adding/Retrieving a Watermark
+
+To add a watermark to the soundfile in.wav with a 128-bit message (which is
+specified as hex-string):
+
+  audiowmark add in.wav out.wav 0123456789abcdef0011223344556677
+
+To get the 128-bit message from the watermarked file, use:
+
+  audiowmark get out.wav
+
+== Watermark Key
+
+Since the software is Open Source, a watermarking key should be used to ensure
+that the message bits cannot be retrieved by somebody else (which would also
+allow removing the watermark without loss of quality). The watermark key
+controls all pseudo-random parameters of the algorithm. This means that
+it determines which frequency bands are increased or decreased to store a
+0 bit or a 1 bit. Without the key, it is impossible to decode the message
+bits from the audio file alone.
+
+Our watermarking key is a 128-bit AES key. A key can be generated using
+
+  audiowmark gen-key test.key
+
+and can be used for the add/get commands as follows:
+
+  audiowmark add --key test.key in.wav out.wav 0123456789abcdef0011223344556677
+  audiowmark get --key test.key out.wav
+
+== Dependencies
+
+If you compile from source, audiowmark needs the follwing libraries:
+
+* libfftw3
+* libsndfile
+* libgcrypt
+* libzita-resampler
+
+== Building fftw
+
+audiowmark needs the single prevision variant of fftw3.
+
+If you are building fftw3 from source, use the `--enable-float`
+configure parameter to build it, e.g.::
+
+	cd ${FFTW3_SOURCE}
+	./configure --enable-float --enable-sse && \
+	make && \
+	sudo make install
+
+or, when building from git
+
+	cd ${FFTW3_GIT}
+	./bootstrap.sh --enable-shared --enable-sse --enable-float && \
+	make && \
+	sudo make install
+
+== Docker Build
+
+You should be able to execute audiowmark via Docker.
+Example that outputs the usage message:
+
+  docker build -t audiowmark .
+  docker run -v <local-data-directory>:/data -it audiowmark -h

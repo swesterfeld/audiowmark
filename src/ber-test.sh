@@ -19,10 +19,8 @@ fi
     ls test/T*
   elif [ "x$AWM_SET" == "xbig" ]; then
     cat test_list
-  elif [ "x$AWM_SET" == "xhuge" ]; then
-    ls huge/T*
-  elif [ "x$AWM_SET" == "xhuge2" ]; then
-    ls huge2/T*
+  elif [ "x$AWM_SET" != "x" ] && [ -d "$AWM_SET" ] && [ -f "$AWM_SET/T001"*wav ]; then
+    ls $AWM_SET/T*
   else
     echo "bad AWM_SET $AWM_SET" >&2
     exit 1
@@ -62,12 +60,6 @@ do
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
       rm ${AWM_FILE}.wav
       ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
-
-      # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
-        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
-        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
-      fi
     elif [ "x$TRANSFORM" == "xdouble-mp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -82,12 +74,6 @@ do
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
       rm ${AWM_FILE}.wav
       ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
-
-      # some (low) mpeg quality settings use a lower sample rate
-      if [ "x$(soxi -r ${AWM_FILE}.wav)" != "x44100" ]; then
-        sox ${AWM_FILE}.wav ${AWM_FILE}r.wav rate 44100
-        mv ${AWM_FILE}r.wav ${AWM_FILE}.wav
-      fi
     elif [ "x$TRANSFORM" == "xogg" ]; then
       if [ "x$2" == "x" ]; then
         echo "need ogg bitrate" >&2

@@ -8,6 +8,7 @@ RUN apt-get install -y autoconf
 RUN apt-get install -y libtool
 RUN apt-get install -y autoconf-archive
 RUN apt-get install -y libgcrypt20-dev
+RUN apt-get install -y libzita-resampler-dev
 
 ADD . /audiowmark
 WORKDIR /audiowmark
