@@ -58,8 +58,7 @@ do
         exit 1
       fi
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
-      rm ${AWM_FILE}.wav
-      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
+      OUT_FILE=${AWM_FILE}.mp3
     elif [ "x$TRANSFORM" == "xdouble-mp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -72,23 +71,22 @@ do
 
       # second mp3 step
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
-      rm ${AWM_FILE}.wav
-      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
+      OUT_FILE=${AWM_FILE}.mp3
     elif [ "x$TRANSFORM" == "xogg" ]; then
       if [ "x$2" == "x" ]; then
         echo "need ogg bitrate" >&2
         exit 1
       fi
       oggenc -b $2 ${AWM_FILE}.wav -o ${AWM_FILE}.ogg --quiet
-      oggdec ${AWM_FILE}.ogg -o ${AWM_FILE}.wav --quiet
+      OUT_FILE=${AWM_FILE}.ogg
     elif [ "x$TRANSFORM" == "x" ]; then
-      :
+      OUT_FILE=${AWM_FILE}.wav
     else
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
     # blind decoding
-    audiowmark cmp ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+    audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
   done
