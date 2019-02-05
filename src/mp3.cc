@@ -93,7 +93,7 @@ mp3_try_load (const string& filename, WavData& wav_data)
       assert (err == 0 || err == MPG123_DONE);
 
       float *f = reinterpret_cast<float *> (&buffer[0]);
-      for (int i = 0; i < buffer.size() / 4; i++)
+      for (int i = 0; i < done / 4; i++)
         {
           samples.push_back (f[i]);
         }
