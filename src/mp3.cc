@@ -8,40 +8,75 @@
 using std::vector;
 using std::string;
 
+struct ScopedMHandle
+{
+  mpg123_handle *mh         = nullptr;
+  bool           need_close = false;
+
+  ~ScopedMHandle()
+  {
+    if (mh && need_close)
+      mpg123_close (mh);
+
+    if (mh)
+      mpg123_delete (mh);
+  }
+};
+
 bool
 mp3_try_load (const string& filename, WavData& wav_data)
 {
-  int err = mpg123_init();
-  assert (err == MPG123_OK);
+  int err = 0;
+
+  static bool mpg123_init_ok = false;
+  if (!mpg123_init_ok)
+    {
+      err = mpg123_init();
+      if (err != MPG123_OK)
+        return false;
+
+      mpg123_init_ok = true;
+    }
 
   mpg123_handle *mh = mpg123_new (NULL, &err);
-  assert (err == MPG123_OK);
+  if (err != MPG123_OK)
+    return false;
 
-  mpg123_param (mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0);
+  auto smh = ScopedMHandle { mh }; // cleanup on return
+
+  err = mpg123_param (mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0);
+  if (err != MPG123_OK)
+    return false;
+
+  // force floating point output
+  {
+    const long *rates;
+    size_t      rate_count;
+
+    mpg123_format_none (mh);
+    mpg123_rates (&rates, &rate_count);
+
+    for (size_t i = 0; i < rate_count; i++)
+      {
+        err = mpg123_format (mh, rates[i], MPG123_MONO|MPG123_STEREO, MPG123_ENC_FLOAT_32);
+        if (err != MPG123_OK)
+          return false;
+      }
+  }
+
+  err = mpg123_open (mh, filename.c_str());
+  if (err != MPG123_OK)
+    return false;
+
+  smh.need_close = true;
+
   long rate;
   int channels;
   int encoding;
-  //
-  const long *rates;
-  size_t rate_count;
-  mpg123_format_none (mh);
-  mpg123_rates(&rates, &rate_count);
-  for(size_t i=0; i<rate_count; ++i)
-    {
-      err = mpg123_format (mh, rates[i], MPG123_MONO|MPG123_STEREO, MPG123_ENC_FLOAT_32);
-      assert (err == 0);
-    }
-  printf ("# format: %d\n", err);
 
-  err = mpg123_open (mh, filename.c_str());
-  assert (err == 0);
   err = mpg123_getformat (mh, &rate, &channels, &encoding);
-  if (err != 0)
+  if (err != MPG123_OK)
     return false;
-  assert (err == 0);
-  printf ("# %d\n", err);
-  printf ("# %ld %d %d\n", rate, channels, encoding);
-  assert (err == MPG123_OK);
 
   /* ensure that the format will not change */
   mpg123_format_none (mh);
