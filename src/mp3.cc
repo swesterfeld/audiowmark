@@ -82,21 +82,21 @@ mp3_try_load (const string& filename, WavData& wav_data)
   mpg123_format_none (mh);
   mpg123_format (mh, rate, channels, encoding);
 
-  printf ("# %zd\n", mpg123_outblock (mh));
-  vector<unsigned char> buffer (mpg123_outblock (mh));
+  size_t buffer_bytes = mpg123_outblock (mh);
+  assert (buffer_bytes % sizeof (float) == 0);
+
+  vector<float> buffer (buffer_bytes / sizeof (float));
   vector<float> samples;
 
   size_t done = 0;
   do
     {
-      err = mpg123_read( mh, &buffer[0], buffer.size(), &done );
-      assert (err == 0 || err == MPG123_DONE);
+      err = mpg123_read (mh, reinterpret_cast<unsigned char *> (&buffer[0]), buffer_bytes, &done);
+      if (err != MPG123_OK && err != MPG123_DONE)
+        return false;
 
-      float *f = reinterpret_cast<float *> (&buffer[0]);
-      for (int i = 0; i < done / 4; i++)
-        {
-          samples.push_back (f[i]);
-        }
+      const size_t n_values = done / sizeof (float);
+      samples.insert (samples.end(), buffer.begin(), buffer.begin() + n_values);
     }
   while (done);
 
