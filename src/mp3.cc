@@ -47,6 +47,7 @@ mp3_try_load (const string& filename, WavData& wav_data)
 
   printf ("# %zd\n", mpg123_outblock (mh));
   vector<unsigned char> buffer (mpg123_outblock (mh));
+  vector<float> samples;
 
   size_t done = 0;
   do
@@ -56,12 +57,13 @@ mp3_try_load (const string& filename, WavData& wav_data)
       printf ("# done=%zd err=%d\n", done, err);
 
       float *f = reinterpret_cast<float *> (&buffer[0]);
-      for (int i = 0; i < buffer.size() / 8; i++)
+      for (int i = 0; i < buffer.size() / 4; i++)
         {
-          printf ("%f\n", f[i*2]);
+          samples.push_back (f[i]);
         }
     }
   while (done);
 
+  wav_data = WavData (samples, channels, rate, 24);
   return true;
 }
