@@ -36,6 +36,8 @@ mp3_try_load (const string& filename, WavData& wav_data)
   err = mpg123_open (mh, filename.c_str());
   assert (err == 0);
   err = mpg123_getformat (mh, &rate, &channels, &encoding);
+  if (err != 0)
+    return false;
   assert (err == 0);
   printf ("# %d\n", err);
   printf ("# %ld %d %d\n", rate, channels, encoding);
@@ -54,7 +56,6 @@ mp3_try_load (const string& filename, WavData& wav_data)
     {
       err = mpg123_read( mh, &buffer[0], buffer.size(), &done );
       assert (err == 0 || err == MPG123_DONE);
-      printf ("# done=%zd err=%d\n", done, err);
 
       float *f = reinterpret_cast<float *> (&buffer[0]);
       for (int i = 0; i < buffer.size() / 4; i++)

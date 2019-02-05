@@ -1,4 +1,5 @@
 #include "wavdata.hh"
+#include "mp3.hh"
 
 #include <math.h>
 #include <sndfile.h>
@@ -35,11 +36,19 @@ WavData::load (const string& filename)
   int error = sf_error (sndfile);
   if (error)
     {
-      m_error_blurb = sf_strerror (sndfile);
-      if (sndfile)
-        sf_close (sndfile);
+      if (mp3_try_load (filename, *this))
+        {
+          // ok, if its an mp3, take it
+          return true;
+        }
+      else
+        {
+          m_error_blurb = sf_strerror (sndfile);
+          if (sndfile)
+            sf_close (sndfile);
 
-      return false;
+          return false;
+        }
     }
 
   vector<int> isamples (sfinfo.frames * sfinfo.channels);
