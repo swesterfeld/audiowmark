@@ -8,7 +8,7 @@ main (int argc, char **argv)
     {
       if (mp3_try_load (argv[1], wd))
         {
-          int sec = wd.n_values() / wd.sample_rate();
+          int sec = wd.n_values() / wd.n_channels() / wd.sample_rate();
 
           printf ("loaded mp3 %s: %d:%02d\n", argv[1], sec / 60, sec % 60);
           if (argc == 3)
