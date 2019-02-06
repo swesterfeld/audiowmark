@@ -1,6 +1,10 @@
 #!/bin/bash
 
 mkdir -p test
+if [ ! -z "$(ls test)"  ]; then
+  echo test dir not empty
+  exit 1
+fi
 
 seq=1
 cat test_list | while read f
