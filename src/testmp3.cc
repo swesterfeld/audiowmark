@@ -20,6 +20,7 @@ main (int argc, char **argv)
       else
         {
           printf ("mp3 try load %s failed\n", argv[1]);
+          return 1;
         }
     }
 }
