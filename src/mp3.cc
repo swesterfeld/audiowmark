@@ -23,6 +23,55 @@ struct ScopedMHandle
   }
 };
 
+/* there is no really simple way of detecting if something is an mp3
+ *
+ * so we try to decode a few frames; if that works without error the
+ * file is probably a valid mp3
+ */
+static bool
+mp3_detect (const string& filename)
+{
+  int err = 0;
+
+  mpg123_handle *mh = mpg123_new (NULL, &err);
+  if (err != MPG123_OK)
+    return false;
+
+  auto smh = ScopedMHandle { mh }; // cleanup on return
+
+  err = mpg123_param (mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0);
+  if (err != MPG123_OK)
+    return false;
+
+  err = mpg123_open (mh, filename.c_str());
+  if (err != MPG123_OK)
+    return false;
+
+  smh.need_close = true;
+
+  size_t buffer_bytes = mpg123_outblock (mh);
+  unsigned char buffer[buffer_bytes];
+
+  for (size_t i = 0; i < 10; i++)
+    {
+      size_t done;
+      err = mpg123_read (mh, buffer, buffer_bytes, &done);
+      if (err == MPG123_NEW_FORMAT)
+        {
+          /* format change: ok */
+        }
+      else if (err != MPG123_OK)
+        {
+          return false;
+        }
+      else if (err == MPG123_DONE)
+        {
+          return true;
+        }
+    }
+  return true;
+}
+
 bool
 mp3_try_load (const string& filename, WavData& wav_data)
 {
@@ -38,6 +87,10 @@ mp3_try_load (const string& filename, WavData& wav_data)
       mpg123_init_ok = true;
     }
 
+  const bool is_mp3 = mp3_detect (filename);
+  if (!is_mp3)
+    return false;
+
   mpg123_handle *mh = mpg123_new (NULL, &err);
   if (err != MPG123_OK)
     return false;
@@ -45,6 +98,11 @@ mp3_try_load (const string& filename, WavData& wav_data)
   auto smh = ScopedMHandle { mh }; // cleanup on return
 
   err = mpg123_param (mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0);
+  if (err != MPG123_OK)
+    return false;
+
+  // allow arbitary amount of data for resync */
+  err = mpg123_param (mh, MPG123_RESYNC_LIMIT, -1, 0);
   if (err != MPG123_OK)
     return false;
 
