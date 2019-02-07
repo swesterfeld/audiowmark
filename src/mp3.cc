@@ -88,17 +88,29 @@ mp3_try_load (const string& filename, WavData& wav_data)
   vector<float> buffer (buffer_bytes / sizeof (float));
   vector<float> samples;
 
-  size_t done = 0;
-  do
+  while (true)
     {
-      err = mpg123_read (mh, reinterpret_cast<unsigned char *> (&buffer[0]), buffer_bytes, &done);
-      if (err != MPG123_OK && err != MPG123_DONE)
-        return false;
+      size_t done = 0;
 
-      const size_t n_values = done / sizeof (float);
-      samples.insert (samples.end(), buffer.begin(), buffer.begin() + n_values);
+      err = mpg123_read (mh, reinterpret_cast<unsigned char *> (&buffer[0]), buffer_bytes, &done);
+      if (err == MPG123_OK)
+        {
+          const size_t n_values = done / sizeof (float);
+          samples.insert (samples.end(), buffer.begin(), buffer.begin() + n_values);
+        }
+      else if (err == MPG123_DONE)
+        {
+          break;
+        }
+      else if (err == MPG123_NEED_MORE)
+        {
+          // some mp3s have this error before reaching eof -> harmless
+        }
+      else
+        {
+          return false;
+        }
     }
-  while (done);
 
   wav_data = WavData (samples, channels, rate, 24);
   return true;
