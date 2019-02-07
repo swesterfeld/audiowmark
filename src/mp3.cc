@@ -23,15 +23,33 @@ struct ScopedMHandle
   }
 };
 
+void
+mp3_init()
+{
+  static bool mpg123_init_ok = false;
+  if (!mpg123_init_ok)
+    {
+      int err = mpg123_init();
+      if (err != MPG123_OK)
+        {
+          fprintf (stderr, "audiowmark: init mpg123 lib failed\n");
+          exit (1);
+        }
+      mpg123_init_ok = true;
+    }
+}
+
 /* there is no really simple way of detecting if something is an mp3
  *
  * so we try to decode a few frames; if that works without error the
  * file is probably a valid mp3
  */
-static bool
+bool
 mp3_detect (const string& filename)
 {
   int err = 0;
+
+  mp3_init();
 
   mpg123_handle *mh = mpg123_new (NULL, &err);
   if (err != MPG123_OK)
@@ -48,6 +66,13 @@ mp3_detect (const string& filename)
     return false;
 
   smh.need_close = true;
+
+  long rate;
+  int channels;
+  int encoding;
+  err = mpg123_getformat (mh, &rate, &channels, &encoding);
+  if (err != MPG123_OK)
+    return false;
 
   size_t buffer_bytes = mpg123_outblock (mh);
   unsigned char buffer[buffer_bytes];
@@ -72,39 +97,27 @@ mp3_detect (const string& filename)
   return true;
 }
 
-bool
-mp3_try_load (const string& filename, WavData& wav_data)
+string
+mp3_load (const string& filename, WavData& wav_data)
 {
   int err = 0;
 
-  static bool mpg123_init_ok = false;
-  if (!mpg123_init_ok)
-    {
-      err = mpg123_init();
-      if (err != MPG123_OK)
-        return false;
-
-      mpg123_init_ok = true;
-    }
-
-  const bool is_mp3 = mp3_detect (filename);
-  if (!is_mp3)
-    return false;
+  mp3_init();
 
   mpg123_handle *mh = mpg123_new (NULL, &err);
   if (err != MPG123_OK)
-    return false;
+    return "mpg123_new failed";
 
   auto smh = ScopedMHandle { mh }; // cleanup on return
 
   err = mpg123_param (mh, MPG123_ADD_FLAGS, MPG123_QUIET, 0);
   if (err != MPG123_OK)
-    return false;
+    return "setting quiet mode failed";
 
   // allow arbitary amount of data for resync */
   err = mpg123_param (mh, MPG123_RESYNC_LIMIT, -1, 0);
   if (err != MPG123_OK)
-    return false;
+    return "setting resync limit parameter failed";
 
   // force floating point output
   {
@@ -118,13 +131,13 @@ mp3_try_load (const string& filename, WavData& wav_data)
       {
         err = mpg123_format (mh, rates[i], MPG123_MONO|MPG123_STEREO, MPG123_ENC_FLOAT_32);
         if (err != MPG123_OK)
-          return false;
+          return mpg123_strerror (mh);
       }
   }
 
   err = mpg123_open (mh, filename.c_str());
   if (err != MPG123_OK)
-    return false;
+    return mpg123_strerror (mh);
 
   smh.need_close = true;
 
@@ -134,7 +147,7 @@ mp3_try_load (const string& filename, WavData& wav_data)
 
   err = mpg123_getformat (mh, &rate, &channels, &encoding);
   if (err != MPG123_OK)
-    return false;
+    return mpg123_strerror (mh);
 
   /* ensure that the format will not change */
   mpg123_format_none (mh);
@@ -158,7 +171,9 @@ mp3_try_load (const string& filename, WavData& wav_data)
         }
       else if (err == MPG123_DONE)
         {
-          break;
+          wav_data = WavData (samples, channels, rate, 24);
+
+          return ""; /* success */
         }
       else if (err == MPG123_NEED_MORE)
         {
@@ -166,10 +181,7 @@ mp3_try_load (const string& filename, WavData& wav_data)
         }
       else
         {
-          return false;
+          return mpg123_strerror (mh);
         }
     }
-
-  wav_data = WavData (samples, channels, rate, 24);
-  return true;
 }

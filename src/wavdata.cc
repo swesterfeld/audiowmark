@@ -36,10 +36,18 @@ WavData::load (const string& filename)
   int error = sf_error (sndfile);
   if (error)
     {
-      if (mp3_try_load (filename, *this))
+      if (mp3_detect (filename))
         {
-          // ok, if its an mp3, take it
-          return true;
+          string error = mp3_load (filename, *this);
+          if (error == "")
+            {
+              return true;  // mp3 loaded successfully
+            }
+          else
+            {
+              m_error_blurb = "mp3 load error: " + error;
+              return false;
+            }
         }
       else
         {
