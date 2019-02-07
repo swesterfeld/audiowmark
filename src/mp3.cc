@@ -60,13 +60,13 @@ mp3_detect (const string& filename)
         {
           /* format change: ok */
         }
-      else if (err != MPG123_OK)
-        {
-          return false;
-        }
       else if (err == MPG123_DONE)
         {
           return true;
+        }
+      else if (err != MPG123_OK)
+        {
+          return false;
         }
     }
   return true;
