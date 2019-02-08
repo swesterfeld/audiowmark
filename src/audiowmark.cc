@@ -77,8 +77,7 @@ print_usage()
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
   printf ("Global options:\n");
-  printf ("  --frames-per-bit      number of frames per bit            [%d]\n",  Params::frames_per_bit);
-  printf ("  --water-delta         set watermarking delta              [%.4f]\n", Params::water_delta);
+  printf ("  --strength            set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
@@ -158,9 +157,9 @@ parse_options (int   *argc_p,
 	{
           Params::frames_per_bit = atoi (opt_arg);
 	}
-      else if (check_arg (argc, argv, &i, "--water-delta", &opt_arg))
+      else if (check_arg (argc, argv, &i, "--strength", &opt_arg))
 	{
-          Params::water_delta = atof (opt_arg);
+          Params::water_delta = atof (opt_arg) / 1000;
 	}
       else if (check_arg (argc, argv, &i, "--pre-scale", &opt_arg))
 	{
@@ -587,7 +586,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
   printf ("Input:        %s\n", infile.c_str());
   printf ("Output:       %s\n", outfile.c_str());
-  printf ("Message:      %s\n\n", bit_vec_to_str (bitvec).c_str());
+  printf ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
+  printf ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
   /* add forward error correction, bitvec will now be a lot larger */
   bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
