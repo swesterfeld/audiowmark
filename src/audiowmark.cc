@@ -346,6 +346,7 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
   vector<int> down;
   get_up_down (f, up, down, random_stream);
   const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+  const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
   for (auto u : up)
     {
       /*
@@ -353,9 +354,13 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
        *
        * this actually increases the amount of energy because mag is less than 1.0
        */
-      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
+      const float mag = abs (fft_out[u]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
 
-      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+          fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+        }
     }
   for (auto d : down)
     {
@@ -364,9 +369,13 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
        *
        * this actually decreases the amount of energy because mag is less than 1.0
        */
-      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
+      const float mag = abs (fft_out[d]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, Params::water_delta * data_bit_sign);
 
-      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+          fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+        }
     }
 }
 
@@ -411,7 +420,8 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
   assert (fft_out.size() >= (start_frame + mark_data_frame_count()) * wav_data.n_channels());
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
 
-  const int frame_count = mark_data_frame_count();
+  const int   frame_count = mark_data_frame_count();
+  const float min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
 
   if (Params::mix)
     {
@@ -431,15 +441,23 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
                   const int u = mix_entries[b].up;
                   const int index = (start_frame + mix_entries[b].frame) * wav_data.n_channels() + ch;
                   {
-                    const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+                    const float mag = abs (fft_out[index][u]);
+                    if (mag > min_mag)
+                      {
+                        const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
 
-                    fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                      }
                   }
                   const int d = mix_entries[b].down;
                   {
-                    const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+                    const float mag = abs (fft_out[index][d]);
+                    if (mag > min_mag)
+                      {
+                        const float mag_factor = pow (mag, Params::water_delta * data_bit_sign);
 
-                    fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                      }
                   }
                 }
             }
