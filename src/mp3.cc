@@ -81,11 +81,7 @@ mp3_detect (const string& filename)
     {
       size_t done;
       err = mpg123_read (mh, buffer, buffer_bytes, &done);
-      if (err == MPG123_NEW_FORMAT)
-        {
-          /* format change: ok */
-        }
-      else if (err == MPG123_DONE)
+      if (err == MPG123_DONE)
         {
           return true;
         }
