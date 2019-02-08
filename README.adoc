@@ -71,16 +71,6 @@ watermark. Fractional strengths (like 7.5) are possible.
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
 
-Since the watermark modifies the input signal, it will make it louder at some
-positions. To avoid clipping, the input signal is scaled down during
-watermarking. For the strength values mentioned here everything should work,
-however for very strong watermarks you are likely to see a warning like this
-
-  audiowmark: warning: clipping occured in watermarked audio signal
-
-which can be fixed by modifying the scaling factor (which defaults to
-0.95) using `--pre-scale 0.9`.
-
 == Dependencies
 
 If you compile from source, audiowmark needs the follwing libraries:

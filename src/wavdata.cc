@@ -1,18 +1,12 @@
 #include "wavdata.hh"
 #include "mp3.hh"
+#include "utils.hh"
 
 #include <math.h>
 #include <sndfile.h>
 
 using std::string;
 using std::vector;
-
-template<typename T>
-inline const T&
-bound (const T& min_value, const T& value, const T& max_value)
-{
-  return std::min (std::max (value, min_value), max_value);
-}
 
 WavData::WavData()
 {

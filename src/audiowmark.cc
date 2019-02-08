@@ -22,6 +22,7 @@ using std::string;
 using std::vector;
 using std::complex;
 using std::min;
+using std::max;
 
 namespace Params
 {
@@ -78,7 +79,6 @@ print_usage()
   printf ("\n");
   printf ("Global options:\n");
   printf ("  --strength            set watermark strength              [%.6g]\n", Params::water_delta * 1000);
-  printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
 }
@@ -746,19 +746,27 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> samples = orig_wav_data.samples();
   out_signal.resize (samples.size());
 
+  float max_value = 1e-6;
   for (size_t i = 0; i < samples.size(); i++)
-    samples[i] = (samples[i] + out_signal[i]) * Params::pre_scale;
-
-  bool clipping_warning = false;
-  for (auto value : samples)
     {
-      if (fabs (value) >= 1.0 && !clipping_warning)
-        {
-          fprintf (stderr, "audiowmark: warning: clipping occured in watermarked audio signal\n");
-          clipping_warning = true;
-        }
+      /* Typically the original samples are already in range [-1;1]. However in
+       * some cases (mp3 loader), the samples are not fully normalized; in those
+       * cases, for volume normalization we treat them as-if they had been
+       * clipped already; final clipping will be done while saving.
+       */
+      const float x = bound<float> (-1, samples[i], 1);
+      const float value = fabsf (x + out_signal[i]);
+      if (value > max_value)
+        max_value = value;
     }
+
+  // scale (samples + watermark) down if necessary to avoid clipping
+  const float scale = min (1.0 / max_value, 1.0);
+  for (size_t i = 0; i < samples.size(); i++)
+    samples[i] = (samples[i] + out_signal[i]) * scale;
+
   printf ("Data Blocks:  %d\n", data_blocks);
+  printf ("Volume Norm:  %.3f (%.2f dB)\n", scale, db_from_factor (scale, -96));
 
   WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.sample_rate(), orig_wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
