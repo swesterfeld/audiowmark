@@ -382,7 +382,7 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
 size_t
 mark_data_frame_count()
 {
-  return conv_code_size (Params::payload_size) * Params::frames_per_bit;
+  return conv_code_size (ConvBlockType::a, Params::payload_size) * Params::frames_per_bit;
 }
 
 struct MixEntry
@@ -608,7 +608,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   printf ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
   /* add forward error correction, bitvec will now be a lot larger */
-  bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
+  bitvec = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
 
   /* pad with zeros to match block_size */
   bitvec.resize (mark_data_frame_count() / Params::frames_per_bit);
@@ -1116,12 +1116,12 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   auto decode_single = [&] (const vector<float>& raw_bit_vec, SyncFinder::Score sync_score)
   {
-    assert (raw_bit_vec.size() == conv_code_size (Params::payload_size));
+    assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
 
     vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
 
     float decode_error = 0;
-    vector<int> bit_vec = conv_decode_soft (randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
+    vector<int> bit_vec = conv_decode_soft (ConvBlockType::a, randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
 
     if (sync_score.index)
       {
@@ -1148,7 +1148,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     total_count++;
   };
 
-  vector<float> raw_bit_vec_all (conv_code_size (Params::payload_size));
+  vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::a, Params::payload_size));
   SyncFinder::Score score_all { 0, 0 };
 
   for (auto sync_score : sync_scores)

@@ -46,16 +46,16 @@ main (int argc, char **argv)
         printf ("%d", b);
       printf ("\n");
 
-      vector<int> coded_bits = conv_encode (in_bits);
+      vector<int> coded_bits = conv_encode (ConvBlockType::a, in_bits);
       printf ("coded vector (n=%zd): ", coded_bits.size());
       for (auto b : coded_bits)
         printf ("%d", b);
       printf ("\n");
       printf ("coded hex: %s\n", bit_vec_to_str (coded_bits).c_str());
 
-      assert (coded_bits.size() == conv_code_size (in_bits.size()));
+      assert (coded_bits.size() == conv_code_size (ConvBlockType::a, in_bits.size()));
 
-      vector<int> decoded_bits = conv_decode_hard (coded_bits);
+      vector<int> decoded_bits = conv_decode_hard (ConvBlockType::a, coded_bits);
       printf ("output vector (k=%zd): ", decoded_bits.size());
       for (auto b : decoded_bits)
         printf ("%d", b);
@@ -70,7 +70,7 @@ main (int argc, char **argv)
     }
   if (argc == 2 && string (argv[1]) == "error")
     {
-      size_t max_bit_errors = conv_code_size (128) * 0.5;
+      size_t max_bit_errors = conv_code_size (ConvBlockType::a, 128) * 0.5;
 
       for (size_t bit_errors = 0; bit_errors < max_bit_errors; bit_errors++)
         {
@@ -84,14 +84,14 @@ main (int argc, char **argv)
               while (in_bits.size() != 128)
                 in_bits.push_back (rand() & 1);
 
-              vector<int> coded_bits = conv_encode (in_bits);
+              vector<int> coded_bits = conv_encode (ConvBlockType::a, in_bits);
               coded_bit_count = coded_bits.size();
 
               vector<int> error_bits = generate_error_vector (coded_bits.size(), bit_errors);
               for (size_t pos = 0; pos < coded_bits.size(); pos++)
                 coded_bits[pos] ^= error_bits[pos];
 
-              vector<int> decoded_bits = conv_decode_hard (coded_bits);
+              vector<int> decoded_bits = conv_decode_hard (ConvBlockType::a, coded_bits);
 
               assert (decoded_bits.size() == 128);
 
@@ -120,7 +120,7 @@ main (int argc, char **argv)
               while (in_bits.size() != 128)
                 in_bits.push_back (rand() & 1);
 
-              vector<int> coded_bits = conv_encode (in_bits);
+              vector<int> coded_bits = conv_encode (ConvBlockType::a, in_bits);
               coded_bit_count = coded_bits.size();
 
               std::default_random_engine generator;
@@ -130,7 +130,7 @@ main (int argc, char **argv)
               for (auto b : coded_bits)
                 recv_bits.push_back (b + dist (generator));
 
-              vector<int> decoded_bits1 = conv_decode_soft (recv_bits);
+              vector<int> decoded_bits1 = conv_decode_soft (ConvBlockType::a, recv_bits);
 
               vector<int> recv_hard_bits;
               for (auto b : recv_bits)
@@ -139,7 +139,7 @@ main (int argc, char **argv)
               for (size_t x = 0; x < recv_hard_bits.size(); x++)
                 local_be += coded_bits[x] ^ recv_hard_bits[x];
 
-              vector<int> decoded_bits2 = conv_decode_hard (recv_hard_bits);
+              vector<int> decoded_bits2 = conv_decode_hard (ConvBlockType::a, recv_hard_bits);
 
               assert (decoded_bits1.size() == 128);
               assert (decoded_bits2.size() == 128);
@@ -171,7 +171,7 @@ main (int argc, char **argv)
       const size_t runs = 20;
       for (size_t i = 0; i < runs; i++)
         {
-          vector<int> out_bits = conv_decode_hard (conv_encode (in_bits));
+          vector<int> out_bits = conv_decode_hard (ConvBlockType::a, conv_encode (ConvBlockType::a, in_bits));
           assert (out_bits == in_bits);
         }
       printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);

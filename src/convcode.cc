@@ -24,9 +24,9 @@ parity (unsigned int v)
 
 // rate 1/6 code generator poynomial from "In search of a 2dB Coding Gain", Yuen and Vo
 // minimum free distance 56
-constexpr  unsigned int rate        = 6;
-constexpr  unsigned int order       = 15;
-constexpr  auto         generators  = std::array<unsigned,6> { 046321, 051271, 070535, 063667, 073277, 076531 };
+constexpr  auto         ab_generators = std::array<unsigned,6> { 046321, 051271, 070535, 063667, 073277, 076531 };
+constexpr  unsigned int ab_rate       = ab_generators.size();
+constexpr  unsigned int order         = 15;
 
 /*
 constexpr  unsigned int order       = 9;
@@ -43,14 +43,45 @@ constexpr  unsigned int state_count = (1 << order);
 constexpr  unsigned int state_mask  = (1 << order) - 1;
 
 size_t
-conv_code_size (size_t msg_size)
+conv_code_size (ConvBlockType block_type, size_t msg_size)
 {
-  return (msg_size + order) * rate;
+  switch (block_type)
+    {
+      case ConvBlockType::a:
+      case ConvBlockType::b:  return (msg_size + order) * ab_rate / 2;
+      case ConvBlockType::ab: return (msg_size + order) * ab_rate;
+      default:                assert (false);
+    }
+}
+
+vector<unsigned>
+get_block_type_generators (ConvBlockType block_type)
+{
+  vector<unsigned> generators;
+
+  if (block_type == ConvBlockType::a)
+    {
+      for (unsigned int i = 0; i < ab_rate / 2; i++)
+        generators.push_back (ab_generators[i * 2]);
+    }
+  else if (block_type == ConvBlockType::b)
+    {
+      for (unsigned int i = 0; i < ab_rate / 2; i++)
+        generators.push_back (ab_generators[i * 2 + 1]);
+    }
+  else
+    {
+      assert (block_type == ConvBlockType::ab);
+      generators.assign (ab_generators.begin(), ab_generators.end());
+    }
+  return generators;
 }
 
 vector<int>
-conv_encode (const vector<int>& in_bits)
+conv_encode (ConvBlockType block_type, const vector<int>& in_bits)
 {
+  auto generators = get_block_type_generators (block_type);
+
   vector<int> out_vec;
   vector<int> vec = in_bits;
 
@@ -75,8 +106,10 @@ conv_encode (const vector<int>& in_bits)
 
 /* decode using viterbi algorithm */
 vector<int>
-conv_decode_soft (const vector<float>& coded_bits, float *error_out)
+conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, float *error_out)
 {
+  auto generators = get_block_type_generators (block_type);
+  unsigned int rate = generators.size();
   vector<int> decoded_bits;
 
   assert (coded_bits.size() % rate == 0);
@@ -121,7 +154,7 @@ conv_decode_soft (const vector<float>& coded_bits, float *error_out)
                   float delta = old_table[state].delta;
                   int   sbit_pos = new_state * rate;
 
-                  for (size_t p = 0; p < generators.size(); p++)
+                  for (size_t p = 0; p < rate; p++)
                     {
                       const float cbit = coded_bits[i + p];
                       const float sbit = state2bits[sbit_pos + p];
@@ -160,7 +193,7 @@ conv_decode_soft (const vector<float>& coded_bits, float *error_out)
 }
 
 vector<int>
-conv_decode_hard (const vector<int>& coded_bits)
+conv_decode_hard (ConvBlockType block_type, const vector<int>& coded_bits)
 {
   /* for the final application, we always want soft decoding, so we don't
    * special case hard decoding here, so this will be a little slower than
@@ -170,5 +203,5 @@ conv_decode_hard (const vector<int>& coded_bits)
   for (auto b : coded_bits)
     soft_bits.push_back (b ? 1.0f : 0.0f);
 
-  return conv_decode_soft (soft_bits);
+  return conv_decode_soft (block_type, soft_bits);
 }

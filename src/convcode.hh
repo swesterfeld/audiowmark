@@ -4,9 +4,11 @@
 #include <vector>
 #include <string>
 
-size_t           conv_code_size (size_t msg_size);
-std::vector<int> conv_encode (const std::vector<int>& in_bits);
-std::vector<int> conv_decode_hard (const std::vector<int>& coded_bits);
-std::vector<int> conv_decode_soft (const std::vector<float>& coded_bits, float *error_out = nullptr);
+enum class ConvBlockType { a, b, ab };
+
+size_t           conv_code_size (ConvBlockType block_type, size_t msg_size);
+std::vector<int> conv_encode (ConvBlockType block_type, const std::vector<int>& in_bits);
+std::vector<int> conv_decode_hard (ConvBlockType block_type, const std::vector<int>& coded_bits);
+std::vector<int> conv_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out = nullptr);
 
 #endif /* AUDIOWMARK_CONV_CODE_HH */
