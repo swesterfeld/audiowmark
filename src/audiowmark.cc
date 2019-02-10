@@ -35,6 +35,7 @@ namespace Params
   static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
+  static bool snr              = false; // compute/show snr while adding watermark
   static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 
@@ -173,6 +174,10 @@ parse_options (int   *argc_p,
 	{
           Params::hard = true;
 	}
+      else if (check_arg (argc, argv, &i, "--snr"))
+        {
+          Params::snr = true;
+        }
       else if (check_arg (argc, argv, &i, "--test-key", &opt_arg))
 	{
           Params::have_key++;
@@ -746,6 +751,24 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> samples = orig_wav_data.samples();
   out_signal.resize (samples.size());
 
+  if (Params::snr)
+    {
+      /* compute/show signal to noise ratio */
+      double delta_power = 0;
+      double signal_power = 0;
+      for (size_t i = 0; i < samples.size(); i++)
+        {
+          const double orig_scaled = samples[i];      // original sample
+          const double delta       = out_signal[i];   // watermark
+
+          delta_power += delta * delta;
+          signal_power += orig_scaled * orig_scaled;
+        }
+      delta_power /= samples.size();
+      signal_power /= samples.size();
+
+      printf ("SNR:          %f dB\n", 10 * log10 (signal_power / delta_power));
+    }
   float max_value = 1e-6;
   for (size_t i = 0; i < samples.size(); i++)
     {
