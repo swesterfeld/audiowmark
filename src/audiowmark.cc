@@ -1162,8 +1162,10 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     total_count++;
   };
 
-  vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::a, Params::payload_size));
-  SyncFinder::Score score_all { 0, 0 };
+  vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
+  vector<int>   raw_bit_vec_norm (2);
+
+  //SyncFinder::Score score_all { 0, 0 };
 
   for (auto sync_score : sync_scores)
     {
@@ -1186,15 +1188,30 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             }
           decode_single (raw_bit_vec, sync_score);
 
-          score_all.quality += sync_score.quality;
-          for (size_t i = 0; i < raw_bit_vec_all.size(); i++)
-            raw_bit_vec_all[i] += raw_bit_vec[i];
+          // score_all.quality += sync_score.quality;
+          raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
+          int ab = (sync_score.block_type == ConvBlockType::b);
+          for (size_t i = 0; i < raw_bit_vec.size(); i++)
+            {
+              raw_bit_vec_all[i * 2 + ab] += raw_bit_vec[i];
+            }
+          raw_bit_vec_norm[ab]++;
         }
     }
   if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
     {
-      score_all.quality /= total_count;
-      decode_single (raw_bit_vec_all, score_all);
+      for (size_t i = 0; i < raw_bit_vec_all.size(); i += 2)
+        {
+          raw_bit_vec_all[i]     /= raw_bit_vec_norm[0]; /* normalize A soft bits with number of A blocks */
+          raw_bit_vec_all[i + 1] /= raw_bit_vec_norm[1]; /* normalize B soft bits with number of B blocks */
+        }
+
+      vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
+
+      float decode_error = 0;
+      vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
+
+      printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), 1.42, decode_error);
     }
 
   if (!orig_pattern.empty())
