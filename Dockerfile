@@ -9,6 +9,7 @@ RUN apt-get install -y libtool
 RUN apt-get install -y autoconf-archive
 RUN apt-get install -y libgcrypt20-dev
 RUN apt-get install -y libzita-resampler-dev
+RUN apt-get install -y libmpg123-dev
 
 ADD . /audiowmark
 WORKDIR /audiowmark

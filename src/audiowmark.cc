@@ -22,6 +22,7 @@ using std::string;
 using std::vector;
 using std::complex;
 using std::min;
+using std::max;
 
 namespace Params
 {
@@ -31,9 +32,9 @@ namespace Params
   static int max_band          = 100;
   static int min_band          = 20;
   static double water_delta    = 0.01;  // strength of the watermark
-  static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
+  static bool snr              = false; // compute/show snr while adding watermark
   static int have_key          = 0;
   static size_t payload_size   = 128;  // number of payload bits for the watermark
 
@@ -77,9 +78,7 @@ print_usage()
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
   printf ("Global options:\n");
-  printf ("  --frames-per-bit      number of frames per bit            [%d]\n",  Params::frames_per_bit);
-  printf ("  --water-delta         set watermarking delta              [%.4f]\n", Params::water_delta);
-  printf ("  --pre-scale           set scaling used for normalization  [%.3f]\n", Params::pre_scale);
+  printf ("  --strength            set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
 }
@@ -158,13 +157,9 @@ parse_options (int   *argc_p,
 	{
           Params::frames_per_bit = atoi (opt_arg);
 	}
-      else if (check_arg (argc, argv, &i, "--water-delta", &opt_arg))
+      else if (check_arg (argc, argv, &i, "--strength", &opt_arg))
 	{
-          Params::water_delta = atof (opt_arg);
-	}
-      else if (check_arg (argc, argv, &i, "--pre-scale", &opt_arg))
-	{
-          Params::pre_scale = atof (opt_arg);
+          Params::water_delta = atof (opt_arg) / 1000;
 	}
       else if (check_arg (argc, argv, &i, "--linear"))
 	{
@@ -174,6 +169,10 @@ parse_options (int   *argc_p,
 	{
           Params::hard = true;
 	}
+      else if (check_arg (argc, argv, &i, "--snr"))
+        {
+          Params::snr = true;
+        }
       else if (check_arg (argc, argv, &i, "--test-key", &opt_arg))
 	{
           Params::have_key++;
@@ -347,6 +346,7 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
   vector<int> down;
   get_up_down (f, up, down, random_stream);
   const double  data_bit_sign = data_bit > 0 ? 1 : -1;
+  const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
   for (auto u : up)
     {
       /*
@@ -354,9 +354,13 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
        *
        * this actually increases the amount of energy because mag is less than 1.0
        */
-      const float mag_factor = pow (abs (fft_out[u]), -Params::water_delta * data_bit_sign);
+      const float mag = abs (fft_out[u]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
 
-      fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+          fft_delta_spect[u] = fft_out[u] * (mag_factor - 1);
+        }
     }
   for (auto d : down)
     {
@@ -365,9 +369,13 @@ mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<fl
        *
        * this actually decreases the amount of energy because mag is less than 1.0
        */
-      const float mag_factor = pow (abs (fft_out[d]), Params::water_delta * data_bit_sign);
+      const float mag = abs (fft_out[d]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, Params::water_delta * data_bit_sign);
 
-      fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+          fft_delta_spect[d] = fft_out[d] * (mag_factor - 1);
+        }
     }
 }
 
@@ -412,7 +420,8 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
   assert (fft_out.size() >= (start_frame + mark_data_frame_count()) * wav_data.n_channels());
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
 
-  const int frame_count = mark_data_frame_count();
+  const int   frame_count = mark_data_frame_count();
+  const float min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
 
   if (Params::mix)
     {
@@ -432,15 +441,23 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
                   const int u = mix_entries[b].up;
                   const int index = (start_frame + mix_entries[b].frame) * wav_data.n_channels() + ch;
                   {
-                    const float mag_factor = pow (abs (fft_out[index][u]), -Params::water_delta * data_bit_sign);
+                    const float mag = abs (fft_out[index][u]);
+                    if (mag > min_mag)
+                      {
+                        const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
 
-                    fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                        fft_delta_spect[index][u] = fft_out[index][u] * (mag_factor - 1);
+                      }
                   }
                   const int d = mix_entries[b].down;
                   {
-                    const float mag_factor = pow (abs (fft_out[index][d]), Params::water_delta * data_bit_sign);
+                    const float mag = abs (fft_out[index][d]);
+                    if (mag > min_mag)
+                      {
+                        const float mag_factor = pow (mag, Params::water_delta * data_bit_sign);
 
-                    fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                        fft_delta_spect[index][d] = fft_out[index][d] * (mag_factor - 1);
+                      }
                   }
                 }
             }
@@ -587,7 +604,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
   printf ("Input:        %s\n", infile.c_str());
   printf ("Output:       %s\n", outfile.c_str());
-  printf ("Message:      %s\n\n", bit_vec_to_str (bitvec).c_str());
+  printf ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
+  printf ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
   /* add forward error correction, bitvec will now be a lot larger */
   bitvec = randomize_bit_order (conv_encode (bitvec), /* encode */ true);
@@ -728,19 +746,45 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> samples = orig_wav_data.samples();
   out_signal.resize (samples.size());
 
-  for (size_t i = 0; i < samples.size(); i++)
-    samples[i] = (samples[i] + out_signal[i]) * Params::pre_scale;
-
-  bool clipping_warning = false;
-  for (auto value : samples)
+  if (Params::snr)
     {
-      if (fabs (value) >= 1.0 && !clipping_warning)
+      /* compute/show signal to noise ratio */
+      double delta_power = 0;
+      double signal_power = 0;
+      for (size_t i = 0; i < samples.size(); i++)
         {
-          fprintf (stderr, "audiowmark: warning: clipping occured in watermarked audio signal\n");
-          clipping_warning = true;
+          const double orig_scaled = samples[i];      // original sample
+          const double delta       = out_signal[i];   // watermark
+
+          delta_power += delta * delta;
+          signal_power += orig_scaled * orig_scaled;
         }
+      delta_power /= samples.size();
+      signal_power /= samples.size();
+
+      printf ("SNR:          %f dB\n", 10 * log10 (signal_power / delta_power));
     }
+  float max_value = 1e-6;
+  for (size_t i = 0; i < samples.size(); i++)
+    {
+      /* Typically the original samples are already in range [-1;1]. However in
+       * some cases (mp3 loader), the samples are not fully normalized; in those
+       * cases, for volume normalization we treat them as-if they had been
+       * clipped already; final clipping will be done while saving.
+       */
+      const float x = bound<float> (-1, samples[i], 1);
+      const float value = fabsf (x + out_signal[i]);
+      if (value > max_value)
+        max_value = value;
+    }
+
+  // scale (samples + watermark) down if necessary to avoid clipping
+  const float scale = min (1.0 / max_value, 1.0);
+  for (size_t i = 0; i < samples.size(); i++)
+    samples[i] = (samples[i] + out_signal[i]) * scale;
+
   printf ("Data Blocks:  %d\n", data_blocks);
+  printf ("Volume Norm:  %.3f (%.2f dB)\n", scale, db_from_factor (scale, -96));
 
   WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.sample_rate(), orig_wav_data.bit_depth());
   if (!out_wav_data.save (outfile))
@@ -1249,30 +1293,6 @@ gentest (const string& infile, const string& outfile)
 }
 
 int
-scale (const string& infile, const string& outfile)
-{
-  WavData wav_data;
-  if (!wav_data.load (infile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
-      return 1;
-    }
-
-  const vector<float>& in_signal = wav_data.samples();
-  vector<float> out_signal;
-  for (size_t i = 0; i < in_signal.size(); i++)
-    out_signal.push_back (in_signal[i] * Params::pre_scale);
-
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-  if (!out_wav_data.save (outfile))
-    {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
-      return 1;
-    }
-  return 0;
-}
-
-int
 cut_start (const string& infile, const string& outfile, const string& start_str)
 {
   WavData wav_data;
@@ -1295,47 +1315,6 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
       return 1;
     }
-  return 0;
-}
-
-int
-get_snr (const string& origfile, const string& wmfile)
-{
-  WavData orig_wav_data;
-  if (!orig_wav_data.load (origfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
-      return 1;
-    }
-
-  WavData wav_data;
-  if (!wav_data.load (wmfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", wmfile.c_str(), wav_data.error_blurb());
-      return 1;
-    }
-  const vector<float>& orig_samples = orig_wav_data.samples();
-  const vector<float>& samples = wav_data.samples();
-
-  if (samples.size() != orig_samples.size())
-    {
-      fprintf (stderr, "audiowmark: files have different length\n");
-      return 1;
-    }
-  double delta_power = 0;
-  double signal_power = 0;
-  for (size_t i = 0; i < samples.size(); i++)
-    {
-      const double orig_scaled = orig_samples[i] * Params::pre_scale;
-      const double delta       = samples[i] - orig_scaled;
-
-      delta_power += delta * delta;
-      signal_power += orig_scaled * orig_scaled;
-    }
-  delta_power /= samples.size();
-  signal_power /= samples.size();
-
-  printf ("snr_db %f\n", 10 * log10 (signal_power / delta_power));
   return 0;
 }
 
@@ -1380,14 +1359,6 @@ main (int argc, char **argv)
   else if (op == "gentest" && argc == 4)
     {
       return gentest (argv[2], argv[3]);
-    }
-  else if (op == "snr" && argc == 4)
-    {
-      get_snr (argv[2], argv[3]);
-    }
-  else if (op == "scale" && argc == 4)
-    {
-      scale (argv[2], argv[3]);
     }
   else if (op == "cut-start" && argc == 5)
     {

@@ -8,15 +8,16 @@ watermark in the output sound file. For human listeners, the files typically
 sound the same.
 
 However, the 128-bit message can be retrieved from the output sound file. Our
-tests show, that even if the file is converted to mp3 or ogg (with bitrates
-higher than 128 kbit/s), the watermark usually can be retrieved without
-problems. The process of retrieving the message does not need the original
-audio file (blind decoding).
+tests show, that even if the file is converted to mp3 or ogg (with bitrate 128
+kbit/s or higher), the watermark usually can be retrieved without problems. The
+process of retrieving the message does not need the original audio file (blind
+decoding).
 
 Internally, audiowmark is using the patchwork algorithm to hide the data in the
-spectrum of the audio file. Some pseoudo-randomly selected amplitudes of the
-frequency bands of a 1024-value FFTs are increased or decreased slightly, which
-can be detected later. The algorithm used here is inspired by
+spectrum of the audio file. The signal is split into 1024 sample frames. For
+each frame, some pseoudo-randomly selected amplitudes of the frequency bands of
+a 1024-value FFTs are increased or decreased slightly, which can be detected
+later. The algorithm used here is inspired by
 
   Martin Steinebach: Digitale Wasserzeichen für Audiodaten.
   Darmstadt University of Technology 2004, ISBN 3-8322-2507-2
@@ -51,6 +52,26 @@ and can be used for the add/get commands as follows:
   audiowmark add --key test.key in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --key test.key out.wav
 
+== Watermark Strength
+
+The watermark strength parameter affects how much the watermarking algorithm
+modifies the input signal. A stronger watermark is more audible, but also more
+robust against modifications. The default strength is 10. A watermark with that
+strength is recoverable after mp3/ogg encoding with 128kbit/s or higher. In our
+informal listening tests, this setting also has a very good subjective quality.
+
+A higher strength (for instance 15) would be helpful for instance if robustness
+against multiple conversions or conversions to low bit rates (i.e. 64kbit/s) is
+desired.
+
+A lower strength (for instance 6) makes the watermark less audible, but also
+less robust. Strengths below 5 are not recommended. To set the strength, the
+same value has to be passed during both, generation and retrieving the
+watermark. Fractional strengths (like 7.5) are possible.
+
+  audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
+  audiowmark get --strength 15 out.wav
+
 == Dependencies
 
 If you compile from source, audiowmark needs the follwing libraries:
@@ -59,6 +80,7 @@ If you compile from source, audiowmark needs the follwing libraries:
 * libsndfile
 * libgcrypt
 * libzita-resampler
+* libmpg123
 
 == Building fftw
 

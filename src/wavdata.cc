@@ -1,17 +1,12 @@
 #include "wavdata.hh"
+#include "mp3.hh"
+#include "utils.hh"
 
 #include <math.h>
 #include <sndfile.h>
 
 using std::string;
 using std::vector;
-
-template<typename T>
-inline const T&
-bound (const T& min_value, const T& value, const T& max_value)
-{
-  return std::min (std::max (value, min_value), max_value);
-}
 
 WavData::WavData()
 {
@@ -35,11 +30,27 @@ WavData::load (const string& filename)
   int error = sf_error (sndfile);
   if (error)
     {
-      m_error_blurb = sf_strerror (sndfile);
-      if (sndfile)
-        sf_close (sndfile);
+      if (mp3_detect (filename))
+        {
+          string error = mp3_load (filename, *this);
+          if (error == "")
+            {
+              return true;  // mp3 loaded successfully
+            }
+          else
+            {
+              m_error_blurb = "mp3 load error: " + error;
+              return false;
+            }
+        }
+      else
+        {
+          m_error_blurb = sf_strerror (sndfile);
+          if (sndfile)
+            sf_close (sndfile);
 
-      return false;
+          return false;
+        }
     }
 
   vector<int> isamples (sfinfo.frames * sfinfo.channels);
