@@ -32,7 +32,6 @@ namespace Params
   static int max_band          = 100;
   static int min_band          = 20;
   static double water_delta    = 0.01;  // strength of the watermark
-  static double pre_scale      = 0.95;  // rescale the signal to avoid clipping after watermark is added
   static bool mix              = true;
   static bool hard             = false; // hard decode bits? (soft decoding is better)
   static bool snr              = false; // compute/show snr while adding watermark
@@ -161,10 +160,6 @@ parse_options (int   *argc_p,
       else if (check_arg (argc, argv, &i, "--strength", &opt_arg))
 	{
           Params::water_delta = atof (opt_arg) / 1000;
-	}
-      else if (check_arg (argc, argv, &i, "--pre-scale", &opt_arg))
-	{
-          Params::pre_scale = atof (opt_arg);
 	}
       else if (check_arg (argc, argv, &i, "--linear"))
 	{
@@ -1298,30 +1293,6 @@ gentest (const string& infile, const string& outfile)
 }
 
 int
-scale (const string& infile, const string& outfile)
-{
-  WavData wav_data;
-  if (!wav_data.load (infile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
-      return 1;
-    }
-
-  const vector<float>& in_signal = wav_data.samples();
-  vector<float> out_signal;
-  for (size_t i = 0; i < in_signal.size(); i++)
-    out_signal.push_back (in_signal[i] * Params::pre_scale);
-
-  WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-  if (!out_wav_data.save (outfile))
-    {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
-      return 1;
-    }
-  return 0;
-}
-
-int
 cut_start (const string& infile, const string& outfile, const string& start_str)
 {
   WavData wav_data;
@@ -1344,47 +1315,6 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
       return 1;
     }
-  return 0;
-}
-
-int
-get_snr (const string& origfile, const string& wmfile)
-{
-  WavData orig_wav_data;
-  if (!orig_wav_data.load (origfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
-      return 1;
-    }
-
-  WavData wav_data;
-  if (!wav_data.load (wmfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", wmfile.c_str(), wav_data.error_blurb());
-      return 1;
-    }
-  const vector<float>& orig_samples = orig_wav_data.samples();
-  const vector<float>& samples = wav_data.samples();
-
-  if (samples.size() != orig_samples.size())
-    {
-      fprintf (stderr, "audiowmark: files have different length\n");
-      return 1;
-    }
-  double delta_power = 0;
-  double signal_power = 0;
-  for (size_t i = 0; i < samples.size(); i++)
-    {
-      const double orig_scaled = orig_samples[i] * Params::pre_scale;
-      const double delta       = samples[i] - orig_scaled;
-
-      delta_power += delta * delta;
-      signal_power += orig_scaled * orig_scaled;
-    }
-  delta_power /= samples.size();
-  signal_power /= samples.size();
-
-  printf ("snr_db %f\n", 10 * log10 (signal_power / delta_power));
   return 0;
 }
 
@@ -1429,14 +1359,6 @@ main (int argc, char **argv)
   else if (op == "gentest" && argc == 4)
     {
       return gentest (argv[2], argv[3]);
-    }
-  else if (op == "snr" && argc == 4)
-    {
-      get_snr (argv[2], argv[3]);
-    }
-  else if (op == "scale" && argc == 4)
-    {
-      scale (argv[2], argv[3]);
     }
   else if (op == "cut-start" && argc == 5)
     {
