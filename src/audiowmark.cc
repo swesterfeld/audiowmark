@@ -484,7 +484,7 @@ mark_sync_frame_count()
 }
 
 void
-mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect, int ab)
 {
   assert (fft_out.size() >= (start_frame + mark_sync_frame_count()) * wav_data.n_channels());
 
@@ -496,7 +496,7 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
           size_t index = (start_frame + f) * wav_data.n_channels() + ch;
-          int    data_bit = (f / Params::sync_frames_per_bit) & 1; /* write 010101 */
+          int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
           mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit, Random::Stream::sync_up_down);
         }
@@ -608,10 +608,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   printf ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
   /* add forward error correction, bitvec will now be a lot larger */
-  bitvec = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
-
-  /* pad with zeros to match block_size */
-  bitvec.resize (mark_data_frame_count() / Params::frames_per_bit);
+  auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
+  auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
   WavData orig_wav_data;
   if (!orig_wav_data.load (infile))
@@ -667,13 +665,13 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   /* embed sync|data|sync|data|... */
   while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
     {
-      mark_sync (wav_data, frame_index, fft_out, fft_delta_spect);
+      mark_sync (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1));
       frame_index += mark_sync_frame_count();
 
-      data_blocks++;
-
-      mark_data (wav_data, frame_index, fft_out, fft_delta_spect, bitvec);
+      mark_data (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1) ? bitvec_b : bitvec_a);
       frame_index += mark_data_frame_count();
+
+      data_blocks++;
     }
   /* padding at end */
   while (frame_index < size_t (frame_count (wav_data)))
@@ -953,7 +951,7 @@ class SyncFinder
       }
   }
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db)
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db, ConvBlockType *block_type)
   {
     double sync_quality = 0;
 
@@ -989,12 +987,23 @@ class SyncFinder
       }
     sync_quality /= Params::sync_bits;
     sync_quality = normalize_sync_quality (sync_quality);
-    return sync_quality;
+
+    if (sync_quality < 0)
+      {
+        *block_type = ConvBlockType::b;
+        return -sync_quality;
+      }
+    else
+      {
+        *block_type = ConvBlockType::a;
+        return sync_quality;
+      }
   }
 public:
   struct Score {
-    size_t index;
-    double quality;
+    size_t        index;
+    double        quality;
+    ConvBlockType block_type;
   };
   vector<Score>
   search (const WavData& wav_data)
@@ -1016,9 +1025,10 @@ public:
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
             if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
               {
-                double quality = sync_decode (wav_data, start_frame, fft_db);
+                ConvBlockType block_type;
+                double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
                 // printf ("%zd %f\n", sync_index, quality);
-                sync_scores.emplace_back (Score { sync_index, quality });
+                sync_scores.emplace_back (Score { sync_index, quality, block_type });
               }
           }
       }
@@ -1042,8 +1052,9 @@ public:
                 //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
 
                 // refine match
-                double best_quality = sync_scores[i].quality;
-                size_t best_index   = sync_scores[i].index;
+                double best_quality       = sync_scores[i].quality;
+                size_t best_index         = sync_scores[i].index;
+                ConvBlockType best_block_type = sync_scores[i].block_type; /* doesn't really change during refinement */
 
                 int start = std::max (int (sync_scores[i].index) - Params::sync_search_step, 0);
                 int end   = sync_scores[i].index + Params::sync_search_step;
@@ -1052,7 +1063,8 @@ public:
                     sync_fft (wav_data, fine_index, mark_sync_frame_count(), fft_db);
                     if (fft_db.size())
                       {
-                        double q = sync_decode (wav_data, 0, fft_db);
+                        ConvBlockType block_type;
+                        double        q = sync_decode (wav_data, 0, fft_db, &block_type);
 
                         if (q > best_quality)
                           {
@@ -1063,7 +1075,7 @@ public:
                   }
                 //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
                 if (best_quality > Params::sync_threshold2)
-                  result_scores.push_back (Score { best_index, best_quality });
+                  result_scores.push_back (Score { best_index, best_quality, best_block_type });
               }
           }
       }
@@ -1121,12 +1133,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
 
     float decode_error = 0;
-    vector<int> bit_vec = conv_decode_soft (ConvBlockType::a, randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
+    vector<int> bit_vec = conv_decode_soft (sync_score.block_type, randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
 
     if (sync_score.index)
       {
         const int seconds = sync_score.index / wav_data.sample_rate();
-        printf ("pattern %2d:%02d %s %.3f %.3f\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
+        printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(),
+                sync_score.quality, decode_error,
+                sync_score.block_type == ConvBlockType::a ? "A" : "B");
       }
     else /* this is the combined pattern "all" */
       {
