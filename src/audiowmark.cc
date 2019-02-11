@@ -1257,7 +1257,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
           raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
           raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
         }
-      score_all.quality /= total_count;
+      score_all.quality /= raw_bit_vec_norm[0] + raw_bit_vec_norm[1];
 
       vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
