@@ -49,6 +49,7 @@ namespace Params
   static int    mark_sample_rate = 44100; // watermark generation and detection sample rate
 
   static int test_cut            = 0; // for sync test
+  static bool test_no_sync       = false; // disable sync
 }
 
 void
@@ -187,6 +188,10 @@ parse_options (int   *argc_p,
 	{
           Params::test_cut = atoi (opt_arg);
 	}
+      else if (check_arg (argc, argv, &i, "--test-no-sync"))
+        {
+          Params::test_no_sync = true;
+        }
     }
 
   /* resort argc/argv */
@@ -1011,6 +1016,18 @@ public:
     vector<Score> result_scores;
     vector<Score> sync_scores;
 
+    if (Params::test_no_sync)
+      {
+        const size_t expect0 = Params::frames_pad_start * Params::frame_size;
+        const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+        const size_t expect_end = frame_count (wav_data) * Params::frame_size;
+
+        int ab = 0;
+        for (size_t expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
+          result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
+
+        return result_scores;
+      }
     init_up_down (wav_data);
 
     vector<float> fft_db;
