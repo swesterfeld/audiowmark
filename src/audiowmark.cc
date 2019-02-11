@@ -1126,15 +1126,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   SyncFinder                sync_finder;
   vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
 
-  auto decode_single = [&] (const vector<float>& raw_bit_vec, SyncFinder::Score sync_score)
+  auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
   {
-    assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
-
-    vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec);
-
-    float decode_error = 0;
-    vector<int> bit_vec = conv_decode_soft (sync_score.block_type, randomize_bit_order (soft_bit_vec, /* encode */ false), &decode_error);
-
     if (sync_score.index)
       {
         const int seconds = sync_score.index / wav_data.sample_rate();
@@ -1146,7 +1139,6 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       {
         printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
       }
-
     if (!orig_pattern.empty())
       {
         bool        match = true;
@@ -1165,7 +1157,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
   vector<int>   raw_bit_vec_norm (2);
 
-  //SyncFinder::Score score_all { 0, 0 };
+  SyncFinder::Score score_all { 0, 0 };
 
   for (auto sync_score : sync_scores)
     {
@@ -1186,10 +1178,17 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             {
               raw_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
             }
-          decode_single (raw_bit_vec, sync_score);
+          assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
 
-          // score_all.quality += sync_score.quality;
           raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
+
+          float decode_error = 0;
+          vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+          report_pattern (sync_score, bit_vec, decode_error);
+
+          score_all.quality += sync_score.quality;
+
           int ab = (sync_score.block_type == ConvBlockType::b);
           for (size_t i = 0; i < raw_bit_vec.size(); i++)
             {
@@ -1205,13 +1204,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
           raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
           raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
         }
+      score_all.quality /= total_count;
 
       vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
       float decode_error = 0;
       vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
-      printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), 1.42, decode_error);
+      report_pattern (score_all, bit_vec, decode_error);
     }
 
   if (!orig_pattern.empty())
