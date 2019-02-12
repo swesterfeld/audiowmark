@@ -202,4 +202,6 @@ main (int argc, char **argv)
         }
       printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);
     }
+  if (argc == 3 && string (argv[2]) == "table")
+    conv_print_table (block_type);
 }

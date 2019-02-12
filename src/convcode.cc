@@ -208,3 +208,22 @@ conv_decode_hard (ConvBlockType block_type, const vector<int>& coded_bits)
 
   return conv_decode_soft (block_type, soft_bits);
 }
+
+void
+conv_print_table (ConvBlockType block_type)
+{
+  vector<int> bits (100);
+  bits[0] = 1;
+
+  vector<int> out_bits = conv_encode (block_type, bits);
+
+  auto generators = get_block_type_generators (block_type);
+  unsigned int rate = generators.size();
+
+  for (unsigned int r = 0; r < rate; r++)
+    {
+      for (unsigned int i = 0; i < order; i++)
+        printf ("%s%d", i == 0 ? "" : " ", out_bits[i * rate + r]);
+      printf ("\n");
+    }
+}

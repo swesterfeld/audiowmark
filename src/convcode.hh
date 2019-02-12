@@ -11,4 +11,6 @@ std::vector<int> conv_encode (ConvBlockType block_type, const std::vector<int>& 
 std::vector<int> conv_decode_hard (ConvBlockType block_type, const std::vector<int>& coded_bits);
 std::vector<int> conv_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out = nullptr);
 
+void             conv_print_table (ConvBlockType block_type);
+
 #endif /* AUDIOWMARK_CONV_CODE_HH */
