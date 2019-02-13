@@ -61,25 +61,17 @@ print_usage()
   printf ("  * create a watermarked wav file with a message\n");
   printf ("    audiowmark add <input_wav> <watermarked_wav> <message_hex>\n");
   printf ("\n");
-  printf ("  * blind decoding (retrieve message without original file)\n");
+  printf ("  * retrieve message\n");
   printf ("    audiowmark get <watermarked_wav>\n");
   printf ("\n");
-  printf ("  * compute bit error rate for blind decoding\n");
+  printf ("  * compare watermark message with expected message\n");
   printf ("    audiowmark cmp <watermarked_wav> <message_hex>\n");
   printf ("\n");
-#if 0
-  printf ("  * retrieve message with original file\n");
-  printf ("    audiowmark get-delta <input_wav> <watermarked_wav>\n");
-  printf ("\n");
-  printf ("  * compute bit error rate for decoding with original file\n");
-  printf ("    audiowmark cmp-delta <input_wav> <watermarked_wav> <message_hex>\n");
-  printf ("\n");
-#endif
   printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
   printf ("Global options:\n");
-  printf ("  --strength            set watermark strength              [%.6g]\n", Params::water_delta * 1000);
+  printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
 }
@@ -826,7 +818,7 @@ normalize_soft_bits (const vector<float>& soft_bits)
 }
 
 vector<float>
-mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
+mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   vector<float> raw_bit_vec;
 
@@ -850,12 +842,6 @@ mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float
 
               umag += db_from_factor (abs (fft_out[index][u]), min_db);
               dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-              if (index < fft_orig_out.size()) /* non-blind decode? */
-                {
-                  umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-                  dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-                }
             }
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
@@ -869,7 +855,7 @@ mix_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float
 }
 
 vector<float>
-linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_orig_out, int n_channels)
+linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   vector<float> raw_bit_vec;
 
@@ -886,19 +872,10 @@ linear_decode (vector<vector<complex<float>>>& fft_out, vector<vector<complex<fl
 
           const double min_db = -96;
           for (auto u : up)
-            {
-              umag += db_from_factor (abs (fft_out[index][u]), min_db);
+            umag += db_from_factor (abs (fft_out[index][u]), min_db);
 
-              if (index < fft_orig_out.size())
-                umag -= db_from_factor (abs (fft_orig_out[index][u]), min_db);
-            }
           for (auto d : down)
-            {
-              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
-
-              if (index < fft_orig_out.size())
-                dmag -= db_from_factor (abs (fft_orig_out[index][d]), min_db);
-            }
+            dmag += db_from_factor (abs (fft_out[index][d]), min_db);
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
         {
@@ -1199,17 +1176,15 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       auto fft_range_out = compute_frame_ffts (wav_data, index, count);
       if (fft_range_out.size())
         {
-          vector<vector<complex<float>>> junk;
-
           /* ---- retrieve bits from watermark ---- */
           vector<float> raw_bit_vec;
           if (Params::mix)
             {
-              raw_bit_vec = mix_decode (fft_range_out, junk, wav_data.n_channels());
+              raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
             }
           else
             {
-              raw_bit_vec = linear_decode (fft_range_out, junk, wav_data.n_channels());
+              raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
             }
           assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
 
@@ -1310,34 +1285,6 @@ get_watermark (const string& infile, const string& orig_pattern)
     {
       return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
     }
-}
-
-int
-get_watermark_delta (const string& origfile, const string& infile, const string& orig_pattern)
-{
-  WavData orig_wav_data;
-  if (!orig_wav_data.load (origfile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", origfile.c_str(), orig_wav_data.error_blurb());
-      return 1;
-    }
-
-  WavData wav_data;
-  if (!wav_data.load (infile))
-    {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
-      return 1;
-    }
-
-  /*
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data);
-  vector<vector<complex<float>>> fft_orig_out = compute_frame_ffts (orig_wav_data);
-
-  return decode_and_report (wav_data, orig_pattern, fft_out, fft_orig_out);
-  */
-  /* FIXME? */
-  printf ("delta decoding currently not supported\n");
-  return 1;
 }
 
 int
@@ -1447,14 +1394,6 @@ main (int argc, char **argv)
   else if (op == "cut-start" && argc == 5)
     {
       cut_start (argv[2], argv[3], argv[4]);
-    }
-  else if (op == "get-delta" && argc == 4)
-    {
-      return get_watermark_delta (argv[2], argv[3], /* no ber */ "");
-    }
-  else if (op == "cmp-delta" && argc == 5)
-    {
-      return get_watermark_delta (argv[2], argv[3], argv[4]);
     }
   else if (op == "gen-key" && argc == 3)
     {
