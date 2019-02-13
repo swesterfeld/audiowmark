@@ -29,7 +29,7 @@ fi
 do
   for SEED in $AWM_SEEDS
   do
-    echo $i
+    echo in_file $i
 
     if [ "x$AWM_RAND_PATTERN" != "x" ]; then
       # random pattern, 128 bit
@@ -43,12 +43,14 @@ do
       # pseudo random pattern, 128 bit
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
     fi
-
+    echo in_pattern $PATTERN
+    echo in_flags $AWM_PARAMS --test-key $SEED
     audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED >/dev/null
     if [ "x$AWM_RAND_CUT" != x ]; then
       CUT=$RANDOM
       audiowmark cut-start "${AWM_FILE}.wav" "${AWM_FILE}.wav" $CUT
       TEST_CUT_ARGS="--test-cut $CUT"
+      echo in_cut $CUT
     else
       TEST_CUT_ARGS=""
     fi
@@ -85,14 +87,18 @@ do
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
+    echo
     # blind decoding
     audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
     # decoding with original
     # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
+    echo
   done
 done | {
   if [ "x$AWM_REPORT" == "xfer" ]; then
     awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+  elif [ "x$AWM_REPORT" == "xferv" ]; then
+    awk 'BEGIN { bad = n = 0 } { print "###", $0; } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
   elif [ "x$AWM_REPORT" == "xsync" ]; then
     awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / n; }'
   elif [ "x$AWM_REPORT" == "xsyncv" ]; then
