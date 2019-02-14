@@ -17,11 +17,19 @@ gcrypt_init()
 
   if (!init_ok)
     {
+      /* version check: start libgcrypt initialization */
       if (!gcry_check_version (GCRYPT_VERSION))
         {
           fprintf (stderr, "audiowmark: libgcrypt version mismatch\n");
           exit (1);
         }
+
+      /* disable secure memory (assume we run in a controlled environment) */
+      gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
+
+      /* tell libgcrypt that initialization has completed */
+      gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
       init_ok = true;
     }
 }
