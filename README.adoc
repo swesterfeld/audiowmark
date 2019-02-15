@@ -42,6 +42,14 @@ specified as hex-string):
   Volume Norm:  0.987 (-0.12 dB)
 ....
 
+The most important options for adding a watermark are:
+
+--key <filename>::
+Use watermarking key from file <filename> (see <<key>>).
+
+--strength <s>::
+Set the watermarking strength (see <<strength>>).
+
 == Retrieving a Watermark
 
 To get the 128-bit message from the watermarked file, use:
@@ -58,7 +66,7 @@ To get the 128-bit message from the watermarked file, use:
   pattern   all 0123456789abcdef0011223344556677 1.350 0.054
 ....
 The output of `audiowmark get` is designed to be machine readable. Each line
-that starts with `pattern` is contains one decoded message. The fields are
+that starts with `pattern` contains one decoded message. The fields are
 seperated by one or more space characters. The first field is a *timestamp*
 indicating the position of the data block. The second field is the *decoded
 message*. For most purposes this is all you need to know.
@@ -68,7 +76,10 @@ able to decide whether a message is correct or not. To do this, on watermarking
 song files, you could list each message you embedded in a database. During
 retrieval, you should look up each pattern `audiowmark get` outputs in the
 database. If the message is not found, then you should assume that a decoding
-error occurred.
+error occurred. In our example each pattern was decoded correctly, because
+the watermark was not damaged at all, but if you for instance use lossy
+compression (with a low bitrate), it may happen that only some of the decoded
+patterns are correct. Or none, if the watermark was damaged too much.
 
 The third field is the *sync score* (higher is better). The synchronization
 algorithm tries to find valid data blocks in the audio file, that become
@@ -90,6 +101,15 @@ combines all data blocks that are available. The combined decoded
 message will often be the most reliable result (meaning that even if all
 other patterns were incorrect, this could still be right).
 
+The most important options for getting a watermark are:
+
+--key <filename>::
+Use watermarking key from file <filename> (see <<key>>).
+
+--strength <s>::
+Set the watermarking strength (see <<strength>>).
+
+[[key]]
 == Watermark Key
 
 Since the software is Open Source, a watermarking key should be used to ensure
@@ -109,6 +129,7 @@ and can be used for the add/get commands as follows:
   audiowmark add --key test.key in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --key test.key out.wav
 
+[[strength]]
 == Watermark Strength
 
 The watermark strength parameter affects how much the watermarking algorithm
