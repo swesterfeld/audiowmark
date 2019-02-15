@@ -152,7 +152,7 @@ watermark. Fractional strengths (like 7.5) are possible.
 
 == Dependencies
 
-If you compile from source, audiowmark needs the follwing libraries:
+If you compile from source, audiowmark needs the following libraries:
 
 * libfftw3
 * libsndfile
