@@ -88,11 +88,9 @@ do
       exit 1
     fi
     echo
-    # blind decoding
     audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
-    # decoding with original
-    # audiowmark cmp-delta "$i" t.wav $PATTERN $AWM_PARAMS --test-key $SEED
     echo
+    rm -f ${AWM_FILE}.wav $OUT_FILE # cleanup temp files
   done
 done | {
   if [ "x$AWM_REPORT" == "xfer" ]; then
