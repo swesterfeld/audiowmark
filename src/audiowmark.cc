@@ -336,6 +336,49 @@ compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_co
   return fft_out;
 }
 
+size_t mark_data_frame_count();
+size_t mark_sync_frame_count();
+
+int
+frame_pos (int f, bool sync)
+{
+  static vector<int> pos_vec;
+
+  if (pos_vec.empty())
+    {
+      int frame_count = mark_data_frame_count() + mark_sync_frame_count();
+      for (int i = 0; i < frame_count; i++)
+        pos_vec.push_back (i);
+
+      Random random (0, Random::Stream::frame_position);
+      random.shuffle (pos_vec);
+    }
+  if (sync)
+    {
+      assert (f >= 0 && size_t (f) < mark_sync_frame_count());
+
+      return pos_vec[f];
+    }
+  else
+    {
+      assert (f >= 0 && size_t (f) < mark_data_frame_count());
+
+      return pos_vec[f + mark_sync_frame_count()];
+    }
+}
+
+int
+sync_frame_pos (int f)
+{
+  return frame_pos (f, true);
+}
+
+int
+data_frame_pos (int f)
+{
+  return frame_pos (f, false);
+}
+
 void
 mark_bit_linear (int f, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect, int data_bit, Random::Stream random_stream)
 {
@@ -402,7 +445,7 @@ gen_mix_entries()
 
       assert (up.size() == down.size());
       for (size_t i = 0; i < up.size(); i++)
-        mix_entries.push_back ({ f, up[i], down[i] });
+        mix_entries.push_back ({ data_frame_pos (f), up[i], down[i] });
     }
   Random random (/* seed */ 0, Random::Stream::mix);
   random.shuffle (mix_entries);
@@ -492,7 +535,7 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
     {
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
-          size_t index = (start_frame + f) * wav_data.n_channels() + ch;
+          size_t index = (start_frame + sync_frame_pos (f)) * wav_data.n_channels() + ch;
           int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
           mark_bit_linear (f, fft_out[index], fft_delta_spect[index], data_bit, Random::Stream::sync_up_down);
@@ -663,10 +706,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
     {
       mark_sync (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1));
-      frame_index += mark_sync_frame_count();
-
       mark_data (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1) ? bitvec_b : bitvec_a);
-      frame_index += mark_data_frame_count();
+
+      frame_index += mark_sync_frame_count() + mark_data_frame_count();
 
       data_blocks++;
     }
@@ -822,7 +864,7 @@ mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   vector<float> raw_bit_vec;
 
-  const int frame_count = fft_out.size() / n_channels;
+  const int frame_count = mark_data_frame_count();
 
   vector<MixEntry> mix_entries = gen_mix_entries();
 
@@ -923,10 +965,10 @@ class SyncFinder
             get_up_down (f + bit * Params::sync_frames_per_bit, frame_up, frame_down, Random::Stream::sync_up_down);
 
             for (auto u : frame_up)
-              up[bit].push_back (u - Params::min_band + f * n_bands * wav_data.n_channels());
+              up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
 
             for (auto d : frame_down)
-              down[bit].push_back (d - Params::min_band + f * n_bands * wav_data.n_channels());
+              down[bit].push_back (d - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
           }
         sort (up[bit].begin(), up[bit].end());
         sort (down[bit].begin(), down[bit].end());
@@ -944,7 +986,7 @@ class SyncFinder
 
         for (int ch = 0; ch < wav_data.n_channels(); ch++)
           {
-            const int index = (((bit * Params::sync_frames_per_bit) + start_frame) * wav_data.n_channels() + ch) * n_bands;
+            const int index = (start_frame * wav_data.n_channels() + ch) * n_bands;
 
             for (size_t i = 0; i < up[bit].size(); i++)
               {
@@ -1017,7 +1059,7 @@ public:
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + mark_sync_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
+            if ((start_frame + mark_sync_frame_count() + mark_data_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
                 double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
@@ -1054,7 +1096,7 @@ public:
                 int end   = sync_scores[i].index + Params::sync_search_step;
                 for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
                   {
-                    sync_fft (wav_data, fine_index, mark_sync_frame_count(), fft_db);
+                    sync_fft (wav_data, fine_index, mark_sync_frame_count() + mark_data_frame_count(), fft_db);
                     if (fft_db.size())
                       {
                         ConvBlockType block_type;
@@ -1169,8 +1211,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   vector<float>         ab_quality (2);
   for (auto sync_score : sync_scores)
     {
-      const size_t count = mark_data_frame_count();
-      const size_t index = sync_score.index + (mark_sync_frame_count() * Params::frame_size);
+      const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+      const size_t index = sync_score.index;
       const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
 
       auto fft_range_out = compute_frame_ffts (wav_data, index, count);
