@@ -515,7 +515,7 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
         {
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              size_t index = (start_frame + f) * wav_data.n_channels() + ch;
+              size_t index = (start_frame + data_frame_pos (f)) * wav_data.n_channels() + ch;
 
               mark_bit_linear (f, fft_out[index], fft_delta_spect[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down);
             }
@@ -907,13 +907,14 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   vector<float> raw_bit_vec;
 
+  const int frame_count = mark_data_frame_count();
+
   double umag = 0, dmag = 0;
-  const int frame_count = fft_out.size() / n_channels;
   for (int f = 0; f < frame_count; f++)
     {
       for (int ch = 0; ch < n_channels; ch++)
         {
-          const size_t index = f * n_channels + ch;
+          const size_t index = data_frame_pos (f) * n_channels + ch;
           vector<int> up;
           vector<int> down;
           get_up_down (f, up, down, Random::Stream::data_up_down);
