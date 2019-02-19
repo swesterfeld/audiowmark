@@ -276,7 +276,7 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
 }
 
 vector<vector<complex<float>>>
-compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count, vector<int> want_frames = {})
+compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count, const vector<int>& want_frames)
 {
   vector<vector<complex<float>>> fft_out;
 
@@ -311,30 +311,33 @@ compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_co
     {
       if (!want_frames.empty() && !want_frames[f])
         {
+          /* skip fft calculation completely if frame is not in want_frames */
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             fft_out.emplace_back();
-          continue;
         }
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      else
         {
-          const auto& samples = wav_data.samples();
-
-          size_t pos = (start_index + f * Params::frame_size) * wav_data.n_channels() + ch;
-          assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
-
-          /* deinterleave frame data and apply window */
-          for (size_t x = 0; x < Params::frame_size; x++)
+          for (int ch = 0; ch < wav_data.n_channels(); ch++)
             {
-              frame[x] = samples[pos] * window[x];
-              pos += wav_data.n_channels();
-            }
-          /* FFT transform */
-          fftar_float (Params::frame_size, frame, frame_fft);
+              const auto& samples = wav_data.samples();
 
-          /* complex<float> and frame_fft have the same layout in memory */
-          const complex<float> *first = (complex<float> *) frame_fft;
-          const complex<float> *last  = first + Params::frame_size / 2 + 1;
-          fft_out.emplace_back (first, last);
+              size_t pos = (start_index + f * Params::frame_size) * wav_data.n_channels() + ch;
+              assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
+
+              /* deinterleave frame data and apply window */
+              for (size_t x = 0; x < Params::frame_size; x++)
+                {
+                  frame[x] = samples[pos] * window[x];
+                  pos += wav_data.n_channels();
+                }
+              /* FFT transform */
+              fftar_float (Params::frame_size, frame, frame_fft);
+
+              /* complex<float> and frame_fft have the same layout in memory */
+              const complex<float> *first = (complex<float> *) frame_fft;
+              const complex<float> *last  = first + Params::frame_size / 2 + 1;
+              fft_out.emplace_back (first, last);
+            }
         }
     }
   free_array_float (frame);
@@ -691,7 +694,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   /* we have extra space for the padded wave data -> truncated before save */
   vector<float> out_signal (wav_data.n_values());
 
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data));
+  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data), /* want all frames */ {});
   vector<vector<complex<float>>> fft_delta_spect;
   for (int f = 0; f < frame_count (wav_data); f++)
     {
@@ -1062,7 +1065,7 @@ public:
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
-        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, {});
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, /* want all frames */ {});
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
@@ -1236,7 +1239,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       const size_t index = sync_score.index;
       const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
 
-      auto fft_range_out = compute_frame_ffts (wav_data, index, count);
+      auto fft_range_out = compute_frame_ffts (wav_data, index, count, /* want all frames */ {});
       if (fft_range_out.size())
         {
           /* ---- retrieve bits from watermark ---- */
