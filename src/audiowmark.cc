@@ -42,7 +42,6 @@ namespace Params
   static int sync_frames_per_bit = 85;
   static int sync_search_step    = 256;
   static int sync_search_fine    = 8;
-  static double sync_threshold1  = 0.4; // minimum grid quality value (search_step grid)
   static double sync_threshold2  = 0.7; // minimum refined quality
 
   static size_t frames_pad_start = 250; // padding at start, in case track starts with silence
@@ -1084,10 +1083,19 @@ public:
     for (size_t f = 0; f < mark_sync_frame_count(); f++)
       want_frames[sync_frame_pos (f)] = 1;
 
+    /* for strength 8 and above:
+     *   -> more false positive candidates are rejected, so we can use a lower threshold
+     *
+     * for strength 7 and below:
+     *   -> we need a higher threshold, because otherwise watermark detection takes too long
+     */
+    const double strength = Params::water_delta * 1000;
+    const double sync_threshold1 = strength > 7.5 ? 0.4 : 0.5;
+
     for (size_t i = 0; i < sync_scores.size(); i++)
       {
         // printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
-        if (sync_scores[i].quality > Params::sync_threshold1)
+        if (sync_scores[i].quality > sync_threshold1)
           {
             double q_last = -1;
             double q_next = -1;
