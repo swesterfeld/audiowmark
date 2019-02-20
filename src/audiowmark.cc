@@ -49,6 +49,7 @@ namespace Params
 
   static int test_cut            = 0; // for sync test
   static bool test_no_sync       = false; // disable sync
+  static int test_truncate       = 0;
 }
 
 void
@@ -183,6 +184,10 @@ parse_options (int   *argc_p,
         {
           Params::test_no_sync = true;
         }
+      else if (check_arg (argc, argv, &i, "--test-truncate", &opt_arg))
+	{
+          Params::test_truncate = atoi (opt_arg);
+	}
     }
 
   /* resort argc/argv */
@@ -1351,6 +1356,17 @@ get_watermark (const string& infile, const string& orig_pattern)
       return 1;
     }
 
+  if (Params::test_truncate)
+    {
+      const size_t  want_n_samples = wav_data.sample_rate() * wav_data.n_channels() * Params::test_truncate;
+      vector<float> short_samples  = wav_data.samples();
+
+      if (want_n_samples < short_samples.size())
+        {
+          short_samples.resize (want_n_samples);
+          wav_data.set_samples (short_samples);
+        }
+    }
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
       return decode_and_report (wav_data, orig_pattern);
