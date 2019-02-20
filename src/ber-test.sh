@@ -1,6 +1,9 @@
 #!/bin/bash
 
 TRANSFORM=$1
+if [ "x$AWM_TRUNCATE" != "x" ]; then
+  AWM_REPORT=truncv
+fi
 if [ "x$AWM_SET" == "x" ]; then
   AWM_SET=small
 fi
@@ -88,8 +91,16 @@ do
       exit 1
     fi
     echo
-    audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
-    echo
+    if [ "x$AWM_REPORT" == "xtruncv" ]; then
+      for TRUNC in $AWM_TRUNCATE
+      do
+        audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
+        echo
+      done
+    else
+      audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+      echo
+    fi
     rm -f ${AWM_FILE}.wav $OUT_FILE # cleanup temp files
   done
 done | {
@@ -101,6 +112,25 @@ done | {
     awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / n; }'
   elif [ "x$AWM_REPORT" == "xsyncv" ]; then
     awk '{ print "###", $0; } $1 == "sync_match" { correct += $2; missing += 3 - $2; incorrect += $3-$2; print "correct:", correct, "missing:", missing, "incorrect:", incorrect; }'
+  elif [ "x$AWM_REPORT" == "xtruncv" ]; then
+    awk ' {
+            print "###", $0;
+          }
+          $2 == "match_count" {
+            if (!n[$1])
+              {
+                n[$1]   = 0;
+                bad[$1] = 0;
+              }
+            if ($3 == 0)
+              bad[$1]++;
+            n[$1]++;
+          }
+          END {
+            for (trunc in n) {
+              print trunc, bad[trunc], n[trunc], bad[trunc] * 100.0 / n[trunc];
+            }
+          }'
   else
     echo "unknown report $AWM_REPORT" >&2
     exit 1
