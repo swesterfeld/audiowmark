@@ -10,6 +10,31 @@ using std::vector;
 using std::regex;
 using std::regex_match;
 
+static void
+gcrypt_init()
+{
+  static bool init_ok = false;
+
+  if (!init_ok)
+    {
+      /* version check: start libgcrypt initialization */
+      if (!gcry_check_version (GCRYPT_VERSION))
+        {
+          fprintf (stderr, "audiowmark: libgcrypt version mismatch\n");
+          exit (1);
+        }
+
+      /* disable secure memory (assume we run in a controlled environment) */
+      gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
+
+      /* tell libgcrypt that initialization has completed */
+      gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+      init_ok = true;
+    }
+}
+
+
 static vector<unsigned char> aes_key (16); // 128 bits
 static constexpr auto        GCRY_CIPHER = GCRY_CIPHER_AES128;
 
@@ -55,6 +80,8 @@ print (const string& label, const vector<unsigned char>& data)
 
 Random::Random (uint64_t seed, Stream stream)
 {
+  gcrypt_init();
+
   vector<unsigned char> ctr = get_start_counter (seed, stream);
 
   // print ("CTR", ctr);
@@ -201,6 +228,8 @@ Random::load_global_key (const string& key_file)
 string
 Random::gen_key()
 {
+  gcrypt_init();
+
   vector<unsigned char> key (16);
   gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
   return vec_to_hex_str (key);

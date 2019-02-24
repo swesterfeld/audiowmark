@@ -15,7 +15,8 @@ public:
     sync_up_down = 2,
     pad_up_down = 3,
     mix = 4,
-    bit_order = 5
+    bit_order = 5,
+    frame_position = 6
   };
 private:
   gcry_cipher_hd_t           aes_ctr_cipher;

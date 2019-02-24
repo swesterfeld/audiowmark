@@ -1,6 +1,10 @@
 #!/bin/bash
 
-echo ".sync-codec-resistence"
+TRUNCATE="60 110 245"
+
+for TRUNC in 60 110 245
+do
+echo ".sync-codec-resistence$TRUNC"
 echo '[frame="topbot",options="header",cols="<2,6*>1"]'
 echo '|=========================='
 echo -n "| "
@@ -23,9 +27,10 @@ do
   fi
   for STRENGTH in $(seq 10 -1 5)
   do
-    cat $STRENGTH-$TEST-* | grep -v '^#' | awk '{bad += $1; n += $2} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
+    cat $STRENGTH-$TEST-* | grep -v '^#' | grep ^$TRUNC | awk '{bad += $2; n += $3} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
   done
   echo
 done
 echo
 echo '|=========================='
+done
