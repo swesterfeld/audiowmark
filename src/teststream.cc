@@ -63,9 +63,22 @@ public:
 class StdoutWavOutputStream : public AudioOutputStream
 {
   std::string m_error_blurb;
+  int         m_bit_depth = 0;
+  size_t      m_close_padding = 0;
+
+  enum class State {
+    NEW,
+    OPEN,
+    CLOSED
+  };
+  State       m_state = State::NEW;
+
 public:
+  ~StdoutWavOutputStream();
+
   bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   bool write_frames (const std::vector<float>& frames);
+  void close();
 
   const char *error_blurb() const
   {
@@ -151,6 +164,11 @@ SFInputStream::close()
     }
 }
 
+StdoutWavOutputStream::~StdoutWavOutputStream()
+{
+  close();
+}
+
 static void
 header_append_str (vector<unsigned char>& bytes, const string& str)
 {
@@ -177,7 +195,9 @@ header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
 bool
 StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames)
 {
-  if (bit_depth != 16)
+  assert (m_state == State::NEW);
+
+  if (bit_depth != 16 && bit_depth != 24)
     {
       m_error_blurb = "StdoutWavOutputStream::open: unsupported bit depth";
       return false;
@@ -186,8 +206,11 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
 
   size_t data_size = n_frames * n_channels * ((bit_depth + 7) / 8);
 
+  m_close_padding = data_size & 1; // padding to ensure even data size
+  size_t aligned_data_size = data_size + m_close_padding;
+
   header_append_str (header_bytes, "RIFF");
-  header_append_u32 (header_bytes, 36 + data_size);
+  header_append_u32 (header_bytes, 36 + aligned_data_size);
   header_append_str (header_bytes, "WAVE");
 
   // subchunk 1
@@ -205,13 +228,17 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   header_append_u32 (header_bytes, data_size);
 
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
+
+  m_bit_depth = bit_depth;
+  m_state     = State::OPEN;
+
   return true;
 }
 
 bool
 StdoutWavOutputStream::write_frames (const vector<float>& samples)
 {
-  vector<unsigned char> output_bytes (samples.size() * sizeof (short));
+  vector<unsigned char> output_bytes (samples.size() * (m_bit_depth / 8));
 
   for (size_t i = 0; i < samples.size(); i++)
     {
@@ -221,12 +248,34 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
 
       const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
 
-      // write short little endian value
-      output_bytes[i * 2]     = sample >> 16;
-      output_bytes[i * 2 + 1] = sample >> 24;
+      if (m_bit_depth == 16)
+        {
+          // write 16-bit little endian value
+          output_bytes[i * 2]     = sample >> 16;
+          output_bytes[i * 2 + 1] = sample >> 24;
+        }
+      else if (m_bit_depth == 24)
+        {
+          // write 24-bit little endian value
+          output_bytes[i * 3]     = sample >> 8;
+          output_bytes[i * 3 + 1] = sample >> 16;
+          output_bytes[i * 3 + 2] = sample >> 24;
+        }
     }
   fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
   return true;
+}
+
+void
+StdoutWavOutputStream::close()
+{
+  if (m_state == State::OPEN)
+    {
+      for (size_t i = 0; i < m_close_padding; i++)
+        fputc (0, stdout);
+
+      m_state = State::CLOSED;
+    }
 }
 
 int
@@ -241,7 +290,7 @@ main (int argc, char **argv)
       fprintf (stderr, "teststream: open input failed: %s\n", in.error_blurb());
       return 1;
     }
-  if (!out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames()))
+  if (!out.open (in.n_channels(), in.sample_rate(), 24, in.n_frames()))
     {
       fprintf (stderr, "teststream: open output failed: %s\n", out.error_blurb());
       return 1;
