@@ -2,8 +2,10 @@
 #include <vector>
 #include <sndfile.h>
 #include <assert.h>
+#include <math.h>
 
 #include "wavdata.hh"
+#include "utils.hh"
 
 class AudioInputStream
 {
@@ -60,6 +62,15 @@ public:
 
 class StdoutWavOutputStream : public AudioOutputStream
 {
+  std::string m_error_blurb;
+public:
+  bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  bool write_frames (const std::vector<float>& frames);
+
+  const char *error_blurb() const
+  {
+    return m_error_blurb.c_str();
+  }
 };
 
 using std::string;
@@ -140,25 +151,106 @@ SFInputStream::close()
     }
 }
 
+static void
+header_append_str (vector<unsigned char>& bytes, const string& str)
+{
+  for (auto ch : str)
+    bytes.push_back (ch);
+}
+
+static void
+header_append_u32 (vector<unsigned char>& bytes, uint32_t u)
+{
+  bytes.push_back (u);
+  bytes.push_back (u >> 8);
+  bytes.push_back (u >> 16);
+  bytes.push_back (u >> 24);
+}
+
+static void
+header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
+{
+  bytes.push_back (u);
+  bytes.push_back (u >> 8);
+}
+
+bool
+StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+{
+  if (bit_depth != 16)
+    {
+      m_error_blurb = "StdoutWavOutputStream::open: unsupported bit depth";
+      return false;
+    }
+  vector<unsigned char> header_bytes;
+
+  size_t data_size = n_frames * n_channels * ((bit_depth + 7) / 8);
+
+  header_append_str (header_bytes, "RIFF");
+  header_append_u32 (header_bytes, 36 + data_size);
+  header_append_str (header_bytes, "WAVE");
+
+  // subchunk 1
+  header_append_str (header_bytes, "fmt ");
+  header_append_u32 (header_bytes, 16); // subchunk size
+  header_append_u16 (header_bytes, 1);  // uncompressed audio
+  header_append_u16 (header_bytes, n_channels);
+  header_append_u32 (header_bytes, sample_rate);
+  header_append_u32 (header_bytes, sample_rate * n_channels * bit_depth / 8); // byte rate
+  header_append_u16 (header_bytes, n_channels * bit_depth / 8); // block align
+  header_append_u16 (header_bytes, bit_depth); // bits per sample
+
+  // subchunk 2
+  header_append_str (header_bytes, "data");
+  header_append_u32 (header_bytes, data_size);
+
+  fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
+  return true;
+}
+
+bool
+StdoutWavOutputStream::write_frames (const vector<float>& samples)
+{
+  vector<unsigned char> output_bytes (samples.size() * sizeof (short));
+
+  for (size_t i = 0; i < samples.size(); i++)
+    {
+      const double norm      =  0x80000000LL;
+      const double min_value = -0x80000000LL;
+      const double max_value =  0x7FFFFFFF;
+
+      const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
+
+      // write short little endian value
+      output_bytes[i * 2]     = sample >> 16;
+      output_bytes[i * 2 + 1] = sample >> 24;
+    }
+  fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
+  return true;
+}
+
 int
 main (int argc, char **argv)
 {
   SFInputStream in;
+  StdoutWavOutputStream out;
 
   std::string filename = (argc >= 2) ? argv[1] : "-";
   if (!in.open (filename.c_str()))
     {
-      fprintf (stderr, "teststream: open failed: %s\n", in.error_blurb());
+      fprintf (stderr, "teststream: open input failed: %s\n", in.error_blurb());
       return 1;
     }
-  vector<float> samples, all_samples;
+  if (!out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames()))
+    {
+      fprintf (stderr, "teststream: open output failed: %s\n", out.error_blurb());
+      return 1;
+    }
+  vector<float> samples;
   do
     {
       samples = in.read_frames (1024);
-      all_samples.insert (all_samples.end(), samples.begin(), samples.end());
+      out.write_frames (samples);
     }
   while (samples.size());
-
-  WavData wav_data (all_samples, in.n_channels(), in.sample_rate(), 16);
-  wav_data.save ("out.wav");
 }
