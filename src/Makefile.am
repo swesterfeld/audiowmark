@@ -6,7 +6,7 @@ COMMON_LIBS = $(SNDFILE_LIBS) $(FFTW_LIBS) $(LIBGCRYPT_LIBS) $(LIBMPG123_LIBS)
 audiowmark_SOURCES = audiowmark.cc fft.cc fft.hh $(COMMON_SRC)
 audiowmark_LDFLAGS = $(COMMON_LIBS)
 
-noinst_PROGRAMS = testconvcode testrandom testmp3
+noinst_PROGRAMS = testconvcode testrandom testmp3 teststream
 
 testconvcode_SOURCES = testconvcode.cc $(COMMON_SRC)
 testconvcode_LDFLAGS = $(COMMON_LIBS)
@@ -16,3 +16,6 @@ testrandom_LDFLAGS = $(COMMON_LIBS)
 
 testmp3_SOURCES = testmp3.cc $(COMMON_SRC)
 testmp3_LDFLAGS = $(COMMON_LIBS)
+
+teststream_SOURCES = teststream.cc $(COMMON_SRC)
+teststream_LDFLAGS = $(COMMON_LIBS)
