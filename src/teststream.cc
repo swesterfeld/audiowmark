@@ -235,11 +235,9 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   return true;
 }
 
-bool
-StdoutWavOutputStream::write_frames (const vector<float>& samples)
+template<int BIT_DEPTH> void
+convert_frames (const vector<float>& samples, vector<unsigned char>& output_bytes)
 {
-  vector<unsigned char> output_bytes (samples.size() * (m_bit_depth / 8));
-
   for (size_t i = 0; i < samples.size(); i++)
     {
       const double norm      =  0x80000000LL;
@@ -248,13 +246,13 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
 
       const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
 
-      if (m_bit_depth == 16)
+      if (BIT_DEPTH == 16)
         {
           // write 16-bit little endian value
           output_bytes[i * 2]     = sample >> 16;
           output_bytes[i * 2 + 1] = sample >> 24;
         }
-      else if (m_bit_depth == 24)
+      else if (BIT_DEPTH == 24)
         {
           // write 24-bit little endian value
           output_bytes[i * 3]     = sample >> 8;
@@ -262,6 +260,26 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
           output_bytes[i * 3 + 2] = sample >> 24;
         }
     }
+}
+
+bool
+StdoutWavOutputStream::write_frames (const vector<float>& samples)
+{
+  vector<unsigned char> output_bytes (samples.size() * (m_bit_depth / 8));
+
+  if (m_bit_depth == 16)
+    {
+      convert_frames<16> (samples, output_bytes);
+    }
+  else if (m_bit_depth == 24)
+    {
+      convert_frames<24> (samples, output_bytes);
+    }
+  else
+    {
+      assert (false);
+    }
+
   fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
   return true;
 }
@@ -290,7 +308,7 @@ main (int argc, char **argv)
       fprintf (stderr, "teststream: open input failed: %s\n", in.error_blurb());
       return 1;
     }
-  if (!out.open (in.n_channels(), in.sample_rate(), 24, in.n_frames()))
+  if (!out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames()))
     {
       fprintf (stderr, "teststream: open output failed: %s\n", out.error_blurb());
       return 1;
