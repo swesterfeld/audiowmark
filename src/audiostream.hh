@@ -6,6 +6,7 @@
 class AudioStream
 {
 public:
+  virtual int     bit_depth()   const = 0;
   virtual int     sample_rate() const = 0;
   virtual size_t  n_frames()    const = 0;
 

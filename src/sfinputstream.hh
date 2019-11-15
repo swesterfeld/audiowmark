@@ -13,6 +13,7 @@ class SFInputStream : public AudioInputStream
   std::string m_error_blurb;
   int         m_n_channels = 0;
   int         m_n_values = 0;
+  int         m_bit_depth = 0;
   int         m_sample_rate = 0;
 
   enum class State {
@@ -34,7 +35,8 @@ public:
   {
     return m_n_channels;
   }
-  int sample_rate() const;
+  int sample_rate() const override;
+  int bit_depth() const override;
   size_t
   n_values() const
   {

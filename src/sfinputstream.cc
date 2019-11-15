@@ -34,6 +34,35 @@ SFInputStream::open (const string& filename)
   m_n_channels  = sfinfo.channels;
   m_n_values    = sfinfo.frames * sfinfo.channels;
   m_sample_rate = sfinfo.samplerate;
+
+  switch (sfinfo.format & SF_FORMAT_SUBMASK)
+    {
+      case SF_FORMAT_PCM_U8:
+      case SF_FORMAT_PCM_S8:
+          m_bit_depth = 8;
+          break;
+
+      case SF_FORMAT_PCM_16:
+          m_bit_depth = 16;
+          break;
+
+      case SF_FORMAT_PCM_24:
+          m_bit_depth = 24;
+          break;
+
+      case SF_FORMAT_FLOAT:
+      case SF_FORMAT_PCM_32:
+          m_bit_depth = 32;
+          break;
+
+      case SF_FORMAT_DOUBLE:
+          m_bit_depth = 64;
+          break;
+
+      default:
+          m_bit_depth = 32; /* unknown */
+    }
+
   m_state       = State::OPEN;
   return true;
 }
@@ -42,6 +71,12 @@ int
 SFInputStream::sample_rate() const
 {
   return m_sample_rate;
+}
+
+int
+SFInputStream::bit_depth() const
+{
+  return m_bit_depth;
 }
 
 vector<float>

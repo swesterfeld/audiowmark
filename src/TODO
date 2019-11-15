@@ -1,3 +1,6 @@
 possible improvements:
 - dynamic bit strength
-- mp3 support with libmad
+
+streaming:
+- need explicit Error objects
+- logging

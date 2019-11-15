@@ -12,6 +12,7 @@
 #include "convcode.hh"
 #include "random.hh"
 #include "sfinputstream.hh"
+#include "stdoutwavoutputstream.hh"
 
 #include <zita-resampler/resampler.h>
 #include <zita-resampler/vresampler.h>
@@ -682,6 +683,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   printf ("Sample Rate:  %d\n", in_stream->sample_rate());
   printf ("Channels:     %d\n", in_stream->n_channels());
 
+  bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
+  auto out_stream = std::make_unique <StdoutWavOutputStream>();
+
+  if (!out_stream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+    {
+      fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
+      return 1;
+    }
 #if 0
   vector<float> in_signal;
   if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
