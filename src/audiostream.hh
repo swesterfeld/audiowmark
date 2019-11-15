@@ -20,6 +20,8 @@ class AudioInputStream : public AudioStream
 
 class AudioOutputStream : public AudioStream
 {
+public:
+  virtual bool write_frames (const std::vector<float>& frames) = 0;
 };
 
 #endif /* AUDIOWMARK_AUDIO_STREAM_HH */

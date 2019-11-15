@@ -114,5 +114,3 @@ SFInputStream::close()
       m_state = State::CLOSED;
     }
 }
-
-

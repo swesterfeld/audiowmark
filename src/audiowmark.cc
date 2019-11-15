@@ -12,6 +12,7 @@
 #include "convcode.hh"
 #include "random.hh"
 #include "sfinputstream.hh"
+#include "sfoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
 
 #include <zita-resampler/resampler.h>
@@ -710,12 +711,26 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
-  auto out_stream = std::make_unique <StdoutWavOutputStream>();
-
-  if (!out_stream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+  std::unique_ptr<AudioOutputStream> out_stream;
+  if (outfile == "-")
     {
-      fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
-      return 1;
+      StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
+      out_stream.reset (swstream);
+      if (!swstream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+        {
+          fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
+          return 1;
+        }
+    }
+  else
+    {
+      SFOutputStream *sfostream = new SFOutputStream();
+      out_stream.reset (sfostream);
+      if (!sfostream->open (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+        {
+          error ("audiowmark: error writing to %s\n", outfile.c_str()); // FIXME, sfostream->error_blurb());
+          return 1;
+        }
     }
   enum State { PAD, SYNC, DATA } state = State::PAD;
   int frame_bound = Params::frames_pad_start;
