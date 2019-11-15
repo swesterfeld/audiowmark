@@ -560,6 +560,18 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
 }
 
 void
+mark_sync_stream (int frame_number, vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect, int ab)
+{
+  int n_channels = frame_fft.size();
+  for (int ch = 0; ch < n_channels; ch++)
+    {
+      int data_bit = (frame_number / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
+
+      mark_bit_linear (frame_number, frame_fft[ch], fft_delta_spect[ch], data_bit, Random::Stream::sync_up_down);
+    }
+}
+
+void
 mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
 {
   assert (fft_out.size() >= (frame + 1) * wav_data.n_channels());
@@ -658,10 +670,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
       bitvec = expanded_bitvec;
     }
-  printf ("Input:        %s\n", infile.c_str());
-  printf ("Output:       %s\n", outfile.c_str());
-  printf ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
-  printf ("Strength:     %.6g\n\n", Params::water_delta * 1000);
+  info ("Input:        %s\n", infile.c_str());
+  info ("Output:       %s\n", outfile.c_str());
+  info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
+  info ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
   /* add forward error correction, bitvec will now be a lot larger */
   auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
@@ -679,9 +691,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
   int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
-  printf ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
-  printf ("Sample Rate:  %d\n", in_stream->sample_rate());
-  printf ("Channels:     %d\n", in_stream->n_channels());
+  info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
+  info ("Sample Rate:  %d\n", in_stream->sample_rate());
+  info ("Channels:     %d\n", in_stream->n_channels());
 
   bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
@@ -691,6 +703,44 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
       return 1;
+    }
+  vector<float> samples;
+  for (int i = 0; ; i++)
+    {
+      samples = in_stream->read_frames (Params::frame_size);
+      if (samples.size() < Params::frame_size * in_stream->n_channels())
+        {
+          out_stream->write_frames (samples);
+          break;
+        }
+
+      WavData wav_data (samples, in_stream->n_channels(), in_stream->sample_rate(), in_stream->bit_depth());
+      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, 1, /* want all frames */ {});
+
+      vector<vector<complex<float>>> fft_delta_spect;
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
+        }
+
+      int ab = 0; // FIXME
+      int frame_number = i - Params::frames_pad_start;
+      if (frame_number >= 0)
+        mark_sync_stream (frame_number, fft_out, fft_delta_spect, ab);
+
+      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        {
+          /* mix watermark signal to output frame */
+          vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
+
+          int pos = wav_data.n_channels() + ch;
+          for (size_t x = 0; x < Params::frame_size; x++)
+            {
+              samples[pos] += fft_delta_out[x]; // FIXME: synth window, 3 frames
+              pos += wav_data.n_channels();
+            }
+        }
+      out_stream->write_frames (samples);
     }
 #if 0
   vector<float> in_signal;

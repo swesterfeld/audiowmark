@@ -17,4 +17,24 @@ bound (const T& min_value, const T& value, const T& max_value)
   return std::min (std::max (value, min_value), max_value);
 }
 
+// detect compiler
+#if __clang__
+  #define AUDIOWMARK_COMP_CLANG
+#elif __GNUC__ > 2
+  #define AUDIOWMARK_COMP_GCC
+#else
+  #error "unsupported compiler"
+#endif
+
+#ifdef AUDIOWMARK_COMP_GCC
+  #define AUDIOWMARK_PRINTF(format_idx, arg_idx)      __attribute__ ((__format__ (gnu_printf, format_idx, arg_idx)))
+#else
+  #define AUDIOWMARK_PRINTF(format_idx, arg_idx)      __attribute__ ((__format__ (__printf__, format_idx, arg_idx)))
+#endif
+
+void error (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
+void warning (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
+void info (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
+void debug (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
+
 #endif /* AUDIOWMARK_UTILS_HH */

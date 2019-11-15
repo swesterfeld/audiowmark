@@ -1,4 +1,5 @@
 #include "utils.hh"
+#include "stdarg.h"
 
 using std::vector;
 using std::string;
@@ -88,4 +89,58 @@ vec_to_hex_str (const vector<unsigned char>& vec)
       s += buffer;
     }
   return s;
+}
+
+enum class Log { ERROR, WARNING, INFO, DEBUG };
+
+static void
+logv (Log log, const char *format, va_list vargs)
+{
+  char buffer[1024];
+
+  vsnprintf (buffer, sizeof (buffer), format, vargs);
+
+  /* could support custom log function here */
+  fprintf (stderr, "%s", buffer);
+  fflush (stderr);
+}
+
+void
+error (const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  logv (Log::ERROR, format, ap);
+  va_end (ap);
+}
+
+void
+warning (const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  logv (Log::WARNING, format, ap);
+  va_end (ap);
+}
+
+void
+info (const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  logv (Log::INFO, format, ap);
+  va_end (ap);
+}
+
+void
+debug (const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  logv (Log::DEBUG, format, ap);
+  va_end (ap);
 }
