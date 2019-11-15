@@ -533,6 +533,19 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
     }
 }
 
+void
+mark_data_stream (int frame_number, const vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect,
+                  const vector<int>& bitvec)
+{
+  assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
+
+  int n_channels = frame_fft.size();
+  for (int ch = 0; ch < n_channels; ch++)
+    {
+      mark_bit_linear (frame_number, frame_fft[ch], fft_delta_spect[ch], bitvec[frame_number / Params::frames_per_bit], Random::Stream::data_up_down);
+    }
+}
+
 size_t
 mark_sync_frame_count()
 {
@@ -729,6 +742,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
       if (state == State::SYNC)
         mark_sync_stream (frame_number, fft_out, fft_delta_spect, ab);
+      if (state == State::DATA)
+        mark_data_stream (frame_number, fft_out, fft_delta_spect, ab ? bitvec_b : bitvec_a);
 
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
@@ -746,23 +761,22 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
       if (frame_number++ == frame_bound)
         {
+          frame_number = 0;
+
           if (state == PAD)
             {
               state = SYNC;
-              frame_number = 0;
               frame_bound = mark_sync_frame_count();
             }
           else if (state == SYNC)
             {
               state = DATA;
-              frame_number = 0;
               frame_bound = mark_data_frame_count();
             }
           else if (state == DATA)
             {
               state = SYNC;
               ab = (ab + 1) & 1; // write A|B|A|B|...
-              frame_number = 0;
               frame_bound = mark_sync_frame_count();
             }
         }
