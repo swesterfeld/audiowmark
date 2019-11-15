@@ -560,7 +560,7 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
 }
 
 void
-mark_sync_stream (int frame_number, vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect, int ab)
+mark_sync_stream (int frame_number, const vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect, int ab)
 {
   int n_channels = frame_fft.size();
   for (int ch = 0; ch < n_channels; ch++)
@@ -704,8 +704,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
       return 1;
     }
+  enum State { PAD, SYNC, DATA } state = State::PAD;
+  int frame_bound = Params::frames_pad_start;
+  int frame_number = 0;
+  int ab = 0;
   vector<float> samples;
-  for (int i = 0; ; i++)
+  while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
       if (samples.size() < Params::frame_size * in_stream->n_channels())
@@ -723,9 +727,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
 
-      int ab = 0; // FIXME
-      int frame_number = i - Params::frames_pad_start;
-      if (frame_number >= 0)
+      if (state == State::SYNC)
         mark_sync_stream (frame_number, fft_out, fft_delta_spect, ab);
 
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -741,6 +743,29 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             }
         }
       out_stream->write_frames (samples);
+
+      if (frame_number++ == frame_bound)
+        {
+          if (state == PAD)
+            {
+              state = SYNC;
+              frame_number = 0;
+              frame_bound = mark_sync_frame_count();
+            }
+          else if (state == SYNC)
+            {
+              state = DATA;
+              frame_number = 0;
+              frame_bound = mark_data_frame_count();
+            }
+          else if (state == DATA)
+            {
+              state = SYNC;
+              ab = (ab + 1) & 1; // write A|B|A|B|...
+              frame_number = 0;
+              frame_bound = mark_sync_frame_count();
+            }
+        }
     }
 #if 0
   vector<float> in_signal;
