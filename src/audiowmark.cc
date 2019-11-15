@@ -774,7 +774,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
       out_stream->write_frames (samples);
 
-      if (frame_number++ == frame_bound)
+      frame_number++;
+      if (frame_number == frame_bound)
         {
           frame_number = 0;
 
