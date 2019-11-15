@@ -4,12 +4,14 @@
 #include <random>
 #include <complex>
 #include <algorithm>
+#include <memory>
 
 #include "fft.hh"
 #include "wavdata.hh"
 #include "utils.hh"
 #include "convcode.hh"
 #include "random.hh"
+#include "sfinputstream.hh"
 
 #include <zita-resampler/resampler.h>
 #include <zita-resampler/vresampler.h>
@@ -664,17 +666,23 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
   auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
-  WavData orig_wav_data;
-  if (!orig_wav_data.load (infile))
+  auto in_stream = std::make_unique<SFInputStream> (); // FIXME: need virtual constructor
+  if (!in_stream->open (infile))
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), orig_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), in_stream->error_blurb());
       return 1;
     }
-  int orig_seconds = orig_wav_data.n_values() / orig_wav_data.sample_rate() / orig_wav_data.n_channels();
+  if (in_stream->sample_rate() != Params::mark_sample_rate)
+    {
+      fprintf (stderr, "FIXME resampling support\n");
+      return 1;
+    }
+  int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
   printf ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
-  printf ("Sample Rate:  %d\n", orig_wav_data.sample_rate());
-  printf ("Channels:     %d\n", orig_wav_data.n_channels());
+  printf ("Sample Rate:  %d\n", in_stream->sample_rate());
+  printf ("Channels:     %d\n", in_stream->n_channels());
 
+#if 0
   vector<float> in_signal;
   if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
     {
@@ -692,7 +700,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
    */
   while (in_signal.size() % (orig_wav_data.n_channels() * Params::frame_size))
     in_signal.push_back (0);
+#endif
 
+#if 0
   WavData wav_data (in_signal, orig_wav_data.n_channels(), Params::mark_sample_rate, orig_wav_data.bit_depth());
 
   /* we have extra space for the padded wave data -> truncated before save */
@@ -842,6 +852,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
       return 1;
     }
+#endif
   return 0;
 }
 
