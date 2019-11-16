@@ -651,6 +651,18 @@ mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<flo
     }
 }
 
+void
+init_frame_mod_vec (vector<vector<FrameDelta>>& frame_mod_vec, int ab, const vector<int>& bitvec)
+{
+  frame_mod_vec.resize (mark_sync_frame_count() + mark_data_frame_count());
+
+  for (auto& frame_mod : frame_mod_vec)
+    frame_mod.resize (Params::max_band + 1);
+
+  mark_sync_stream (frame_mod_vec, ab);
+  mark_data_stream (frame_mod_vec, bitvec);
+}
+
 template<class R>
 static void
 process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
@@ -790,18 +802,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int frame_number = 0;
   int ab = 0;
   vector<float> samples;
-  vector<vector<FrameDelta>> frame_mod_vec_a (mark_sync_frame_count() + mark_data_frame_count());
-  vector<vector<FrameDelta>> frame_mod_vec_b (mark_sync_frame_count() + mark_data_frame_count());
-  for (size_t i = 0; i < frame_mod_vec_a.size(); i++)
-    {
-      frame_mod_vec_a[i].resize (Params::max_band + 1);
-      frame_mod_vec_b[i].resize (Params::max_band + 1);
-    }
 
-  mark_sync_stream (frame_mod_vec_a, 0);
-  mark_sync_stream (frame_mod_vec_b, 1);
-  mark_data_stream (frame_mod_vec_a, bitvec_a);
-  mark_data_stream (frame_mod_vec_b, bitvec_b);
+  vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;;
+  init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
@@ -854,6 +857,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             {
               ab = (ab + 1) & 1; // write A|B|A|B|...
               frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+
+              if (frame_mod_vec_b.empty())
+                {
+                  // we initialize this only when we need it to minimize startup latency
+                  init_frame_mod_vec (frame_mod_vec_b, 1, bitvec_b);
+                }
             }
         }
     }
