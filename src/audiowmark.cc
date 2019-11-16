@@ -470,6 +470,51 @@ gen_mix_entries()
   return mix_entries;
 }
 
+enum class FrameDelta : uint8_t {
+  KEEP = 0,
+  UP,
+  DOWN
+};
+
+void
+prepare_frame_delta (int f, vector<FrameDelta>& frame_delta, int data_bit, Random::Stream random_stream)
+{
+  vector<int> up;
+  vector<int> down;
+  get_up_down (f, up, down, random_stream);
+  for (auto u : up)
+    frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
+
+  for (auto d : down)
+    frame_delta[d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
+}
+
+void
+apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect)
+{
+  const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
+  for (size_t i = 0; i < frame_delta.size(); i++)
+    {
+      if (frame_delta[i] == FrameDelta::KEEP)
+        continue;
+
+      int data_bit_sign = (frame_delta[i] == FrameDelta::UP) ? 1 : -1;
+      /*
+       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       *
+       * this actually increases the amount of energy because mag is less than 1.0
+       */
+      const float mag = abs (fft_out[i]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
+
+          fft_delta_spect[i] = fft_out[i] * (mag_factor - 1);
+        }
+    }
+}
+
+
 void
 mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect,
            const vector<int>& bitvec)
@@ -535,15 +580,19 @@ mark_data (const WavData& wav_data, int start_frame, const vector<vector<complex
 }
 
 void
-mark_data_stream (int frame_number, const vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect,
-                  const vector<int>& bitvec)
+mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitvec)
 {
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
+  assert (frame_mod.size() >= mark_data_frame_count());
 
-  int n_channels = frame_fft.size();
-  for (int ch = 0; ch < n_channels; ch++)
+  const int frame_count = mark_data_frame_count();
+
+  // sync block always written in linear order (no mix)
+  for (int f = 0; f < frame_count; f++)
     {
-      mark_bit_linear (frame_number, frame_fft[ch], fft_delta_spect[ch], bitvec[frame_number / Params::frames_per_bit], Random::Stream::data_up_down);
+      size_t index = mark_sync_frame_count() + f; // data_frame_pos (f); FIXME enable bit reordering
+
+      prepare_frame_delta (f, frame_mod[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down); // FIXME: rename
     }
 }
 
@@ -572,51 +621,6 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
         }
     }
 }
-
-enum class FrameDelta : uint8_t {
-  KEEP = 0,
-  UP,
-  DOWN
-};
-
-void
-prepare_frame_delta (int f, vector<FrameDelta>& frame_delta, int data_bit, Random::Stream random_stream)
-{
-  vector<int> up;
-  vector<int> down;
-  get_up_down (f, up, down, random_stream);
-  for (auto u : up)
-    frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
-
-  for (auto d : down)
-    frame_delta[d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
-}
-
-void
-apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect)
-{
-  const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
-  for (size_t i = 0; i < frame_delta.size(); i++)
-    {
-      if (frame_delta[i] == FrameDelta::KEEP)
-        continue;
-
-      int data_bit_sign = (frame_delta[i] == FrameDelta::UP) ? 1 : -1;
-      /*
-       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
-       *
-       * this actually increases the amount of energy because mag is less than 1.0
-       */
-      const float mag = abs (fft_out[i]);
-      if (mag > min_mag)
-        {
-          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
-
-          fft_delta_spect[i] = fft_out[i] * (mag_factor - 1);
-        }
-    }
-}
-
 
 void
 mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
@@ -786,8 +790,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int frame_number = 0;
   int ab = 0;
   vector<float> samples;
-  vector<vector<FrameDelta>> frame_mod_vec_a (mark_sync_frame_count());
-  vector<vector<FrameDelta>> frame_mod_vec_b (mark_sync_frame_count());
+  vector<vector<FrameDelta>> frame_mod_vec_a (mark_sync_frame_count() + mark_data_frame_count());
+  vector<vector<FrameDelta>> frame_mod_vec_b (mark_sync_frame_count() + mark_data_frame_count());
   for (size_t i = 0; i < frame_mod_vec_a.size(); i++)
     {
       frame_mod_vec_a[i].resize (Params::max_band + 1);
@@ -796,6 +800,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   mark_sync_stream (frame_mod_vec_a, 0);
   mark_sync_stream (frame_mod_vec_b, 1);
+  mark_data_stream (frame_mod_vec_a, bitvec_a);
+  mark_data_stream (frame_mod_vec_b, bitvec_b);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
@@ -814,13 +820,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
 
-      if (state == State::SYNC)
+      if (state == State::SYNC || state == State::DATA)
         {
+          int vfn = frame_number;
+          if (state == State::DATA)
+            vfn += mark_sync_frame_count();
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
+            apply_frame_delta (ab ? frame_mod_vec_b[vfn] : frame_mod_vec_a[vfn], fft_out[ch], fft_delta_spect[ch]);
         }
-      if (state == State::DATA)
-        mark_data_stream (frame_number, fft_out, fft_delta_spect, ab ? bitvec_b : bitvec_a);
 
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
         {
