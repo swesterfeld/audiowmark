@@ -573,6 +573,51 @@ mark_sync (const WavData& wav_data, int start_frame, const vector<vector<complex
     }
 }
 
+enum class FrameDelta : uint8_t {
+  KEEP = 0,
+  UP,
+  DOWN
+};
+
+void
+prepare_frame_delta (int f, vector<FrameDelta>& frame_delta, int data_bit, Random::Stream random_stream)
+{
+  vector<int> up;
+  vector<int> down;
+  get_up_down (f, up, down, random_stream);
+  for (auto u : up)
+    frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
+
+  for (auto d : down)
+    frame_delta[d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
+}
+
+void
+apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect)
+{
+  const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
+  for (size_t i = 0; i < frame_delta.size(); i++)
+    {
+      if (frame_delta[i] == FrameDelta::KEEP)
+        continue;
+
+      int data_bit_sign = (frame_delta[i] == FrameDelta::UP) ? 1 : -1;
+      /*
+       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       *
+       * this actually increases the amount of energy because mag is less than 1.0
+       */
+      const float mag = abs (fft_out[i]);
+      if (mag > min_mag)
+        {
+          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
+
+          fft_delta_spect[i] = fft_out[i] * (mag_factor - 1);
+        }
+    }
+}
+
+
 void
 mark_sync_stream (int frame_number, const vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect, int ab)
 {
@@ -581,7 +626,9 @@ mark_sync_stream (int frame_number, const vector<vector<complex<float>>>& frame_
     {
       int data_bit = (frame_number / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
-      mark_bit_linear (frame_number, frame_fft[ch], fft_delta_spect[ch], data_bit, Random::Stream::sync_up_down);
+      vector<FrameDelta> frame_delta_vec (Params::max_band + 1);
+      prepare_frame_delta (frame_number, frame_delta_vec, data_bit, Random::Stream::sync_up_down);
+      apply_frame_delta (frame_delta_vec, frame_fft[ch], fft_delta_spect[ch]);
     }
 }
 
