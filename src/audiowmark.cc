@@ -785,7 +785,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           return 1;
         }
     }
-  enum State { PAD, SYNC, DATA } state = State::PAD;
+  enum State { PAD, WATERMARK } state = State::PAD;
   int frame_bound = Params::frames_pad_start;
   int frame_number = 0;
   int ab = 0;
@@ -820,13 +820,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
 
-      if (state == State::SYNC || state == State::DATA)
+      if (state == State::WATERMARK)
         {
-          int vfn = frame_number;
-          if (state == State::DATA)
-            vfn += mark_sync_frame_count();
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_delta (ab ? frame_mod_vec_b[vfn] : frame_mod_vec_a[vfn], fft_out[ch], fft_delta_spect[ch]);
+            apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
 
       for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -850,19 +847,13 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
           if (state == PAD)
             {
-              state = SYNC;
-              frame_bound = mark_sync_frame_count();
+              state = WATERMARK;
+              frame_bound = mark_sync_frame_count() + mark_data_frame_count();
             }
-          else if (state == SYNC)
+          else if (state == WATERMARK)
             {
-              state = DATA;
-              frame_bound = mark_data_frame_count();
-            }
-          else if (state == DATA)
-            {
-              state = SYNC;
               ab = (ab + 1) & 1; // write A|B|A|B|...
-              frame_bound = mark_sync_frame_count();
+              frame_bound = mark_sync_frame_count() + mark_data_frame_count();
             }
         }
     }
