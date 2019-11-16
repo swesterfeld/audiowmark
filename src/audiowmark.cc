@@ -619,16 +619,18 @@ apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<f
 
 
 void
-mark_sync_stream (int frame_number, const vector<vector<complex<float>>>& frame_fft, vector<vector<complex<float>>>& fft_delta_spect, int ab)
+mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
 {
-  int n_channels = frame_fft.size();
-  for (int ch = 0; ch < n_channels; ch++)
-    {
-      int data_bit = (frame_number / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
+  const int frame_count = mark_sync_frame_count();
+  assert (frame_mod.size() >= mark_sync_frame_count());
 
-      vector<FrameDelta> frame_delta_vec (Params::max_band + 1);
-      prepare_frame_delta (frame_number, frame_delta_vec, data_bit, Random::Stream::sync_up_down);
-      apply_frame_delta (frame_delta_vec, frame_fft[ch], fft_delta_spect[ch]);
+  // sync block always written in linear order (no mix)
+  for (int f = 0; f < frame_count; f++)
+    {
+      size_t index = f; // sync_frame_pos (f); FIXME enable bit reordering
+      int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
+
+      prepare_frame_delta (index, frame_mod[f], data_bit, Random::Stream::sync_up_down); // FIXME: rename
     }
 }
 
@@ -784,6 +786,16 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int frame_number = 0;
   int ab = 0;
   vector<float> samples;
+  vector<vector<FrameDelta>> frame_mod_vec_a (mark_sync_frame_count());
+  vector<vector<FrameDelta>> frame_mod_vec_b (mark_sync_frame_count());
+  for (size_t i = 0; i < frame_mod_vec_a.size(); i++)
+    {
+      frame_mod_vec_a[i].resize (Params::max_band + 1);
+      frame_mod_vec_b[i].resize (Params::max_band + 1);
+    }
+
+  mark_sync_stream (frame_mod_vec_a, 0);
+  mark_sync_stream (frame_mod_vec_b, 1);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
@@ -803,7 +815,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
 
       if (state == State::SYNC)
-        mark_sync_stream (frame_number, fft_out, fft_delta_spect, ab);
+        {
+          for (int ch = 0; ch < in_stream->n_channels(); ch++)
+            apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
+        }
       if (state == State::DATA)
         mark_data_stream (frame_number, fft_out, fft_delta_spect, ab ? bitvec_b : bitvec_a);
 
