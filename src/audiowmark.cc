@@ -428,17 +428,20 @@ struct MixEntry
 vector<MixEntry>
 gen_mix_entries()
 {
-  vector<MixEntry> mix_entries;
+  const int frame_count = mark_data_frame_count();
+  vector<MixEntry> mix_entries (frame_count * Params::bands_per_frame);
 
   UpDownGen up_down_gen (Random::Stream::data_up_down);
-  for (int f = 0; f < int (mark_data_frame_count()); f++)
+  int entry = 0;
+  for (int f = 0; f < frame_count; f++)
     {
+      const int index = data_frame_pos (f);
       UpDownArray up, down;
       up_down_gen.get (f, up, down);
 
       assert (up.size() == down.size());
       for (size_t i = 0; i < up.size(); i++)
-        mix_entries.push_back ({ data_frame_pos (f), up[i], down[i] });
+        mix_entries[entry++] = { index, up[i], down[i] };
     }
   Random random (/* seed */ 0, Random::Stream::mix);
   random.shuffle (mix_entries);
