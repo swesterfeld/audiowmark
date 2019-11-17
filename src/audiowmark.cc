@@ -243,6 +243,7 @@ frame_count (const WavData& wav_data)
   return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
 }
 
+typedef std::array<int, 30> UpDownArray;
 class UpDownGen
 {
   Random::Stream random_stream;
@@ -255,9 +256,11 @@ public:
     random (0, random_stream),
     bands_reorder (Params::max_band - Params::min_band + 1)
   {
+    UpDownArray x;
+    assert (x.size() == Params::bands_per_frame);
   }
   void
-  get (int f, vector<int>& up, vector<int>& down)
+  get (int f, UpDownArray& up, UpDownArray& down)
   {
     for (size_t i = 0; i < bands_reorder.size(); i++)
       bands_reorder[i] = Params::min_band + i;
@@ -268,8 +271,8 @@ public:
     assert (2 * Params::bands_per_frame < bands_reorder.size());
     for (size_t i = 0; i < Params::bands_per_frame; i++)
       {
-        up.push_back (bands_reorder[i]);
-        down.push_back (bands_reorder[Params::bands_per_frame + i]);
+        up[i]   = bands_reorder[i];
+        down[i] = bands_reorder[Params::bands_per_frame + i];
       }
   }
 };
@@ -430,8 +433,7 @@ gen_mix_entries()
   UpDownGen up_down_gen (Random::Stream::data_up_down);
   for (int f = 0; f < int (mark_data_frame_count()); f++)
     {
-      vector<int> up;
-      vector<int> down;
+      UpDownArray up, down;
       up_down_gen.get (f, up, down);
 
       assert (up.size() == down.size());
@@ -453,8 +455,7 @@ enum class FrameDelta : uint8_t {
 void
 prepare_frame_delta (UpDownGen& up_down_gen, int f, vector<FrameDelta>& frame_delta, int data_bit)
 {
-  vector<int> up;
-  vector<int> down;
+  UpDownArray up, down;
   up_down_gen.get (f, up, down);
   for (auto u : up)
     frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
@@ -1041,8 +1042,7 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
       for (int ch = 0; ch < n_channels; ch++)
         {
           const size_t index = data_frame_pos (f) * n_channels + ch;
-          vector<int> up;
-          vector<int> down;
+          UpDownArray up, down;
           up_down_gen.get (f, up, down);
 
           const double min_db = -96;
@@ -1095,7 +1095,7 @@ class SyncFinder
       {
         for (int f = 0; f < Params::sync_frames_per_bit; f++)
           {
-            vector<int> frame_up, frame_down;
+            UpDownArray frame_up, frame_down;
             up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
             for (auto u : frame_up)
