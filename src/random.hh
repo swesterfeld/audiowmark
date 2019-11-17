@@ -19,11 +19,10 @@ public:
     frame_position = 6
   };
 private:
-  gcry_cipher_hd_t           aes_ctr_cipher;
+  gcry_cipher_hd_t           aes_ctr_cipher = nullptr;
+  gcry_cipher_hd_t           seed_cipher = nullptr;
   std::vector<uint64_t>      buffer;
   size_t                     buffer_pos = 0;
-
-  std::vector<unsigned char> get_start_counter (uint64_t seed, Stream stream);
 
   void die_on_error (const char *func, gcry_error_t error);
 public:
@@ -39,6 +38,7 @@ public:
     return buffer[buffer_pos++];
   }
   void refill_buffer();
+  void seed (uint64_t seed, Stream stream);
 
   template<class T> void
   shuffle (std::vector<T>& result)

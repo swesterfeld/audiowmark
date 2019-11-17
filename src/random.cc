@@ -78,13 +78,9 @@ print (const string& label, const vector<unsigned char>& data)
 }
 #endif
 
-Random::Random (uint64_t seed, Stream stream)
+Random::Random (uint64_t start_seed, Stream stream)
 {
   gcrypt_init();
-
-  vector<unsigned char> ctr = get_start_counter (seed, stream);
-
-  // print ("CTR", ctr);
 
   gcry_error_t gcry_ret = gcry_cipher_open (&aes_ctr_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_CTR, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
@@ -92,43 +88,40 @@ Random::Random (uint64_t seed, Stream stream)
   gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, &aes_key[0], aes_key.size());
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
-  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &ctr[0], ctr.size());
+  gcry_ret = gcry_cipher_open (&seed_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
+  die_on_error ("gcry_cipher_open", gcry_ret);
+
+  gcry_ret = gcry_cipher_setkey (seed_cipher, &aes_key[0], aes_key.size());
+  die_on_error ("gcry_cipher_setkey", gcry_ret);
+
+  seed (start_seed, stream);
+}
+
+void
+Random::seed (uint64_t seed, Stream stream)
+{
+  buffer_pos = 0;
+  buffer.clear();
+
+  unsigned char plain_text[aes_key.size()] = { 0, };
+  unsigned char cipher_text[aes_key.size()];
+
+  uint64_to_buffer (seed, &plain_text[0]);
+
+  plain_text[8] = uint8_t (stream);
+
+  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], aes_key.size(),
+                                                            &plain_text[0],  aes_key.size());
+  die_on_error ("gcry_cipher_encrypt", gcry_ret);
+
+  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], aes_key.size());
   die_on_error ("gcry_cipher_setctr", gcry_ret);
 }
 
 Random::~Random()
 {
   gcry_cipher_close (aes_ctr_cipher);
-}
-
-vector<unsigned char>
-Random::get_start_counter (uint64_t seed, Stream stream)
-{
-  gcry_error_t     gcry_ret;
-  gcry_cipher_hd_t cipher_hd;
-
-  gcry_ret = gcry_cipher_open (&cipher_hd, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
-  die_on_error ("gcry_cipher_open", gcry_ret);
-
-  gcry_ret = gcry_cipher_setkey (cipher_hd, &aes_key[0], aes_key.size());
-  die_on_error ("gcry_cipher_setkey", gcry_ret);
-
-  vector<unsigned char> cipher_text (16);
-  vector<unsigned char> plain_text (16);
-
-  uint64_to_buffer (seed, &plain_text[0]);
-
-  plain_text[8] = uint8_t (stream);
-
-  // print ("SEED", plain_text);
-
-  gcry_ret = gcry_cipher_encrypt (cipher_hd, &cipher_text[0], cipher_text.size(),
-                                             &plain_text[0],  plain_text.size());
-  die_on_error ("gcry_cipher_encrypt", gcry_ret);
-
-  gcry_cipher_close (cipher_hd);
-
-  return cipher_text;
+  gcry_cipher_close (seed_cipher);
 }
 
 void
