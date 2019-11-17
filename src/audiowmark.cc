@@ -590,7 +590,7 @@ mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitv
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
-      size_t index = mark_sync_frame_count() + f; // data_frame_pos (f); FIXME enable bit reordering
+      size_t index = data_frame_pos (f);
 
       prepare_frame_delta (f, frame_mod[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down); // FIXME: rename
     }
@@ -631,10 +631,10 @@ mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
-      size_t index = f; // sync_frame_pos (f); FIXME enable bit reordering
+      size_t index = sync_frame_pos (f);
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
-      prepare_frame_delta (index, frame_mod[f], data_bit, Random::Stream::sync_up_down); // FIXME: rename
+      prepare_frame_delta (f, frame_mod[index], data_bit, Random::Stream::sync_up_down); // FIXME: rename
     }
 }
 
