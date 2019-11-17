@@ -243,23 +243,35 @@ frame_count (const WavData& wav_data)
   return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
 }
 
-void
-get_up_down (int f, vector<int>& up, vector<int>& down, Random::Stream random_stream)
+class UpDownGen
 {
-  vector<int> bands_reorder;
-  for (int i = Params::min_band; i <= Params::max_band; i++)
-    bands_reorder.push_back (i);
+  Random::Stream random_stream;
+  Random         random;
 
-  Random random (f, random_stream); // use per frame random seed
-  random.shuffle (bands_reorder);
+public:
+  UpDownGen (Random::Stream random_stream) :
+    random_stream (random_stream),
+    random (0, random_stream)
+  {
+  }
+  void
+  get (int f, vector<int>& up, vector<int>& down)
+  {
+    vector<int> bands_reorder;
+    for (int i = Params::min_band; i <= Params::max_band; i++)
+      bands_reorder.push_back (i);
 
-  assert (2 * Params::bands_per_frame < bands_reorder.size());
-  for (size_t i = 0; i < Params::bands_per_frame; i++)
-    {
-      up.push_back (bands_reorder[i]);
-      down.push_back (bands_reorder[Params::bands_per_frame + i]);
-    }
-}
+    random.seed (f, random_stream); // use per frame random seed
+    random.shuffle (bands_reorder);
+
+    assert (2 * Params::bands_per_frame < bands_reorder.size());
+    for (size_t i = 0; i < Params::bands_per_frame; i++)
+      {
+        up.push_back (bands_reorder[i]);
+        down.push_back (bands_reorder[Params::bands_per_frame + i]);
+      }
+  }
+};
 
 template<class T> vector<T>
 randomize_bit_order (const vector<T>& bit_vec, bool encode)
@@ -414,11 +426,12 @@ gen_mix_entries()
 {
   vector<MixEntry> mix_entries;
 
+  UpDownGen up_down_gen (Random::Stream::data_up_down);
   for (int f = 0; f < int (mark_data_frame_count()); f++)
     {
       vector<int> up;
       vector<int> down;
-      get_up_down (f, up, down, Random::Stream::data_up_down);
+      up_down_gen.get (f, up, down);
 
       assert (up.size() == down.size());
       for (size_t i = 0; i < up.size(); i++)
@@ -437,11 +450,11 @@ enum class FrameDelta : uint8_t {
 };
 
 void
-prepare_frame_delta (int f, vector<FrameDelta>& frame_delta, int data_bit, Random::Stream random_stream)
+prepare_frame_delta (UpDownGen& up_down_gen, int f, vector<FrameDelta>& frame_delta, int data_bit)
 {
   vector<int> up;
   vector<int> down;
-  get_up_down (f, up, down, random_stream);
+  up_down_gen.get (f, up, down);
   for (auto u : up)
     frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
 
@@ -505,12 +518,13 @@ mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitv
     }
   else
     {
+      UpDownGen up_down_gen (Random::Stream::data_up_down);
       // sync block always written in linear order (no mix)
       for (int f = 0; f < frame_count; f++)
         {
           size_t index = data_frame_pos (f);
 
-          prepare_frame_delta (f, frame_mod[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down); // FIXME: rename
+          prepare_frame_delta (up_down_gen, f, frame_mod[index], bitvec[f / Params::frames_per_bit]); // FIXME: rename
         }
     }
 }
@@ -527,13 +541,15 @@ mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
   const int frame_count = mark_sync_frame_count();
   assert (frame_mod.size() >= mark_sync_frame_count());
 
+  UpDownGen up_down_gen (Random::Stream::sync_up_down);
+
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
       size_t index = sync_frame_pos (f);
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
-      prepare_frame_delta (f, frame_mod[index], data_bit, Random::Stream::sync_up_down); // FIXME: rename
+      prepare_frame_delta (up_down_gen, f, frame_mod[index], data_bit); // FIXME: rename
     }
 }
 
@@ -1008,6 +1024,7 @@ mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 vector<float>
 linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 {
+  UpDownGen     up_down_gen (Random::Stream::data_up_down);
   vector<float> raw_bit_vec;
 
   const int frame_count = mark_data_frame_count();
@@ -1020,7 +1037,7 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
           const size_t index = data_frame_pos (f) * n_channels + ch;
           vector<int> up;
           vector<int> down;
-          get_up_down (f, up, down, Random::Stream::data_up_down);
+          up_down_gen.get (f, up, down);
 
           const double min_db = -96;
           for (auto u : up)
@@ -1066,13 +1083,14 @@ class SyncFinder
     up.resize (Params::sync_bits);
     down.resize (Params::sync_bits);
 
+    UpDownGen up_down_gen (Random::Stream::sync_up_down);
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int bit = 0; bit < Params::sync_bits; bit++)
       {
         for (int f = 0; f < Params::sync_frames_per_bit; f++)
           {
             vector<int> frame_up, frame_down;
-            get_up_down (f + bit * Params::sync_frames_per_bit, frame_up, frame_down, Random::Stream::sync_up_down);
+            up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
             for (auto u : frame_up)
               up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
