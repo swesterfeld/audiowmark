@@ -587,12 +587,36 @@ mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitv
 
   const int frame_count = mark_data_frame_count();
 
-  // sync block always written in linear order (no mix)
-  for (int f = 0; f < frame_count; f++)
+  if (Params::mix)
     {
-      size_t index = data_frame_pos (f);
+      vector<MixEntry> mix_entries = gen_mix_entries();
 
-      prepare_frame_delta (f, frame_mod[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down); // FIXME: rename
+      for (int f = 0; f < frame_count; f++)
+        {
+          for (size_t frame_b = 0; frame_b < Params::bands_per_frame; frame_b++)
+            {
+              int b = f * Params::bands_per_frame + frame_b;
+
+              const int data_bit = bitvec[f / Params::frames_per_bit];
+
+              const int u = mix_entries[b].up;
+              const int d = mix_entries[b].down;
+              const int index = mix_entries[b].frame;
+
+              frame_mod[index][u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
+              frame_mod[index][d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
+            }
+        }
+    }
+  else
+    {
+      // sync block always written in linear order (no mix)
+      for (int f = 0; f < frame_count; f++)
+        {
+          size_t index = data_frame_pos (f);
+
+          prepare_frame_delta (f, frame_mod[index], bitvec[f / Params::frames_per_bit], Random::Stream::data_up_down); // FIXME: rename
+        }
     }
 }
 
