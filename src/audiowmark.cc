@@ -247,19 +247,20 @@ class UpDownGen
 {
   Random::Stream random_stream;
   Random         random;
+  vector<int>    bands_reorder;
 
 public:
   UpDownGen (Random::Stream random_stream) :
     random_stream (random_stream),
-    random (0, random_stream)
+    random (0, random_stream),
+    bands_reorder (Params::max_band - Params::min_band + 1)
   {
   }
   void
   get (int f, vector<int>& up, vector<int>& down)
   {
-    vector<int> bands_reorder;
-    for (int i = Params::min_band; i <= Params::max_band; i++)
-      bands_reorder.push_back (i);
+    for (size_t i = 0; i < bands_reorder.size(); i++)
+      bands_reorder[i] = Params::min_band + i;
 
     random.seed (f, random_stream); // use per frame random seed
     random.shuffle (bands_reorder);
@@ -720,6 +721,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int ab = 0;
   vector<float> samples;
 
+  for (int j = 0; j < 100; j++)
+    {
+      vector<vector<FrameDelta>> frame_mod_vec;
+      init_frame_mod_vec (frame_mod_vec, 0, bitvec_a);
+    }
   vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;;
   init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
   while (true)
