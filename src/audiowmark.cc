@@ -299,6 +299,75 @@ randomize_bit_order (const vector<T>& bit_vec, bool encode)
   return out_bits;
 }
 
+class FFTAnalyzer
+{
+  int           m_n_channels = 0;
+  vector<float> m_window;
+  float        *m_frame = nullptr;
+  float        *m_frame_fft = nullptr;
+public:
+  FFTAnalyzer (int n_channels) :
+    m_n_channels (n_channels)
+  {
+    /* generate analysis window */
+    m_window.resize (Params::frame_size);
+
+    double window_weight = 0;
+    for (size_t i = 0; i < Params::frame_size; i++)
+      {
+        const double fsize_2 = Params::frame_size / 2.0;
+        // const double win =  window_cos ((i - fsize_2) / fsize_2);
+        const double win = window_hamming ((i - fsize_2) / fsize_2);
+        //const double win = 1;
+        m_window[i] = win;
+        window_weight += win;
+      }
+
+    /* normalize window using window weight */
+    for (size_t i = 0; i < Params::frame_size; i++)
+      {
+        m_window[i] *= 2.0 / window_weight;
+      }
+
+    /* allocate properly aligned buffers for SIMD */
+    m_frame  = new_array_float (Params::frame_size);
+    m_frame_fft = new_array_float (Params::frame_size);
+  }
+  ~FFTAnalyzer()
+  {
+    free_array_float (m_frame);
+    free_array_float (m_frame_fft);
+  }
+  vector<vector<complex<float>>>
+  run_fft (const vector<float>& samples)
+  {
+    assert (samples.size() >= Params::frame_size * m_n_channels);
+
+    vector<vector<complex<float>>> fft_out;
+    for (int ch = 0; ch < m_n_channels; ch++)
+      {
+        size_t pos = ch;
+        assert (pos + (Params::frame_size - 1) * m_n_channels < samples.size());
+
+        /* deinterleave frame data and apply window */
+        for (size_t x = 0; x < Params::frame_size; x++)
+          {
+            m_frame[x] = samples[pos] * m_window[x];
+            pos += m_n_channels;
+          }
+        /* FFT transform */
+        fftar_float (Params::frame_size, m_frame, m_frame_fft);
+
+        /* complex<float> and frame_fft have the same layout in memory */
+        const complex<float> *first = (complex<float> *) m_frame_fft;
+        const complex<float> *last  = first + Params::frame_size / 2 + 1;
+        fft_out.emplace_back (first, last);
+      }
+
+    return fft_out;
+  }
+};
+
 vector<vector<complex<float>>>
 compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count, const vector<int>& want_frames)
 {
@@ -727,6 +796,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;
   init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
+
+  const int n_channels = in_stream->n_channels();
+  FFTAnalyzer fft_analyzer (n_channels);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
@@ -736,11 +808,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           break;
         }
 
-      WavData wav_data (samples, in_stream->n_channels(), in_stream->sample_rate(), in_stream->bit_depth());
-      vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, 1, /* want all frames */ {});
-
+      vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples);
       vector<vector<complex<float>>> fft_delta_spect;
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
@@ -751,16 +821,16 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
 
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
+      for (int ch = 0; ch < n_channels; ch++)
         {
           /* mix watermark signal to output frame */
           vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
 
-          int pos = wav_data.n_channels() + ch;
+          int pos = ch;
           for (size_t x = 0; x < Params::frame_size; x++)
             {
               samples[pos] += fft_delta_out[x]; // FIXME: synth window, 3 frames
-              pos += wav_data.n_channels();
+              pos += n_channels;
             }
         }
       out_stream->write_frames (samples);
