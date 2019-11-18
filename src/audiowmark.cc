@@ -725,12 +725,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int ab = 0;
   vector<float> samples;
 
-  for (int j = 0; j < 100; j++)
-    {
-      vector<vector<FrameDelta>> frame_mod_vec;
-      init_frame_mod_vec (frame_mod_vec, 0, bitvec_a);
-    }
-  vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;;
+  vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;
   init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
   while (true)
     {
