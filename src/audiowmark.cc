@@ -1297,17 +1297,17 @@ private:
   void
   sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, const vector<int>& want_frames)
   {
-    FFTAnalyzer fft_analyzer (wav_data.n_channels());
-    const vector<float>& samples = wav_data.samples();
+    fft_out_db.clear();
 
     /* read past end? -> fail */
     if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
       return;
 
+    FFTAnalyzer fft_analyzer (wav_data.n_channels());
+    const vector<float>& samples = wav_data.samples();
     const size_t n_bands = Params::max_band - Params::min_band + 1;
     int out_pos = 0;
 
-    fft_out_db.clear();
     fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
 
     for (size_t f = 0; f < frame_count; f++)
