@@ -389,76 +389,6 @@ public:
   }
 };
 
-vector<vector<complex<float>>>
-compute_frame_ffts (const WavData& wav_data, size_t start_index, size_t frame_count, const vector<int>& want_frames)
-{
-  vector<vector<complex<float>>> fft_out;
-
-  /* if there is not enough space for frame_count values, return an error (empty vector) */
-  if (wav_data.n_values() < (start_index + frame_count * Params::frame_size) * wav_data.n_channels())
-    return fft_out;
-
-  /* generate analysis window */
-  vector<float> window (Params::frame_size);
-
-  double window_weight = 0;
-  for (size_t i = 0; i < Params::frame_size; i++)
-    {
-      const double fsize_2 = Params::frame_size / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      const double win = window_hamming ((i - fsize_2) / fsize_2);
-      //const double win = 1;
-      window[i] = win;
-      window_weight += win;
-    }
-
-  /* normalize window using window weight */
-  for (size_t i = 0; i < Params::frame_size; i++)
-    {
-      window[i] *= 2.0 / window_weight;
-    }
-
-  float *frame  = new_array_float (Params::frame_size);
-  float *frame_fft = new_array_float (Params::frame_size);
-
-  for (size_t f = 0; f < frame_count; f++)
-    {
-      if (!want_frames.empty() && !want_frames[f])
-        {
-          /* skip fft calculation completely if frame is not in want_frames */
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            fft_out.emplace_back();
-        }
-      else
-        {
-          for (int ch = 0; ch < wav_data.n_channels(); ch++)
-            {
-              const auto& samples = wav_data.samples();
-
-              size_t pos = (start_index + f * Params::frame_size) * wav_data.n_channels() + ch;
-              assert (pos + (Params::frame_size - 1) * wav_data.n_channels() < samples.size());
-
-              /* deinterleave frame data and apply window */
-              for (size_t x = 0; x < Params::frame_size; x++)
-                {
-                  frame[x] = samples[pos] * window[x];
-                  pos += wav_data.n_channels();
-                }
-              /* FFT transform */
-              fftar_float (Params::frame_size, frame, frame_fft);
-
-              /* complex<float> and frame_fft have the same layout in memory */
-              const complex<float> *first = (complex<float> *) frame_fft;
-              const complex<float> *last  = first + Params::frame_size / 2 + 1;
-              fft_out.emplace_back (first, last);
-            }
-        }
-    }
-  free_array_float (frame);
-  free_array_float (frame_fft);
-  return fft_out;
-}
-
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
 
@@ -1358,10 +1288,12 @@ private:
   void
   sync_fft (const WavData& wav_data, size_t index, size_t count, vector<float>& fft_out_db, const vector<int>& want_frames)
   {
+    FFTAnalyzer fft_analyzer (wav_data.n_channels());
+
     fft_out_db.clear();
 
     /* computing db-magnitude is expensive, so we better do it here */
-    vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, index, count, want_frames);
+    vector<vector<complex<float>>> fft_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
     for (size_t p = 0; p < fft_out.size(); p++)
       {
         const double min_db = -96;
