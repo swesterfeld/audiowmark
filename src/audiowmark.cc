@@ -1304,10 +1304,11 @@ private:
     if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
       return;
 
-    fft_out_db.clear();
+    const size_t n_bands = Params::max_band - Params::min_band + 1;
+    int out_pos = 0;
 
-    /* computing db-magnitude is expensive, so we better do it here */
-    vector<vector<complex<float>>> fft_out;
+    fft_out_db.clear();
+    fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
 
     for (size_t f = 0; f < frame_count; f++)
       {
@@ -1316,15 +1317,16 @@ private:
           {
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
               for (int i = Params::min_band; i <= Params::max_band; i++)
-                fft_out_db.push_back (min_db);
+                fft_out_db[out_pos++] = min_db;
           }
         else
           {
             vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
 
+            /* computing db-magnitude is expensive, so we better do it here */
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
               for (int i = Params::min_band; i <= Params::max_band; i++)
-                fft_out_db.push_back (db_from_factor (abs (frame_result[ch][i]), min_db));
+                fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
           }
       }
   }
