@@ -366,6 +366,27 @@ public:
 
     return fft_out;
   }
+  vector<vector<complex<float>>>
+  fft_range (const vector<float>& samples, size_t start_index, size_t frame_count)
+  {
+    vector<vector<complex<float>>> fft_out;
+
+    for (size_t f = 0; f < frame_count; f++)
+      {
+        const size_t input_start = (start_index + f * Params::frame_size) * m_n_channels;
+        const size_t input_end   = input_start + Params::frame_size * m_n_channels;
+
+        if (input_end > samples.size()) // not enough samples? fail -> return nothing
+          return {};
+
+        vector<float> input (samples.begin() + input_start, samples.begin() + input_end);
+
+        vector<vector<complex<float>>> frame_result = run_fft (input);
+        for (auto& fr : frame_result)
+          fft_out.emplace_back (std::move (fr));
+      }
+    return fft_out;
+  }
 };
 
 vector<vector<complex<float>>>
@@ -1434,13 +1455,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   ConvBlockType last_block_type = ConvBlockType::b;
   vector<vector<float>> ab_raw_bit_vec (2);
   vector<float>         ab_quality (2);
+  FFTAnalyzer           fft_analyzer (wav_data.n_channels());
   for (auto sync_score : sync_scores)
     {
       const size_t count = mark_sync_frame_count() + mark_data_frame_count();
       const size_t index = sync_score.index;
       const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
 
-      auto fft_range_out = compute_frame_ffts (wav_data, index, count, /* want all frames */ {});
+      auto fft_range_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
       if (fft_range_out.size())
         {
           /* ---- retrieve bits from watermark ---- */
