@@ -1300,31 +1300,20 @@ private:
 
     for (size_t f = 0; f < frame_count; f++)
       {
+        const double min_db = -96;
         if (want_frames.size() && !want_frames[f])
           {
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
-              fft_out.push_back ({});
+              for (int i = Params::min_band; i <= Params::max_band; i++)
+                fft_out_db.push_back (min_db);
           }
         else
           {
             vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
-            for (auto& fr : frame_result)
-              fft_out.emplace_back (std::move (fr));
-          }
-      }
-    for (size_t p = 0; p < fft_out.size(); p++)
-      {
-        const double min_db = -96;
 
-        if (!fft_out[p].size()) // not in want_frames?
-          {
-            for (int i = Params::min_band; i <= Params::max_band; i++)
-              fft_out_db.push_back (min_db);
-          }
-        else
-          {
-            for (int i = Params::min_band; i <= Params::max_band; i++)
-              fft_out_db.push_back (db_from_factor (abs (fft_out[p][i]), min_db));
+            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              for (int i = Params::min_band; i <= Params::max_band; i++)
+                fft_out_db.push_back (db_from_factor (abs (frame_result[ch][i]), min_db));
           }
       }
   }
