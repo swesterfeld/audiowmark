@@ -1284,31 +1284,30 @@ public:
   }
 private:
   void
-  sync_fft (const WavData& wav_data, size_t index, size_t count, vector<float>& fft_out_db, const vector<int>& want_frames)
+  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, const vector<int>& want_frames)
   {
     FFTAnalyzer fft_analyzer (wav_data.n_channels());
     const vector<float>& samples = wav_data.samples();
+
+    /* read past end? -> fail */
+    if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
+      return;
 
     fft_out_db.clear();
 
     /* computing db-magnitude is expensive, so we better do it here */
     vector<vector<complex<float>>> fft_out;
 
-    for (size_t f = 0; f < count; f++)
+    for (size_t f = 0; f < frame_count; f++)
       {
-        const size_t input_start = (index + f * Params::frame_size) * wav_data.n_channels();
-        const size_t input_end   = input_start + Params::frame_size * wav_data.n_channels();
-
-        if (input_end > samples.size() || (want_frames.size() && !want_frames[f]))
+        if (want_frames.size() && !want_frames[f])
           {
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
               fft_out.push_back ({});
           }
         else
           {
-            vector<float> input (samples.begin() + input_start, samples.begin() + input_end);
-
-            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (input, 0);
+            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
             for (auto& fr : frame_result)
               fft_out.emplace_back (std::move (fr));
           }
