@@ -339,14 +339,14 @@ public:
     free_array_float (m_frame_fft);
   }
   vector<vector<complex<float>>>
-  run_fft (const vector<float>& samples)
+  run_fft (const vector<float>& samples, size_t start_index)
   {
-    assert (samples.size() >= Params::frame_size * m_n_channels);
+    assert (samples.size() >= (Params::frame_size + start_index) * m_n_channels);
 
     vector<vector<complex<float>>> fft_out;
     for (int ch = 0; ch < m_n_channels; ch++)
       {
-        size_t pos = ch;
+        size_t pos = start_index * m_n_channels + ch;
         assert (pos + (Params::frame_size - 1) * m_n_channels < samples.size());
 
         /* deinterleave frame data and apply window */
@@ -371,17 +371,15 @@ public:
   {
     vector<vector<complex<float>>> fft_out;
 
+    /* if there is not enough space for frame_count values, return an error (empty vector) */
+    if (samples.size() < (start_index + frame_count * Params::frame_size) * m_n_channels)
+      return fft_out;
+
     for (size_t f = 0; f < frame_count; f++)
       {
-        const size_t input_start = (start_index + f * Params::frame_size) * m_n_channels;
-        const size_t input_end   = input_start + Params::frame_size * m_n_channels;
+        const size_t frame_start = (f * Params::frame_size) + start_index;
 
-        if (input_end > samples.size()) // not enough samples? fail -> return nothing
-          return {};
-
-        vector<float> input (samples.begin() + input_start, samples.begin() + input_end);
-
-        vector<vector<complex<float>>> frame_result = run_fft (input);
+        vector<vector<complex<float>>> frame_result = run_fft (samples, frame_start);
         for (auto& fr : frame_result)
           fft_out.emplace_back (std::move (fr));
       }
@@ -759,7 +757,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           break;
         }
 
-      vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples);
+      vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
       vector<vector<complex<float>>> fft_delta_spect;
       for (int ch = 0; ch < n_channels; ch++)
         {
@@ -1310,7 +1308,7 @@ private:
           {
             vector<float> input (samples.begin() + input_start, samples.begin() + input_end);
 
-            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (input);
+            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (input, 0);
             for (auto& fr : frame_result)
               fft_out.emplace_back (std::move (fr));
           }
