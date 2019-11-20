@@ -522,7 +522,7 @@ apply_frame_mod (const vector<FrameMod>& frame_mod, const vector<complex<float>>
 }
 
 void
-mark_data_stream (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
+mark_data (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
 {
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
   assert (frame_mod.size() >= mark_data_frame_count());
@@ -570,7 +570,7 @@ mark_sync_frame_count()
 }
 
 void
-mark_sync_stream (vector<vector<FrameMod>>& frame_mod, int ab)
+mark_sync (vector<vector<FrameMod>>& frame_mod, int ab)
 {
   const int frame_count = mark_sync_frame_count();
   assert (frame_mod.size() >= mark_sync_frame_count());
@@ -609,8 +609,8 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
   for (auto& frame_mod : frame_mod_vec)
     frame_mod.resize (Params::max_band + 1);
 
-  mark_sync_stream (frame_mod_vec, ab);
-  mark_data_stream (frame_mod_vec, bitvec);
+  mark_sync (frame_mod_vec, ab);
+  mark_data (frame_mod_vec, bitvec);
 }
 
 template<class R>
