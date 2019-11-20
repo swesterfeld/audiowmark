@@ -588,18 +588,17 @@ mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
 }
 
 void
-mark_pad (const WavData& wav_data, size_t frame, const vector<vector<complex<float>>>& fft_out, vector<vector<complex<float>>>& fft_delta_spect)
+init_pad_mod_vec (vector<vector<FrameDelta>>& pad_mod_vec)
 {
-  /* TODO FIXME
-  assert (fft_out.size() >= (frame + 1) * wav_data.n_channels());
+  UpDownGen up_down_gen (Random::Stream::pad_up_down);
 
-  for (int ch = 0; ch < wav_data.n_channels(); ch++)
+  for (size_t f = 0; f < Params::frames_pad_start; f++)
     {
-      size_t index = frame * wav_data.n_channels() + ch;
+      vector<FrameDelta> mod (Params::max_band + 1);
 
-      mark_bit_linear (frame, fft_out[index], fft_delta_spect[index], 0, Random::Stream::pad_up_down);
+      prepare_frame_delta (up_down_gen, f, mod, 0);
+      pad_mod_vec.push_back (mod);
     }
-  */
 }
 
 void
@@ -754,6 +753,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int ab = 0;
   vector<float> samples;
 
+  vector<vector<FrameDelta>> pad_mod_vec;
+  init_pad_mod_vec (pad_mod_vec);
+
   vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;
   init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
 
@@ -774,8 +776,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         {
           fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
         }
-
-      if (state == State::WATERMARK)
+      if (state == State::PAD)
+        {
+          for (int ch = 0; ch < in_stream->n_channels(); ch++)
+            apply_frame_delta (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+        }
+      else if (state == State::WATERMARK)
         {
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
             apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
@@ -1602,6 +1608,45 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
 }
 
 int
+test_subtract (const string& infile1, const string& infile2, const string& outfile)
+{
+  WavData in1_data;
+  if (!in1_data.load (infile1))
+    {
+      error ("audiowmark: error loading %s: %s\n", infile1.c_str(), in1_data.error_blurb());
+      return 1;
+    }
+  WavData in2_data;
+  if (!in2_data.load (infile2))
+    {
+      error ("audiowmark: error loading %s: %s\n", infile2.c_str(), in2_data.error_blurb());
+      return 1;
+    }
+  if (in1_data.n_values() != in2_data.n_values())
+    {
+      error ("audiowmark: %s values: %zd ; %s values: %zd ; size mismatch",
+             infile1.c_str(), in1_data.n_values(),
+             infile2.c_str(), in2_data.n_values());
+      return 1;
+    }
+  assert (in1_data.n_channels() == in2_data.n_channels());
+
+  const auto& in1_signal = in1_data.samples();
+  const auto& in2_signal = in2_data.samples();
+  vector<float> out_signal;
+  for (size_t i = 0; i < in1_data.n_values(); i++)
+    out_signal.push_back (in1_signal[i] - in2_signal[i]);
+
+  WavData out_wav_data (out_signal, in1_data.n_channels(), in1_data.sample_rate(), in1_data.bit_depth());
+  if (!out_wav_data.save (outfile))
+    {
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      return 1;
+    }
+  return 0;
+}
+
+int
 gen_key (const string& outfile)
 {
   FILE *f = fopen (outfile.c_str(), "w");
@@ -1646,6 +1691,10 @@ main (int argc, char **argv)
   else if (op == "cut-start" && argc == 5)
     {
       cut_start (argv[2], argv[3], argv[4]);
+    }
+  else if (op == "test-subtract" && argc == 5)
+    {
+      test_subtract (argv[2], argv[3], argv[4]);
     }
   else if (op == "gen-key" && argc == 3)
     {
