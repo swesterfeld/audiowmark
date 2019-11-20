@@ -478,34 +478,34 @@ gen_mix_entries()
   return mix_entries;
 }
 
-enum class FrameDelta : uint8_t {
+enum class FrameMod : uint8_t {
   KEEP = 0,
   UP,
   DOWN
 };
 
 void
-prepare_frame_delta (UpDownGen& up_down_gen, int f, vector<FrameDelta>& frame_delta, int data_bit)
+prepare_frame_mod (UpDownGen& up_down_gen, int f, vector<FrameMod>& frame_mod, int data_bit)
 {
   UpDownArray up, down;
   up_down_gen.get (f, up, down);
   for (auto u : up)
-    frame_delta[u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
+    frame_mod[u] = data_bit ? FrameMod::UP : FrameMod::DOWN;
 
   for (auto d : down)
-    frame_delta[d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
+    frame_mod[d] = data_bit ? FrameMod::DOWN : FrameMod::UP;
 }
 
 void
-apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect)
+apply_frame_mod (const vector<FrameMod>& frame_mod, const vector<complex<float>>& fft_out, vector<complex<float>>& fft_delta_spect)
 {
   const float   min_mag = 1e-7;   // avoid computing pow (0.0, -water_delta) which would be inf
-  for (size_t i = 0; i < frame_delta.size(); i++)
+  for (size_t i = 0; i < frame_mod.size(); i++)
     {
-      if (frame_delta[i] == FrameDelta::KEEP)
+      if (frame_mod[i] == FrameMod::KEEP)
         continue;
 
-      int data_bit_sign = (frame_delta[i] == FrameDelta::UP) ? 1 : -1;
+      int data_bit_sign = (frame_mod[i] == FrameMod::UP) ? 1 : -1;
       /*
        * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
        *
@@ -522,7 +522,7 @@ apply_frame_delta (const vector<FrameDelta>& frame_delta, const vector<complex<f
 }
 
 void
-mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitvec)
+mark_data_stream (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
 {
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
   assert (frame_mod.size() >= mark_data_frame_count());
@@ -545,8 +545,8 @@ mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitv
               const int d = mix_entries[b].down;
               const int index = mix_entries[b].frame;
 
-              frame_mod[index][u] = data_bit ? FrameDelta::UP : FrameDelta::DOWN;
-              frame_mod[index][d] = data_bit ? FrameDelta::DOWN : FrameDelta::UP;
+              frame_mod[index][u] = data_bit ? FrameMod::UP : FrameMod::DOWN;
+              frame_mod[index][d] = data_bit ? FrameMod::DOWN : FrameMod::UP;
             }
         }
     }
@@ -558,7 +558,7 @@ mark_data_stream (vector<vector<FrameDelta>>& frame_mod, const vector<int>& bitv
         {
           size_t index = data_frame_pos (f);
 
-          prepare_frame_delta (up_down_gen, f, frame_mod[index], bitvec[f / Params::frames_per_bit]); // FIXME: rename
+          prepare_frame_mod (up_down_gen, f, frame_mod[index], bitvec[f / Params::frames_per_bit]);
         }
     }
 }
@@ -570,7 +570,7 @@ mark_sync_frame_count()
 }
 
 void
-mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
+mark_sync_stream (vector<vector<FrameMod>>& frame_mod, int ab)
 {
   const int frame_count = mark_sync_frame_count();
   assert (frame_mod.size() >= mark_sync_frame_count());
@@ -583,26 +583,26 @@ mark_sync_stream (vector<vector<FrameDelta>>& frame_mod, int ab)
       size_t index = sync_frame_pos (f);
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
-      prepare_frame_delta (up_down_gen, f, frame_mod[index], data_bit); // FIXME: rename
+      prepare_frame_mod (up_down_gen, f, frame_mod[index], data_bit);
     }
 }
 
 void
-init_pad_mod_vec (vector<vector<FrameDelta>>& pad_mod_vec)
+init_pad_mod_vec (vector<vector<FrameMod>>& pad_mod_vec)
 {
   UpDownGen up_down_gen (Random::Stream::pad_up_down);
 
   for (size_t f = 0; f < Params::frames_pad_start; f++)
     {
-      vector<FrameDelta> mod (Params::max_band + 1);
+      vector<FrameMod> mod (Params::max_band + 1);
 
-      prepare_frame_delta (up_down_gen, f, mod, 0);
+      prepare_frame_mod (up_down_gen, f, mod, 0);
       pad_mod_vec.push_back (mod);
     }
 }
 
 void
-init_frame_mod_vec (vector<vector<FrameDelta>>& frame_mod_vec, int ab, const vector<int>& bitvec)
+init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vector<int>& bitvec)
 {
   frame_mod_vec.resize (mark_sync_frame_count() + mark_data_frame_count());
 
@@ -753,10 +753,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   int ab = 0;
   vector<float> samples;
 
-  vector<vector<FrameDelta>> pad_mod_vec;
+  vector<vector<FrameMod>> pad_mod_vec;
   init_pad_mod_vec (pad_mod_vec);
 
-  vector<vector<FrameDelta>> frame_mod_vec_a, frame_mod_vec_b;
+  vector<vector<FrameMod>> frame_mod_vec_a, frame_mod_vec_b;
   init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
 
   const int n_channels = in_stream->n_channels();
@@ -779,12 +779,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       if (state == State::PAD)
         {
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_delta (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+            apply_frame_mod (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
       else if (state == State::WATERMARK)
         {
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_delta (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
+            apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
 
       for (int ch = 0; ch < n_channels; ch++)

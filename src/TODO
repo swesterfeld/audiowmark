@@ -5,6 +5,4 @@ streaming:
 - need explicit Error objects
 - logging
 - resampling
-- padding
 - synthesis with 3 frames
-- frame delta should be frame mod (rename)
