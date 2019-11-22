@@ -834,19 +834,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           /* mix watermark signal to output frame */
           vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
 
-          for (int dframe = -1; dframe <= 1; dframe++)
+          for (int dframe = 0; dframe <= 2; dframe++)
             {
-              const int wstart = (dframe + 1) * Params::frame_size;
+              const int wstart = dframe * Params::frame_size;
 
-              if (frame_number + dframe > 0)
+              int pos = dframe * Params::frame_size * n_channels + ch;
+              for (size_t x = 0; x < Params::frame_size; x++)
                 {
-                  int pos = (1 + dframe) * Params::frame_size * n_channels + ch;
-
-                  for (size_t x = 0; x < Params::frame_size; x++)
-                    {
-                      synth_samples[pos] += fft_delta_out[x] * synth_window[wstart + x];
-                      pos += n_channels;
-                    }
+                  synth_samples[pos] += fft_delta_out[x] * synth_window[wstart + x];
+                  pos += n_channels;
                 }
             }
         }
