@@ -719,6 +719,13 @@ class WatermarkSynth
         window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
       }
   }
+  vector<float>
+  concat (vector<float>& fv1, vector<float>& fv2)
+  {
+    vector<float> fv = fv1;
+    fv.insert (fv.end(), fv2.begin(), fv2.end());
+    return fv;
+  }
 public:
   WatermarkSynth (int n_channels) :
     n_channels (n_channels)
@@ -727,13 +734,26 @@ public:
     synth_samples.resize (window.size() * n_channels);
   }
   vector<float>
-  end (vector<float>& samples)
+  end (const vector<float>& samples)
   {
-    return samples;
+    /* process full frame, with padded input samples */
+    vector<float> in1 = samples;
+    in1.resize (Params::frame_size * n_channels);
+
+    vector<float> out1 = run (in1, {});
+
+    /* process frame containing zeros, but truncate result to match input size */
+    vector<float> in2 (Params::frame_size * n_channels);
+    vector<float> out2 = run (in2, {});
+    out2.resize (samples.size());
+
+    return concat (out1, out2);
   }
   vector<float>
-  run (vector<float>& samples, vector<vector<complex<float>>>& fft_delta_spect)
+  run (const vector<float>& samples, const vector<vector<complex<float>>>& fft_delta_spect)
   {
+    assert (samples.size() == Params::frame_size * n_channels);
+
     const size_t synth_frame_sz = Params::frame_size * n_channels;
     /* move frame 1 and frame 2 to frame 0 and frame 1 */
     std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
@@ -744,7 +764,8 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       {
         /* mix watermark signal to output frame */
-        vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
+        vector<float> fft_delta_out = fft_delta_spect.size() ? ifft (fft_delta_spect[ch]) :
+                                      vector<float> (Params::frame_size * n_channels); // if fft_delta_spect was empty (no modification)
 
         for (int dframe = 0; dframe <= 2; dframe++)
           {
@@ -862,7 +883,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       if (samples.size() < Params::frame_size * in_stream->n_channels())
         {
           vector<float> wm_samples = wm_synth.end (samples);
-          out_stream->write_frames (wm_samples);
+          if (wm_samples.size())
+            out_stream->write_frames (wm_samples);
           break;
         }
 
