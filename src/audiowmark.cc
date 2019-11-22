@@ -1624,17 +1624,20 @@ test_subtract (const string& infile1, const string& infile2, const string& outfi
     }
   if (in1_data.n_values() != in2_data.n_values())
     {
-      error ("audiowmark: %s values: %zd ; %s values: %zd ; size mismatch",
-             infile1.c_str(), in1_data.n_values(),
-             infile2.c_str(), in2_data.n_values());
-      return 1;
+      int64_t l1 = in1_data.n_values();
+      int64_t l2 = in2_data.n_values();
+      size_t  delta = std::abs (l1 - l2);
+      warning ("audiowmark: size mismatch: %zd frames\n", delta / in1_data.n_channels());
+      warning (" - %s frames: %zd\n", infile1.c_str(), in1_data.n_values() / in1_data.n_channels());
+      warning (" - %s frames: %zd\n", infile2.c_str(), in2_data.n_values() / in2_data.n_channels());
     }
   assert (in1_data.n_channels() == in2_data.n_channels());
 
   const auto& in1_signal = in1_data.samples();
   const auto& in2_signal = in2_data.samples();
+  size_t len = std::min (in1_data.n_values(), in2_data.n_values());
   vector<float> out_signal;
-  for (size_t i = 0; i < in1_data.n_values(); i++)
+  for (size_t i = 0; i < len; i++)
     out_signal.push_back (in1_signal[i] - in2_signal[i]);
 
   WavData out_wav_data (out_signal, in1_data.n_channels(), in1_data.sample_rate(), in1_data.bit_depth());
