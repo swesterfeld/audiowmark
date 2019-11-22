@@ -6,3 +6,4 @@ streaming:
 - logging
 - resampling
 - synthesis with 3 frames
+- raw streams
