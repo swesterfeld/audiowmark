@@ -613,38 +613,6 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
   mark_data (frame_mod_vec, bitvec);
 }
 
-vector<float>
-generate_synth_window()
-{
-  vector<float> synth_window (Params::frame_size * 3);
-  for (size_t i = 0; i < synth_window.size(); i++)
-    {
-      const double overlap = 0.1;
-
-      // triangular basic window
-      double tri;
-      double norm_pos = (double (i) - Params::frame_size) / Params::frame_size;
-
-      if (norm_pos > 0.5) /* symmetric window */
-        norm_pos = 1 - norm_pos;
-      if (norm_pos < -overlap)
-        {
-          tri = 0;
-        }
-      else if (norm_pos < overlap)
-        {
-          tri = 0.5 + norm_pos / (2 * overlap);
-        }
-      else
-        {
-          tri = 1;
-        }
-      // cosine
-      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-    }
-  return synth_window;
-}
-
 template<class R>
 static void
 process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
@@ -708,6 +676,100 @@ resample (const WavData& wav_data, int rate)
   fprintf (stderr, "audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
   exit (1);
 }
+
+/* synthesizes a watermark stream (overlap add with synthesis window)
+ *
+ * input: samples + delta fft
+ * output: samples
+ */
+class WatermarkSynth
+{
+  const int     n_channels = 0;
+  vector<float> window;
+  vector<float> synth_samples;
+  bool          first_frame = true;
+
+  void
+  generate_window()
+  {
+    window.resize (Params::frame_size * 3);
+    for (size_t i = 0; i < window.size(); i++)
+      {
+        const double overlap = 0.1;
+
+        // triangular basic window
+        double tri;
+        double norm_pos = (double (i) - Params::frame_size) / Params::frame_size;
+
+        if (norm_pos > 0.5) /* symmetric window */
+          norm_pos = 1 - norm_pos;
+        if (norm_pos < -overlap)
+          {
+            tri = 0;
+          }
+        else if (norm_pos < overlap)
+          {
+            tri = 0.5 + norm_pos / (2 * overlap);
+          }
+        else
+          {
+            tri = 1;
+          }
+        // cosine
+        window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+      }
+  }
+public:
+  WatermarkSynth (int n_channels) :
+    n_channels (n_channels)
+  {
+    generate_window();
+    synth_samples.resize (window.size() * n_channels);
+  }
+  vector<float>
+  end (vector<float>& samples)
+  {
+    return samples;
+  }
+  vector<float>
+  run (vector<float>& samples, vector<vector<complex<float>>>& fft_delta_spect)
+  {
+    const size_t synth_frame_sz = Params::frame_size * n_channels;
+    /* move frame 1 and frame 2 to frame 0 and frame 1 */
+    std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
+    /* zero out frame 2 */
+    std::fill (&synth_samples[synth_frame_sz * 2], &synth_samples[synth_frame_sz * 3], 0);
+    for (size_t i = 0; i < Params::frame_size * n_channels; i++)
+      synth_samples[i + synth_frame_sz] += samples[i];
+    for (int ch = 0; ch < n_channels; ch++)
+      {
+        /* mix watermark signal to output frame */
+        vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
+
+        for (int dframe = 0; dframe <= 2; dframe++)
+          {
+            const int wstart = dframe * Params::frame_size;
+
+            int pos = dframe * Params::frame_size * n_channels + ch;
+            for (size_t x = 0; x < Params::frame_size; x++)
+              {
+                synth_samples[pos] += fft_delta_out[x] * window[wstart + x];
+                pos += n_channels;
+              }
+          }
+      }
+    if (first_frame)
+      {
+        first_frame = false;
+        return {};
+      }
+    else
+      {
+        vector<float> out_samples (synth_samples.begin(), synth_samples.begin() + Params::frame_size * n_channels);
+        return out_samples;
+      }
+  }
+};
 
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
@@ -793,15 +855,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   FFTAnalyzer fft_analyzer (n_channels);
-  vector<float> synth_window = generate_synth_window();
-  vector<float> synth_samples (synth_window.size() * n_channels);
-  bool          synth_first = true;
+  WatermarkSynth wm_synth (n_channels);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
       if (samples.size() < Params::frame_size * in_stream->n_channels())
         {
-          out_stream->write_frames (samples);
+          vector<float> wm_samples = wm_synth.end (samples);
+          out_stream->write_frames (wm_samples);
           break;
         }
 
@@ -821,40 +882,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           for (int ch = 0; ch < in_stream->n_channels(); ch++)
             apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
-
-      const size_t synth_frame_sz = Params::frame_size * n_channels;
-      /* move frame 1 and frame 2 to frame 0 and frame 1 */
-      std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
-      /* zero out frame 2 */
-      std::fill (&synth_samples[synth_frame_sz * 2], &synth_samples[synth_frame_sz * 3], 0);
-      for (size_t i = 0; i < Params::frame_size * n_channels; i++)
-        synth_samples[i + synth_frame_sz] += samples[i];
-      for (int ch = 0; ch < n_channels; ch++)
-        {
-          /* mix watermark signal to output frame */
-          vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
-
-          for (int dframe = 0; dframe <= 2; dframe++)
-            {
-              const int wstart = dframe * Params::frame_size;
-
-              int pos = dframe * Params::frame_size * n_channels + ch;
-              for (size_t x = 0; x < Params::frame_size; x++)
-                {
-                  synth_samples[pos] += fft_delta_out[x] * synth_window[wstart + x];
-                  pos += n_channels;
-                }
-            }
-        }
-      if (!synth_first)
-        {
-          vector<float> out_samples (synth_samples.begin(), synth_samples.begin() + Params::frame_size * n_channels);
-          out_stream->write_frames (out_samples);
-        }
-      else
-        {
-          synth_first = false;
-        }
+      vector<float> wm_samples = wm_synth.run (samples, fft_delta_spect);
+      if (wm_samples.size())
+        out_stream->write_frames (wm_samples);
 
       frame_number++;
       if (frame_number == frame_bound)
@@ -900,109 +930,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 #endif
 
 #if 0
-  WavData wav_data (in_signal, orig_wav_data.n_channels(), Params::mark_sample_rate, orig_wav_data.bit_depth());
-
-  /* we have extra space for the padded wave data -> truncated before save */
-  vector<float> out_signal (wav_data.n_values());
-
-  vector<vector<complex<float>>> fft_out = compute_frame_ffts (wav_data, 0, frame_count (wav_data), /* want all frames */ {});
-  vector<vector<complex<float>>> fft_delta_spect;
-  for (int f = 0; f < frame_count (wav_data); f++)
-    {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
-        {
-          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
-        }
-    }
-  size_t frame_index = 0;
-  int    data_blocks = 0;
-  /* padding at start */
-  while (frame_index < Params::frames_pad_start && frame_index < size_t (frame_count (wav_data)))
-    {
-      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
-      frame_index++;
-    }
-  /* embed sync|data|sync|data|... */
-  while (frame_index + (mark_sync_frame_count() + mark_data_frame_count()) < size_t (frame_count (wav_data)))
-    {
-      mark_sync (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1));
-      mark_data (wav_data, frame_index, fft_out, fft_delta_spect, (data_blocks & 1) ? bitvec_b : bitvec_a);
-
-      frame_index += mark_sync_frame_count() + mark_data_frame_count();
-
-      data_blocks++;
-    }
-  /* padding at end */
-  while (frame_index < size_t (frame_count (wav_data)))
-    {
-      mark_pad (wav_data, frame_index, fft_out, fft_delta_spect);
-      frame_index++;
-    }
-
-  /* generate synthesis window */
-  // we want overlapping synthesis windows, so the window affects the last, the current and the next frame
-  vector<float> synth_window (Params::frame_size * 3);
-  for (size_t i = 0; i < synth_window.size(); i++)
-    {
-      const double overlap = 0.1;
-
-      // triangular basic window
-      double tri;
-      double norm_pos = (double (i) - Params::frame_size) / Params::frame_size;
-
-      if (norm_pos > 0.5) /* symmetric window */
-        norm_pos = 1 - norm_pos;
-      if (norm_pos < -overlap)
-        {
-          tri = 0;
-        }
-      else if (norm_pos < overlap)
-        {
-          tri = 0.5 + norm_pos / (2 * overlap);
-        }
-      else
-        {
-          tri = 1;
-        }
-      // cosine
-      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
-    }
-  for (int f = 0; f < frame_count (wav_data); f++)
-    {
-      for (int ch = 0; ch < wav_data.n_channels(); ch++)
-        {
-          /* mix watermark signal to output frame */
-          vector<float> fft_delta_out = ifft (fft_delta_spect[f * wav_data.n_channels() + ch]);
-
-          for (int dframe = -1; dframe <= 1; dframe++)
-            {
-              const int wstart = (dframe + 1) * Params::frame_size;
-
-              if (f + dframe > 0 && f + dframe < frame_count (wav_data))
-                {
-                  int pos = (f + dframe) * Params::frame_size * wav_data.n_channels() + ch;
-
-                  for (size_t x = 0; x < Params::frame_size; x++)
-                    {
-                      out_signal[pos] += fft_delta_out[x] * synth_window[wstart + x];
-                      pos += wav_data.n_channels();
-                    }
-                }
-            }
-        }
-    }
-
-  if (wav_data.sample_rate() != orig_wav_data.sample_rate())
-    {
-      /* resample the watermark to the original sample rate */
-      WavData mark_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-      mark_wav_data = resample (mark_wav_data, orig_wav_data.sample_rate());
-
-      out_signal = mark_wav_data.samples();
-    }
-  vector<float> samples = orig_wav_data.samples();
-  out_signal.resize (samples.size());
-
   if (Params::snr)
     {
       /* compute/show signal to noise ratio */
@@ -1042,13 +969,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   printf ("Data Blocks:  %d\n", data_blocks);
   printf ("Volume Norm:  %.3f (%.2f dB)\n", scale, db_from_factor (scale, -96));
-
-  WavData out_wav_data (samples, orig_wav_data.n_channels(), orig_wav_data.sample_rate(), orig_wav_data.bit_depth());
-  if (!out_wav_data.save (outfile))
-    {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
-      return 1;
-    }
 #endif
   return 0;
 }
