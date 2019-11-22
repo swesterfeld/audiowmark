@@ -613,6 +613,38 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
   mark_data (frame_mod_vec, bitvec);
 }
 
+vector<float>
+generate_synth_window()
+{
+  vector<float> synth_window (Params::frame_size * 3);
+  for (size_t i = 0; i < synth_window.size(); i++)
+    {
+      const double overlap = 0.1;
+
+      // triangular basic window
+      double tri;
+      double norm_pos = (double (i) - Params::frame_size) / Params::frame_size;
+
+      if (norm_pos > 0.5) /* symmetric window */
+        norm_pos = 1 - norm_pos;
+      if (norm_pos < -overlap)
+        {
+          tri = 0;
+        }
+      else if (norm_pos < overlap)
+        {
+          tri = 0.5 + norm_pos / (2 * overlap);
+        }
+      else
+        {
+          tri = 1;
+        }
+      // cosine
+      synth_window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
+    }
+  return synth_window;
+}
+
 template<class R>
 static void
 process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
@@ -761,6 +793,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   FFTAnalyzer fft_analyzer (n_channels);
+  vector<float> synth_window = generate_synth_window();
+  vector<float> synth_samples (synth_window.size() * n_channels);
+  bool          synth_first = true;
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
@@ -787,19 +822,43 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
             apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
         }
 
+      const size_t synth_frame_sz = Params::frame_size * n_channels;
+      /* move frame 1 and frame 2 to frame 0 and frame 1 */
+      std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
+      /* zero out frame 2 */
+      std::fill (&synth_samples[synth_frame_sz * 2], &synth_samples[synth_frame_sz * 3], 0);
+      for (size_t i = 0; i < Params::frame_size * n_channels; i++)
+        synth_samples[i + synth_frame_sz] += samples[i];
       for (int ch = 0; ch < n_channels; ch++)
         {
           /* mix watermark signal to output frame */
           vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
 
-          int pos = ch;
-          for (size_t x = 0; x < Params::frame_size; x++)
+          for (int dframe = -1; dframe <= 1; dframe++)
             {
-              samples[pos] += fft_delta_out[x]; // FIXME: synth window, 3 frames
-              pos += n_channels;
+              const int wstart = (dframe + 1) * Params::frame_size;
+
+              if (frame_number + dframe > 0)
+                {
+                  int pos = (1 + dframe) * Params::frame_size * n_channels + ch;
+
+                  for (size_t x = 0; x < Params::frame_size; x++)
+                    {
+                      synth_samples[pos] += fft_delta_out[x] * synth_window[wstart + x];
+                      pos += n_channels;
+                    }
+                }
             }
         }
-      out_stream->write_frames (samples);
+      if (!synth_first)
+        {
+          vector<float> out_samples (synth_samples.begin(), synth_samples.begin() + Params::frame_size * n_channels);
+          out_stream->write_frames (out_samples);
+        }
+      else
+        {
+          synth_first = false;
+        }
 
       frame_number++;
       if (frame_number == frame_bound)
