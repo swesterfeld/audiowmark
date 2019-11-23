@@ -792,6 +792,85 @@ public:
   }
 };
 
+class WatermarkGen
+{
+  enum State { PAD, WATERMARK } state = State::PAD;
+
+  const int                 n_channels = 0;
+  int                       frame_number = 0;
+  int                       frame_bound = Params::frames_pad_start;
+  int                       ab = 0;
+
+  FFTAnalyzer               fft_analyzer;
+  WatermarkSynth            wm_synth;
+
+  vector<int>               bitvec_a;
+  vector<int>               bitvec_b;
+  vector<vector<FrameMod>>  pad_mod_vec;
+  vector<vector<FrameMod>>  frame_mod_vec_a;
+  vector<vector<FrameMod>>  frame_mod_vec_b;
+public:
+  WatermarkGen (int n_channels, const vector<int>& bitvec_a, const vector<int>& bitvec_b) :
+    n_channels (n_channels),
+    fft_analyzer (n_channels),
+    wm_synth (n_channels),
+    bitvec_a (bitvec_a),
+    bitvec_b (bitvec_b)
+  {
+    init_pad_mod_vec (pad_mod_vec);
+    init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
+  }
+  vector<float>
+  run (const vector<float>& samples)
+  {
+    vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
+
+    vector<vector<complex<float>>> fft_delta_spect;
+    for (int ch = 0; ch < n_channels; ch++)
+      fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
+
+    if (state == State::PAD)
+      {
+        for (int ch = 0; ch < n_channels; ch++)
+          apply_frame_mod (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+      }
+    else if (state == State::WATERMARK)
+      {
+        for (int ch = 0; ch < n_channels; ch++)
+          apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
+      }
+
+    frame_number++;
+    if (frame_number == frame_bound)
+      {
+        frame_number = 0;
+
+        if (state == PAD)
+          {
+            state = WATERMARK;
+            frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+          }
+        else if (state == WATERMARK)
+          {
+            ab = (ab + 1) & 1; // write A|B|A|B|...
+            frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+
+            if (frame_mod_vec_b.empty())
+              {
+                // we initialize this only when we need it to minimize startup latency
+                init_frame_mod_vec (frame_mod_vec_b, 1, bitvec_b);
+              }
+          }
+      }
+    return wm_synth.run (samples, fft_delta_spect);
+  }
+  vector<float>
+  end (const vector<float>& samples)
+  {
+    return wm_synth.end (samples);
+  }
+};
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -862,76 +941,27 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           return 1;
         }
     }
-  enum State { PAD, WATERMARK } state = State::PAD;
-  int frame_bound = Params::frames_pad_start;
-  int frame_number = 0;
-  int ab = 0;
   vector<float> samples;
 
-  vector<vector<FrameMod>> pad_mod_vec;
-  init_pad_mod_vec (pad_mod_vec);
-
-  vector<vector<FrameMod>> frame_mod_vec_a, frame_mod_vec_b;
-  init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
-
   const int n_channels = in_stream->n_channels();
-  FFTAnalyzer fft_analyzer (n_channels);
-  WatermarkSynth wm_synth (n_channels);
+  WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
-      if (samples.size() < Params::frame_size * in_stream->n_channels())
+      if (samples.size() < Params::frame_size * n_channels)
         {
-          vector<float> wm_samples = wm_synth.end (samples);
+          auto wm_samples = wm_gen.end (samples);
           if (wm_samples.size())
             out_stream->write_frames (wm_samples);
           break;
         }
 
-      vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
-      vector<vector<complex<float>>> fft_delta_spect;
-      for (int ch = 0; ch < n_channels; ch++)
-        {
-          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
-        }
-      if (state == State::PAD)
-        {
-          for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_mod (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
-        }
-      else if (state == State::WATERMARK)
-        {
-          for (int ch = 0; ch < in_stream->n_channels(); ch++)
-            apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
-        }
-      vector<float> wm_samples = wm_synth.run (samples, fft_delta_spect);
+      auto wm_samples = wm_gen.run (samples);
       if (wm_samples.size())
         out_stream->write_frames (wm_samples);
-
-      frame_number++;
-      if (frame_number == frame_bound)
-        {
-          frame_number = 0;
-
-          if (state == PAD)
-            {
-              state = WATERMARK;
-              frame_bound = mark_sync_frame_count() + mark_data_frame_count();
-            }
-          else if (state == WATERMARK)
-            {
-              ab = (ab + 1) & 1; // write A|B|A|B|...
-              frame_bound = mark_sync_frame_count() + mark_data_frame_count();
-
-              if (frame_mod_vec_b.empty())
-                {
-                  // we initialize this only when we need it to minimize startup latency
-                  init_frame_mod_vec (frame_mod_vec_b, 1, bitvec_b);
-                }
-            }
-        }
     }
 #if 0
+    }
   vector<float> in_signal;
   if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
     {
