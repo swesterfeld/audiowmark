@@ -759,8 +759,6 @@ public:
     std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
     /* zero out frame 2 */
     std::fill (&synth_samples[synth_frame_sz * 2], &synth_samples[synth_frame_sz * 3], 0);
-    for (size_t i = 0; i < Params::frame_size * n_channels; i++)
-      synth_samples[i + synth_frame_sz] += samples[i];
     for (int ch = 0; ch < n_channels; ch++)
       {
         /* mix watermark signal to output frame */
@@ -868,6 +866,33 @@ public:
   end (const vector<float>& samples)
   {
     return wm_synth.end (samples);
+  }
+};
+
+class AudioBuffer
+{
+  const int     n_channels = 0;
+  vector<float> buffer;
+
+public:
+  AudioBuffer (int n_channels) :
+    n_channels (n_channels)
+  {
+  }
+  void
+  write_frames (const vector<float>& samples)
+  {
+    buffer.insert (buffer.end(), samples.begin(), samples.end());
+  }
+  vector<float>
+  read_frames (size_t frames)
+  {
+    assert (frames * n_channels <= buffer.size());
+    const auto begin = buffer.begin();
+    const auto end   = begin + frames * n_channels;
+    vector<float> result (begin, end);
+    buffer.erase (begin, end);
+    return result;
   }
 };
 
@@ -1001,12 +1026,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
+  AudioBuffer audio_buffer (n_channels);
   BufferedResampler in_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate);
   BufferedResampler out_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate());
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
       in_resampler.write_frames (samples);
+      audio_buffer.write_frames (samples);
 
       const bool eof = samples.size() < Params::frame_size * n_channels;
 #if 0
@@ -1019,14 +1046,22 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 #endif
 
       while (in_resampler.can_read_frames() >= Params::frame_size)
-         {
-           auto r_samples = in_resampler.read_frames (Params::frame_size);
+        {
+          auto r_samples = in_resampler.read_frames (Params::frame_size);
 
-           auto wm_samples = wm_gen.run (r_samples);
-           out_resampler.write_frames (wm_samples);
+          auto wm_samples = wm_gen.run (r_samples);
+          out_resampler.write_frames (wm_samples);
 
-           out_stream->write_frames (out_resampler.read_frames (out_resampler.can_read_frames()));
-         }
+          size_t to_read = out_resampler.can_read_frames();
+          auto out_samples = out_resampler.read_frames (to_read);
+          auto orig_samples  = audio_buffer.read_frames (to_read);
+
+          assert (out_samples.size() == orig_samples.size());
+
+          for (size_t i = 0; i < out_samples.size(); i++)
+            out_samples[i] += orig_samples[i];
+          out_stream->write_frames (out_samples);
+        }
       if (eof)
         break;
     }
