@@ -871,6 +871,59 @@ public:
   }
 };
 
+class BufferedResampler
+{
+  const int     n_channels = 0;
+  Resampler     resampler;
+
+  vector<float> buffer;
+public:
+  BufferedResampler (int n_channels, int old_rate, int new_rate) :
+    n_channels (n_channels)
+  {
+    const int hlen = 16;
+    resampler.setup (old_rate, new_rate, n_channels, hlen);
+  }
+  void
+  write_frames (const vector<float>& frames)
+  {
+    vector<float> in = frames;
+    vector<float> out (256 * n_channels);
+
+    uint start = 0;
+    do
+      {
+        resampler.out_count = out.size() / n_channels;
+        resampler.out_data = &out[0];
+
+        resampler.inp_count = in.size() / n_channels - start;
+        resampler.inp_data  = &in[start * n_channels];
+        resampler.process();
+
+        size_t count = out.size() / n_channels - resampler.out_count;
+        buffer.insert (buffer.end(), out.begin(), out.begin() + count * n_channels);
+
+        start += in.size() / n_channels - start - resampler.inp_count;
+      }
+    while (start != in.size() / n_channels);
+  }
+  vector<float>
+  read_frames (size_t frames)
+  {
+    assert (frames * n_channels <= buffer.size());
+    const auto begin = buffer.begin();
+    const auto end   = begin + frames * n_channels;
+    vector<float> result (begin, end);
+    buffer.erase (begin, end);
+    return result;
+  }
+  size_t
+  can_read_frames() const
+  {
+    return buffer.size() / n_channels;
+  }
+};
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -908,11 +961,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), in_stream->error_blurb());
       return 1;
     }
-  if (in_stream->sample_rate() != Params::mark_sample_rate)
-    {
-      fprintf (stderr, "FIXME resampling support\n");
-      return 1;
-    }
   int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
   info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
   info ("Sample Rate:  %d\n", in_stream->sample_rate());
@@ -945,20 +993,34 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
+  BufferedResampler in_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate);
+  BufferedResampler out_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate());
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
-      if (samples.size() < Params::frame_size * n_channels)
+      in_resampler.write_frames (samples);
+
+      const bool eof = samples.size() < Params::frame_size * n_channels;
+#if 0
         {
           auto wm_samples = wm_gen.end (samples);
           if (wm_samples.size())
             out_stream->write_frames (wm_samples);
           break;
         }
+#endif
 
-      auto wm_samples = wm_gen.run (samples);
-      if (wm_samples.size())
-        out_stream->write_frames (wm_samples);
+      while (in_resampler.can_read_frames() >= Params::frame_size)
+         {
+           auto r_samples = in_resampler.read_frames (Params::frame_size);
+
+           auto wm_samples = wm_gen.run (r_samples);
+           out_resampler.write_frames (wm_samples);
+
+           out_stream->write_frames (out_resampler.read_frames (out_resampler.can_read_frames()));
+         }
+      if (eof)
+        break;
     }
 #if 0
     }
