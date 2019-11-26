@@ -894,16 +894,60 @@ public:
     buffer.erase (begin, end);
     return result;
   }
+  size_t
+  can_read_frames() const
+  {
+    return buffer.size() / n_channels;
+  }
 };
 
-class BufferedResampler
+class ResamplerImpl
+{
+public:
+  virtual
+  ~ResamplerImpl()
+  {
+  }
+
+  virtual void          write_frames (const vector<float>& frames) = 0;
+  virtual vector<float> read_frames (size_t frames) = 0;
+  virtual size_t        can_read_frames() const = 0;
+};
+
+class NoResamplerImpl : public ResamplerImpl
+{
+  AudioBuffer audio_buffer;
+public:
+  NoResamplerImpl (int n_channels) :
+    audio_buffer (n_channels)
+  {
+  }
+  void
+  write_frames (const vector<float>& frames)
+  {
+    audio_buffer.write_frames (frames);
+  }
+  vector<float>
+  read_frames (size_t frames)
+  {
+    return audio_buffer.read_frames (frames);
+  }
+  size_t
+  can_read_frames() const
+  {
+    return audio_buffer.can_read_frames();
+  }
+};
+
+template<class Resampler>
+class BufferedResamplerImpl : public ResamplerImpl
 {
   const int     n_channels = 0;
   Resampler     resampler;
 
   vector<float> buffer;
 public:
-  BufferedResampler (int n_channels, int old_rate, int new_rate) :
+  BufferedResamplerImpl (int n_channels, int old_rate, int new_rate) :
     n_channels (n_channels)
   {
     const int hlen = 16;
@@ -956,6 +1000,15 @@ public:
     return buffer.size() / n_channels;
   }
 };
+
+ResamplerImpl *
+create_resampler (int n_channels, int old_rate, int new_rate)
+{
+  if (old_rate == new_rate)
+    return new NoResamplerImpl (n_channels);
+  else
+    return new BufferedResamplerImpl<Resampler> (n_channels, old_rate, new_rate);
+}
 
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
@@ -1027,12 +1080,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   const int n_channels = in_stream->n_channels();
   WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
   AudioBuffer audio_buffer (n_channels);
-  BufferedResampler in_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate);
-  BufferedResampler out_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate());
+  std::unique_ptr<ResamplerImpl> in_resampler (create_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate));
+  std::unique_ptr<ResamplerImpl> out_resampler (create_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate()));
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
-      in_resampler.write_frames (samples);
+      in_resampler->write_frames (samples);
       audio_buffer.write_frames (samples);
 
       const bool eof = samples.size() < Params::frame_size * n_channels;
@@ -1045,15 +1098,15 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
 #endif
 
-      while (in_resampler.can_read_frames() >= Params::frame_size)
+      while (in_resampler->can_read_frames() >= Params::frame_size)
         {
-          auto r_samples = in_resampler.read_frames (Params::frame_size);
+          auto r_samples = in_resampler->read_frames (Params::frame_size);
 
           auto wm_samples = wm_gen.run (r_samples);
-          out_resampler.write_frames (wm_samples);
+          out_resampler->write_frames (wm_samples);
 
-          size_t to_read = out_resampler.can_read_frames();
-          auto out_samples = out_resampler.read_frames (to_read);
+          size_t to_read = out_resampler->can_read_frames();
+          auto out_samples = out_resampler->read_frames (to_read);
           auto orig_samples  = audio_buffer.read_frames (to_read);
 
           assert (out_samples.size() == orig_samples.size());
