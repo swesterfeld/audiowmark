@@ -883,6 +883,14 @@ public:
   {
     const int hlen = 16;
     resampler.setup (old_rate, new_rate, n_channels, hlen);
+
+    /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
+    resampler.inp_count = resampler.inpsize () / 2 - 1;
+    resampler.inp_data  = nullptr;
+
+    resampler.out_count = 1000000; // <- just needs to be large enough that all input is consumed
+    resampler.out_data  = nullptr;
+    resampler.process();
   }
   void
   write_frames (const vector<float>& frames)
