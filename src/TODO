@@ -5,5 +5,4 @@ streaming:
 - need explicit Error objects
 - logging
 - resampling
-- synthesis with 3 frames
 - raw streams

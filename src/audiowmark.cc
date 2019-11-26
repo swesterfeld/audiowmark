@@ -719,35 +719,12 @@ class WatermarkSynth
         window[i] = (cos (tri*M_PI+M_PI)+1) * 0.5;
       }
   }
-  vector<float>
-  concat (vector<float>& fv1, vector<float>& fv2)
-  {
-    vector<float> fv = fv1;
-    fv.insert (fv.end(), fv2.begin(), fv2.end());
-    return fv;
-  }
 public:
   WatermarkSynth (int n_channels) :
     n_channels (n_channels)
   {
     generate_window();
     synth_samples.resize (window.size() * n_channels);
-  }
-  vector<float>
-  end (const vector<float>& samples)
-  {
-    /* process full frame, with padded input samples */
-    vector<float> in1 = samples;
-    in1.resize (Params::frame_size * n_channels);
-
-    vector<float> out1 = run (in1, {});
-
-    /* process frame containing zeros, but truncate result to match input size */
-    vector<float> in2 (Params::frame_size * n_channels);
-    vector<float> out2 = run (in2, {});
-    out2.resize (samples.size());
-
-    return concat (out1, out2);
   }
   vector<float>
   run (const vector<float>& samples, const vector<vector<complex<float>>>& fft_delta_spect)
@@ -861,11 +838,6 @@ public:
           }
       }
     return wm_synth.run (samples, fft_delta_spect);
-  }
-  vector<float>
-  end (const vector<float>& samples)
-  {
-    return wm_synth.end (samples);
   }
 };
 
@@ -1131,21 +1103,23 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   std::unique_ptr<ResamplerImpl> out_resampler (create_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate()));
   if (!out_resampler)
     return 1;
+  size_t total_input_frames = 0;
+  size_t total_output_frames = 0;
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
+      total_input_frames += samples.size() / n_channels;
+
+      if (samples.size() == 0)
+        {
+          if (total_input_frames == total_output_frames)
+            break;
+
+          /* zero sample padding after the actual input */
+          samples.resize (Params::frame_size * n_channels);
+        }
       in_resampler->write_frames (samples);
       audio_buffer.write_frames (samples);
-
-      const bool eof = samples.size() < Params::frame_size * n_channels;
-#if 0
-        {
-          auto wm_samples = wm_gen.end (samples);
-          if (wm_samples.size())
-            out_stream->write_frames (wm_samples);
-          break;
-        }
-#endif
 
       while (in_resampler->can_read_frames() >= Params::frame_size)
         {
@@ -1162,32 +1136,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
           for (size_t i = 0; i < out_samples.size(); i++)
             out_samples[i] += orig_samples[i];
+
+          size_t max_write_frames = total_input_frames - total_output_frames;
+          if (out_samples.size() > max_write_frames * n_channels)
+            out_samples.resize (max_write_frames * n_channels);
           out_stream->write_frames (out_samples);
+          total_output_frames += out_samples.size() / n_channels;
         }
-      if (eof)
-        break;
     }
-#if 0
-    }
-  vector<float> in_signal;
-  if (orig_wav_data.sample_rate() != Params::mark_sample_rate)
-    {
-      WavData in_wav_data = resample (orig_wav_data, Params::mark_sample_rate);
-      in_signal = in_wav_data.samples();
-    }
-  else
-    {
-      in_signal = orig_wav_data.samples();
-    }
-
-  /*
-   * to keep the watermarking code simpler, we pad the wave data with zeros
-   * to avoid processing a partly filled frame
-   */
-  while (in_signal.size() % (orig_wav_data.n_channels() * Params::frame_size))
-    in_signal.push_back (0);
-#endif
-
 #if 0
   if (Params::snr)
     {
