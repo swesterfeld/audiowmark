@@ -943,44 +943,53 @@ template<class Resampler>
 class BufferedResamplerImpl : public ResamplerImpl
 {
   const int     n_channels = 0;
-  Resampler     resampler;
+  bool          first_write = true;
+  Resampler     m_resampler;
 
   vector<float> buffer;
 public:
-  BufferedResamplerImpl (int n_channels, int old_rate, int new_rate) :
+  BufferedResamplerImpl (int n_channels) :
     n_channels (n_channels)
   {
-    const int hlen = 16;
-    resampler.setup (old_rate, new_rate, n_channels, hlen);
-
-    /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
-    resampler.inp_count = resampler.inpsize () / 2 - 1;
-    resampler.inp_data  = nullptr;
-
-    resampler.out_count = 1000000; // <- just needs to be large enough that all input is consumed
-    resampler.out_data  = nullptr;
-    resampler.process();
+  }
+  Resampler&
+  resampler()
+  {
+    return m_resampler;
   }
   void
   write_frames (const vector<float>& frames)
   {
+    if (first_write)
+      {
+        /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
+        m_resampler.inp_count = m_resampler.inpsize () / 2 - 1;
+        m_resampler.inp_data  = nullptr;
+
+        m_resampler.out_count = 1000000; // <- just needs to be large enough that all input is consumed
+        m_resampler.out_data  = nullptr;
+        m_resampler.process();
+
+        first_write = false;
+      }
+
     vector<float> in = frames;
     vector<float> out (256 * n_channels);
 
     uint start = 0;
     do
       {
-        resampler.out_count = out.size() / n_channels;
-        resampler.out_data = &out[0];
+        m_resampler.out_count = out.size() / n_channels;
+        m_resampler.out_data = &out[0];
 
-        resampler.inp_count = in.size() / n_channels - start;
-        resampler.inp_data  = &in[start * n_channels];
-        resampler.process();
+        m_resampler.inp_count = in.size() / n_channels - start;
+        m_resampler.inp_data  = &in[start * n_channels];
+        m_resampler.process();
 
-        size_t count = out.size() / n_channels - resampler.out_count;
+        size_t count = out.size() / n_channels - m_resampler.out_count;
         buffer.insert (buffer.end(), out.begin(), out.begin() + count * n_channels);
 
-        start += in.size() / n_channels - start - resampler.inp_count;
+        start += in.size() / n_channels - start - m_resampler.inp_count;
       }
     while (start != in.size() / n_channels);
   }
@@ -1005,9 +1014,45 @@ ResamplerImpl *
 create_resampler (int n_channels, int old_rate, int new_rate)
 {
   if (old_rate == new_rate)
-    return new NoResamplerImpl (n_channels);
+    {
+      return new NoResamplerImpl (n_channels);
+    }
   else
-    return new BufferedResamplerImpl<Resampler> (n_channels, old_rate, new_rate);
+    {
+      /* zita-resampler provides two resampling algorithms
+       *
+       * a fast optimized version: Resampler
+       *   this is an optimized version, which works for many common cases,
+       *   like resampling between 22050, 32000, 44100, 48000, 96000 Hz
+       *
+       * a slower version: VResampler
+       *   this works for arbitary rates (like 33333 -> 44100 resampling)
+       *
+       * so we try using Resampler, and if that fails fall back to VResampler
+       */
+      const int hlen = 16;
+
+      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels);
+      if (resampler->resampler().setup (old_rate, new_rate, n_channels, hlen) == 0)
+        {
+          return resampler;
+        }
+      else
+        delete resampler;
+
+      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels);
+      const double ratio = double (new_rate) / old_rate;
+      if (vresampler->resampler().setup (ratio, n_channels, hlen) == 0)
+        {
+          return vresampler;
+        }
+      else
+        {
+          error ("audiowmark: resampling from old_rate=%d to new_rate=%d not implemented\n", old_rate, new_rate);
+          delete vresampler;
+          return nullptr;
+        }
+    }
 }
 
 int
@@ -1081,7 +1126,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
   AudioBuffer audio_buffer (n_channels);
   std::unique_ptr<ResamplerImpl> in_resampler (create_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate));
+  if (!in_resampler)
+    return 1;
   std::unique_ptr<ResamplerImpl> out_resampler (create_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate()));
+  if (!out_resampler)
+    return 1;
   while (true)
     {
       samples = in_stream->read_frames (Params::frame_size);
