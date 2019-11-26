@@ -6,3 +6,4 @@ streaming:
 - logging
 - resampling
 - raw streams
+- mp3 indexing
