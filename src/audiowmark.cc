@@ -727,10 +727,8 @@ public:
     synth_samples.resize (window.size() * n_channels);
   }
   vector<float>
-  run (const vector<float>& samples, const vector<vector<complex<float>>>& fft_delta_spect)
+  run (const vector<vector<complex<float>>>& fft_delta_spect)
   {
-    assert (samples.size() == Params::frame_size * n_channels);
-
     const size_t synth_frame_sz = Params::frame_size * n_channels;
     /* move frame 1 and frame 2 to frame 0 and frame 1 */
     std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
@@ -739,8 +737,7 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       {
         /* mix watermark signal to output frame */
-        vector<float> fft_delta_out = fft_delta_spect.size() ? ifft (fft_delta_spect[ch]) :
-                                      vector<float> (Params::frame_size * n_channels); // if fft_delta_spect was empty (no modification)
+        vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
 
         for (int dframe = 0; dframe <= 2; dframe++)
           {
@@ -837,7 +834,7 @@ public:
               }
           }
       }
-    return wm_synth.run (samples, fft_delta_spect);
+    return wm_synth.run (fft_delta_spect);
   }
 };
 
