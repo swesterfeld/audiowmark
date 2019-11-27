@@ -883,31 +883,6 @@ public:
   virtual size_t        can_read_frames() const = 0;
 };
 
-class NoResamplerImpl : public ResamplerImpl
-{
-  AudioBuffer audio_buffer;
-public:
-  NoResamplerImpl (int n_channels) :
-    audio_buffer (n_channels)
-  {
-  }
-  void
-  write_frames (const vector<float>& frames)
-  {
-    audio_buffer.write_frames (frames);
-  }
-  vector<float>
-  read_frames (size_t frames)
-  {
-    return audio_buffer.read_frames (frames);
-  }
-  size_t
-  can_read_frames() const
-  {
-    return audio_buffer.can_read_frames();
-  }
-};
-
 template<class Resampler>
 class BufferedResamplerImpl : public ResamplerImpl
 {
@@ -984,7 +959,7 @@ create_resampler (int n_channels, int old_rate, int new_rate)
 {
   if (old_rate == new_rate)
     {
-      return new NoResamplerImpl (n_channels);
+      return nullptr; // should not be using create_resampler for that case
     }
   else
     {
@@ -1029,21 +1004,33 @@ class WatermarkResampler
   std::unique_ptr<ResamplerImpl> in_resampler;
   std::unique_ptr<ResamplerImpl> out_resampler;
   WatermarkGen                   wm_gen;
+  bool                           need_resampler = false;
 public:
-  WatermarkResampler (int n_channels, int old_rate, int new_rate, vector<int>& bitvec_a, vector<int>& bitvec_b) :
+  WatermarkResampler (int n_channels, int input_rate, vector<int>& bitvec_a, vector<int>& bitvec_b) :
     wm_gen (n_channels , bitvec_a, bitvec_b)
   {
-    in_resampler.reset (create_resampler (n_channels, old_rate, new_rate));
-    out_resampler.reset (create_resampler (n_channels, new_rate, old_rate));
+    need_resampler = (input_rate != Params::mark_sample_rate);
+
+    if (need_resampler)
+      {
+        in_resampler.reset (create_resampler (n_channels, input_rate, Params::mark_sample_rate));
+        out_resampler.reset (create_resampler (n_channels, Params::mark_sample_rate, input_rate));
+      }
   }
   bool
   init_ok()
   {
-    return in_resampler && out_resampler;
+    if (need_resampler)
+      return (in_resampler && out_resampler);
+    else
+      return true;
   }
   vector<float>
   run (const vector<float>& samples)
   {
+    if (!need_resampler)
+      return wm_gen.run (samples);
+
     vector<float> out_samples;
 
     /* resample to the watermark sample rate */
@@ -1136,7 +1123,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   AudioBuffer audio_buffer (n_channels);
-  WatermarkResampler wm_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate, bitvec_a, bitvec_b);
+  WatermarkResampler wm_resampler (n_channels, in_stream->sample_rate(), bitvec_a, bitvec_b);
   if (!wm_resampler.init_ok())
     return 1;
 
@@ -1147,7 +1134,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       samples = in_stream->read_frames (Params::frame_size);
       total_input_frames += samples.size() / n_channels;
 
-      if (samples.size() == 0)
+      if (samples.size() < Params::frame_size * n_channels)
         {
           if (total_input_frames == total_output_frames)
             break;
