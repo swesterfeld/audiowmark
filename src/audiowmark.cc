@@ -1031,8 +1031,6 @@ public:
     if (!need_resampler)
       return wm_gen.run (samples);
 
-    vector<float> out_samples;
-
     /* resample to the watermark sample rate */
     in_resampler->write_frames (samples);
     while (in_resampler->can_read_frames() >= Params::frame_size)
@@ -1044,13 +1042,10 @@ public:
 
         /* resample back to the original sample rate of the audio file */
         out_resampler->write_frames (wm_samples);
-
-        size_t to_read = out_resampler->can_read_frames();
-        vector<float> res_samples = out_resampler->read_frames (to_read);
-
-        out_samples.insert (out_samples.end(), res_samples.begin(), res_samples.end());
       }
-    return out_samples;
+
+    size_t to_read = out_resampler->can_read_frames();
+    return out_resampler->read_frames (to_read);
   }
 };
 
