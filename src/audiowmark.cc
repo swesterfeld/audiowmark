@@ -1024,6 +1024,49 @@ create_resampler (int n_channels, int old_rate, int new_rate)
     }
 }
 
+class WatermarkResampler
+{
+  std::unique_ptr<ResamplerImpl> in_resampler;
+  std::unique_ptr<ResamplerImpl> out_resampler;
+  WatermarkGen                   wm_gen;
+public:
+  WatermarkResampler (int n_channels, int old_rate, int new_rate, vector<int>& bitvec_a, vector<int>& bitvec_b) :
+    wm_gen (n_channels , bitvec_a, bitvec_b)
+  {
+    in_resampler.reset (create_resampler (n_channels, old_rate, new_rate));
+    out_resampler.reset (create_resampler (n_channels, new_rate, old_rate));
+  }
+  bool
+  init_ok()
+  {
+    return in_resampler && out_resampler;
+  }
+  vector<float>
+  run (const vector<float>& samples)
+  {
+    vector<float> out_samples;
+
+    /* resample to the watermark sample rate */
+    in_resampler->write_frames (samples);
+    while (in_resampler->can_read_frames() >= Params::frame_size)
+      {
+        vector<float> r_samples = in_resampler->read_frames (Params::frame_size);
+
+        /* generate watermark at normalized sample rate */
+        vector<float> wm_samples = wm_gen.run (r_samples);
+
+        /* resample back to the original sample rate of the audio file */
+        out_resampler->write_frames (wm_samples);
+
+        size_t to_read = out_resampler->can_read_frames();
+        vector<float> res_samples = out_resampler->read_frames (to_read);
+
+        out_samples.insert (out_samples.end(), res_samples.begin(), res_samples.end());
+      }
+    return out_samples;
+  }
+};
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -1092,14 +1135,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   vector<float> samples;
 
   const int n_channels = in_stream->n_channels();
-  WatermarkGen wm_gen (n_channels, bitvec_a, bitvec_b);
   AudioBuffer audio_buffer (n_channels);
-  std::unique_ptr<ResamplerImpl> in_resampler (create_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate));
-  if (!in_resampler)
+  WatermarkResampler wm_resampler (n_channels, in_stream->sample_rate(), Params::mark_sample_rate, bitvec_a, bitvec_b);
+  if (!wm_resampler.init_ok())
     return 1;
-  std::unique_ptr<ResamplerImpl> out_resampler (create_resampler (n_channels, Params::mark_sample_rate, in_stream->sample_rate()));
-  if (!out_resampler)
-    return 1;
+
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
   while (true)
@@ -1115,31 +1155,20 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           /* zero sample padding after the actual input */
           samples.resize (Params::frame_size * n_channels);
         }
-      in_resampler->write_frames (samples);
       audio_buffer.write_frames (samples);
+      samples = wm_resampler.run (samples);
+      size_t to_read = samples.size() / n_channels;
+      vector<float> orig_samples  = audio_buffer.read_frames (to_read);
+      assert (samples.size() == orig_samples.size());
 
-      while (in_resampler->can_read_frames() >= Params::frame_size)
-        {
-          auto r_samples = in_resampler->read_frames (Params::frame_size);
+      for (size_t i = 0; i < samples.size(); i++)
+        samples[i] += orig_samples[i];
 
-          auto wm_samples = wm_gen.run (r_samples);
-          out_resampler->write_frames (wm_samples);
-
-          size_t to_read = out_resampler->can_read_frames();
-          auto out_samples = out_resampler->read_frames (to_read);
-          auto orig_samples  = audio_buffer.read_frames (to_read);
-
-          assert (out_samples.size() == orig_samples.size());
-
-          for (size_t i = 0; i < out_samples.size(); i++)
-            out_samples[i] += orig_samples[i];
-
-          size_t max_write_frames = total_input_frames - total_output_frames;
-          if (out_samples.size() > max_write_frames * n_channels)
-            out_samples.resize (max_write_frames * n_channels);
-          out_stream->write_frames (out_samples);
-          total_output_frames += out_samples.size() / n_channels;
-        }
+      size_t max_write_frames = total_input_frames - total_output_frames;
+      if (samples.size() > max_write_frames * n_channels)
+        samples.resize (max_write_frames * n_channels);
+      out_stream->write_frames (samples);
+      total_output_frames += samples.size() / n_channels;
     }
 #if 0
   if (Params::snr)
