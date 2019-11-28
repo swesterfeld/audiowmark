@@ -228,7 +228,7 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
  * glibc log2f is a lot faster than glibc log10
  */
 inline double
-log10_approx (double l)
+fast_log10 (double l)
 {
   constexpr double log2_log10_factor = 0.3010299956639811952; // 1 / log2 (10)
 
@@ -240,7 +240,7 @@ db_from_factor (double factor, double min_dB)
 {
   if (factor > 0)
     {
-      double dB = log10_approx (factor); /* Bell */
+      double dB = fast_log10 (factor); /* Bell */
       dB *= 20;
       return dB;
     }
