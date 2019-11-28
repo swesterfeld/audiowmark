@@ -99,6 +99,12 @@ SFOutputStream::sample_rate() const
   return m_sample_rate;
 }
 
+int
+SFOutputStream::n_channels() const
+{
+  return m_n_channels;
+}
+
 size_t
 SFOutputStream::n_frames() const
 {

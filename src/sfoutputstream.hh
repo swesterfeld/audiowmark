@@ -31,6 +31,7 @@ public:
   void   close();
   int    bit_depth() const override;
   int    sample_rate() const override;
+  int    n_channels() const override;
   size_t n_frames() const override;
 };
 

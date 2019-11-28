@@ -24,6 +24,12 @@ StdoutWavOutputStream::bit_depth() const
   return m_bit_depth;
 }
 
+int
+StdoutWavOutputStream::n_channels() const
+{
+  return m_n_channels;
+}
+
 static void
 header_append_str (vector<unsigned char>& bytes, const string& str)
 {
