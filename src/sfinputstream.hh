@@ -10,7 +10,6 @@
 class SFInputStream : public AudioInputStream
 {
   SNDFILE    *m_sndfile = nullptr;
-  std::string m_error_blurb;
   int         m_n_channels = 0;
   int         m_n_values = 0;
   int         m_bit_depth = 0;
@@ -26,7 +25,7 @@ class SFInputStream : public AudioInputStream
 public:
   ~SFInputStream();
 
-  bool                open (const std::string& filename);
+  Error               open (const std::string& filename);
   Error               read_frames (std::vector<float>& samples, size_t count);
   void                close();
 
@@ -46,10 +45,6 @@ public:
   n_frames() const override
   {
     return m_n_values / m_n_channels;
-  }
-  const char *error_blurb() const
-  {
-    return m_error_blurb.c_str();
   }
 };
 

@@ -47,15 +47,14 @@ header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
   bytes.push_back (u >> 8);
 }
 
-bool
+Error
 StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames)
 {
   assert (m_state == State::NEW);
 
   if (bit_depth != 16 && bit_depth != 24)
     {
-      m_error_blurb = "StdoutWavOutputStream::open: unsupported bit depth";
-      return false;
+      return Error ("StdoutWavOutputStream::open: unsupported bit depth");
     }
   vector<unsigned char> header_bytes;
 
@@ -88,7 +87,7 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   m_n_frames  = n_frames;
   m_state     = State::OPEN;
 
-  return true;
+  return Error::Code::NONE;
 }
 
 template<int BIT_DEPTH> void

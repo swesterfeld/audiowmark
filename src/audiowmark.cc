@@ -1096,9 +1096,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
   auto in_stream = std::make_unique<SFInputStream> (); // FIXME: need virtual constructor
-  if (!in_stream->open (infile))
+  Error err = in_stream->open (infile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), in_stream->error_blurb());
+      fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
   int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
@@ -1112,9 +1113,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
       out_stream.reset (swstream);
-      if (!swstream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+      err = swstream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames());
+      if (err)
         {
-          fprintf (stderr, "audiowmark: error writing to -\n"); //%s: %s\n", outfile.c_str(), out_wav_data.error_blurb()); FIXME
+          error ("audiowmark: error writing to -: %s\n", err.message());
           return 1;
         }
     }

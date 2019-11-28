@@ -23,7 +23,7 @@ class StdoutWavOutputStream : public AudioOutputStream
 public:
   ~StdoutWavOutputStream();
 
-  bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  Error open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   Error write_frames (const std::vector<float>& frames) override;
   void close();
   int  sample_rate() const override;

@@ -10,7 +10,7 @@ SFInputStream::~SFInputStream()
   close();
 }
 
-bool
+Error
 SFInputStream::open (const string& filename)
 {
   assert (m_state == State::NEW);
@@ -22,13 +22,13 @@ SFInputStream::open (const string& filename)
   int error = sf_error (m_sndfile);
   if (error)
     {
-      m_error_blurb = sf_strerror (m_sndfile);
+      Error err (sf_strerror (m_sndfile));
       if (m_sndfile)
         {
           m_sndfile = nullptr;
           sf_close (m_sndfile);
         }
-      return false;
+      return err;
     }
 
   m_n_channels  = sfinfo.channels;
@@ -64,7 +64,7 @@ SFInputStream::open (const string& filename)
     }
 
   m_state       = State::OPEN;
-  return true;
+  return Error::Code::NONE;
 }
 
 int

@@ -18,9 +18,10 @@ main (int argc, char **argv)
   StdoutWavOutputStream out;
 
   std::string filename = (argc >= 2) ? argv[1] : "-";
-  if (!in.open (filename.c_str()))
+  Error err = in.open (filename.c_str());
+  if (err)
     {
-      fprintf (stderr, "teststream: open input failed: %s\n", in.error_blurb());
+      fprintf (stderr, "teststream: open input failed: %s\n", err.message());
       return 1;
     }
   if (!out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames()))
