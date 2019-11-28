@@ -924,25 +924,25 @@ public:
         first_write = false;
       }
 
-    vector<float> in = frames;
-    vector<float> out (256 * n_channels);
-
     uint start = 0;
     do
       {
-        m_resampler.out_count = out.size() / n_channels;
-        m_resampler.out_data = &out[0];
+        const int out_count = Params::frame_size;
+        float out[out_count * n_channels];
 
-        m_resampler.inp_count = in.size() / n_channels - start;
-        m_resampler.inp_data  = &in[start * n_channels];
+        m_resampler.out_count = out_count;
+        m_resampler.out_data  = out;
+
+        m_resampler.inp_count = frames.size() / n_channels - start;
+        m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
         m_resampler.process();
 
-        size_t count = out.size() / n_channels - m_resampler.out_count;
-        buffer.insert (buffer.end(), out.begin(), out.begin() + count * n_channels);
+        size_t count = out_count - m_resampler.out_count;
+        buffer.insert (buffer.end(), out, out + count * n_channels);
 
-        start += in.size() / n_channels - start - m_resampler.inp_count;
+        start += frames.size() / n_channels - start - m_resampler.inp_count;
       }
-    while (start != in.size() / n_channels);
+    while (start != frames.size() / n_channels);
   }
   vector<float>
   read_frames (size_t frames)
