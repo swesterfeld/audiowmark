@@ -679,7 +679,7 @@ resample (const WavData& wav_data, int rate)
 
 /* synthesizes a watermark stream (overlap add with synthesis window)
  *
- * input: samples + delta fft
+ * input:  per-channel fft delta values (always one frame)
  * output: samples
  */
 class WatermarkSynth
@@ -764,6 +764,11 @@ public:
   }
 };
 
+/* generates a watermark signal
+ *
+ * input:  original signal samples (always for one complete frame)
+ * output: watermark signal (to be mixed to the original sample)
+ */
 class WatermarkGen
 {
   enum State { PAD, WATERMARK } state = State::PAD;
@@ -795,6 +800,8 @@ public:
   vector<float>
   run (const vector<float>& samples)
   {
+    assert (samples.size() == Params::frame_size * n_channels);
+
     vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
 
     vector<vector<complex<float>>> fft_delta_spect;
@@ -999,6 +1006,11 @@ create_resampler (int n_channels, int old_rate, int new_rate)
     }
 }
 
+/* generate a watermark at Params::mark_sample_rate and resample to whatever the original signal has
+ *
+ * input:  samples from original signal (always one frame)
+ * output: watermark signal resampled to original signal sample rate
+ */
 class WatermarkResampler
 {
   std::unique_ptr<ResamplerImpl> in_resampler;
@@ -1029,7 +1041,10 @@ public:
   run (const vector<float>& samples)
   {
     if (!need_resampler)
-      return wm_gen.run (samples);
+      {
+        /* cheap case: if no resampling is necessary, just generate the watermark signal */
+        return wm_gen.run (samples);
+      }
 
     /* resample to the watermark sample rate */
     in_resampler->write_frames (samples);
@@ -1091,7 +1106,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   info ("Sample Rate:  %d\n", in_stream->sample_rate());
   info ("Channels:     %d\n", in_stream->n_channels());
 
-  bool open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
   std::unique_ptr<AudioOutputStream> out_stream;
   if (outfile == "-")
