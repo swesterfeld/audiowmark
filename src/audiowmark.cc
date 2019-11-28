@@ -514,7 +514,7 @@ apply_frame_mod (const vector<FrameMod>& frame_mod, const vector<complex<float>>
       const float mag = abs (fft_out[i]);
       if (mag > min_mag)
         {
-          const float mag_factor = pow (mag, -Params::water_delta * data_bit_sign);
+          const float mag_factor = powf (mag, -Params::water_delta * data_bit_sign);
 
           fft_delta_spect[i] = fft_out[i] * (mag_factor - 1);
         }
