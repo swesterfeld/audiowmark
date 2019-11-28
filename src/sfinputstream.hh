@@ -27,7 +27,7 @@ public:
   ~SFInputStream();
 
   bool                open (const std::string& filename);
-  std::vector<float>  read_frames (size_t count);
+  Error               read_frames (std::vector<float>& samples, size_t count);
   void                close();
 
   int

@@ -31,7 +31,7 @@ main (int argc, char **argv)
   vector<float> samples;
   do
     {
-      samples = in.read_frames (1024);
+      in.read_frames (samples, 1024);
       out.write_frames (samples);
     }
   while (samples.size());

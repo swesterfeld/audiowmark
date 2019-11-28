@@ -2,6 +2,7 @@
 #define AUDIOWMARK_AUDIO_STREAM_HH
 
 #include <vector>
+#include "utils.hh"
 
 class AudioStream
 {
@@ -15,13 +16,13 @@ public:
 
 class AudioInputStream : public AudioStream
 {
-  virtual std::vector<float> read_frames (size_t count) = 0;
+  virtual Error read_frames (std::vector<float>& samples, size_t count) = 0;
 };
 
 class AudioOutputStream : public AudioStream
 {
 public:
-  virtual bool write_frames (const std::vector<float>& frames) = 0;
+  virtual Error write_frames (const std::vector<float>& frames) = 0;
 };
 
 #endif /* AUDIOWMARK_AUDIO_STREAM_HH */

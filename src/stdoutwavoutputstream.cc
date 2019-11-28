@@ -118,7 +118,7 @@ convert_frames (const vector<float>& samples, vector<unsigned char>& output_byte
     }
 }
 
-bool
+Error
 StdoutWavOutputStream::write_frames (const vector<float>& samples)
 {
   vector<unsigned char> output_bytes (samples.size() * (m_bit_depth / 8));
@@ -137,7 +137,7 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
     }
 
   fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
-  return true;
+  return Error::Code::NONE;
 }
 
 void

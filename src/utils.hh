@@ -37,4 +37,49 @@ void warning (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void info (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void debug (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 
+class Error
+{
+public:
+  enum class Code {
+    NONE,
+    STR
+  };
+  Error (Code code) :
+    m_code (code)
+  {
+    switch (code)
+      {
+        case Code::NONE:
+          m_message = "OK";
+          break;
+
+        default:
+          m_message = "Unknown error";
+      }
+  }
+  explicit
+  Error (const std::string& message) :
+    m_code (Code::STR),
+    m_message (message)
+  {
+  }
+  Code
+  code()
+  {
+    return m_code;
+  }
+  const char *
+  message()
+  {
+    return m_message.c_str();
+  }
+  operator bool()
+  {
+    return m_code != Code::NONE;
+  }
+private:
+  Code        m_code;
+  std::string m_message;
+};
+
 #endif /* AUDIOWMARK_UTILS_HH */

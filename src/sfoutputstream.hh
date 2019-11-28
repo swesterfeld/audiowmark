@@ -27,7 +27,7 @@ public:
   ~SFOutputStream();
 
   bool   open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
-  bool   write_frames (const std::vector<float>& frames) override;
+  Error  write_frames (const std::vector<float>& frames) override;
   void   close();
   int    bit_depth() const override;
   int    sample_rate() const override;

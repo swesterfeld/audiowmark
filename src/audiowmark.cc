@@ -1126,7 +1126,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   size_t total_output_frames = 0;
   while (true)
     {
-      samples = in_stream->read_frames (Params::frame_size);
+      Error err = Error::Code::NONE;
+
+      err = in_stream->read_frames (samples, Params::frame_size);
+      if (err)
+        {
+          error ("audiowmark: input stream read failed: %s\n", err.message());
+          return 1;
+        }
       total_input_frames += samples.size() / n_channels;
 
       if (samples.size() < Params::frame_size * n_channels)
@@ -1149,7 +1156,13 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       size_t max_write_frames = total_input_frames - total_output_frames;
       if (samples.size() > max_write_frames * n_channels)
         samples.resize (max_write_frames * n_channels);
-      out_stream->write_frames (samples);
+
+      err = out_stream->write_frames (samples);
+      if (err)
+        {
+          error ("audiowmark output write failed: %s\n", err.message());
+          return 1;
+        }
       total_output_frames += samples.size() / n_channels;
     }
 #if 0

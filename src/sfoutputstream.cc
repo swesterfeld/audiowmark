@@ -62,7 +62,7 @@ SFOutputStream::close()
     }
 }
 
-bool
+Error
 SFOutputStream::write_frames (const vector<float>& samples)
 {
   vector<int> isamples (samples.size());
@@ -78,20 +78,13 @@ SFOutputStream::write_frames (const vector<float>& samples)
   sf_count_t frames = samples.size() / m_n_channels;
   sf_count_t count = sf_writef_int (m_sndfile, &isamples[0], frames);
 
-  int error = sf_error (m_sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_strerror (m_sndfile);
-      return false;
-    }
+  if (sf_error (m_sndfile))
+    return Error (sf_strerror (m_sndfile));
 
   if (count != frames)
-    {
-      m_error_blurb = "writing sample data failed: short write";
-      return false;
-    }
+    return Error ("writing sample data failed: short write");
 
-  return true;
+  return Error::Code::NONE;
 }
 
 int

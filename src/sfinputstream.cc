@@ -79,13 +79,16 @@ SFInputStream::bit_depth() const
   return m_bit_depth;
 }
 
-vector<float>
-SFInputStream::read_frames (size_t count)
+Error
+SFInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
   vector<int> isamples (count * m_n_channels);
   sf_count_t r_count = sf_readf_int (m_sndfile, &isamples[0], count);
+
+  if (sf_error (m_sndfile))
+    return Error (sf_strerror (m_sndfile));
 
   /* reading a wav file and saving it again with the libsndfile float API will
    * change some values due to normalization issues:
@@ -95,12 +98,12 @@ SFInputStream::read_frames (size_t count)
    * and float manually - the important part is that the normalization factors
    * used during read and write are identical
    */
-  vector<float> result (r_count * m_n_channels);;
+  samples.resize (r_count * m_n_channels);
   const double norm = 1.0 / 0x80000000LL;
-  for (size_t i = 0; i < result.size(); i++)
-    result[i] = isamples[i] * norm;
+  for (size_t i = 0; i < samples.size(); i++)
+    samples[i] = isamples[i] * norm;
 
-  return result;
+  return Error::Code::NONE;
 }
 
 void
