@@ -14,6 +14,7 @@
 #include "sfinputstream.hh"
 #include "sfoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
+#include "rawinputstream.hh"
 
 #include <zita-resampler/resampler.h>
 #include <zita-resampler/vresampler.h>
@@ -27,6 +28,8 @@ using std::vector;
 using std::complex;
 using std::min;
 using std::max;
+
+enum class Format { AUTO = 1, RAW = 2 };
 
 namespace Params
 {
@@ -54,6 +57,9 @@ namespace Params
   static int test_cut            = 0; // for sync test
   static bool test_no_sync       = false; // disable sync
   static int test_truncate       = 0;
+
+  static Format input_format     = Format::AUTO;
+  static Format output_format    = Format::AUTO;
 }
 
 void
@@ -128,6 +134,17 @@ check_arg (uint         argc,
   exit (1);
 }
 
+Format
+parse_format (const string& str)
+{
+  if (str == "raw")
+    return Format::RAW;
+  if (str == "auto")
+    return Format::AUTO;
+  error ("audiowmark: unsupported format '%s'\n", str.c_str());
+  exit (1);
+}
+
 void
 parse_options (int   *argc_p,
                char **argv_p[])
@@ -192,6 +209,18 @@ parse_options (int   *argc_p,
 	{
           Params::test_truncate = atoi (opt_arg);
 	}
+      else if (check_arg (argc, argv, &i, "--input-format", &opt_arg))
+        {
+          Params::input_format = parse_format (opt_arg);
+        }
+      else if (check_arg (argc, argv, &i, "--output-format", &opt_arg))
+        {
+          Params::output_format = parse_format (opt_arg);
+        }
+      else if (check_arg (argc, argv, &i, "--format", &opt_arg))
+        {
+          Params::input_format = Params::output_format = parse_format (opt_arg);
+        }
     }
 
   /* resort argc/argv */
@@ -1096,18 +1125,37 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
   std::unique_ptr<AudioInputStream> in_stream; // FIXME: virtual constructor
-  {
-    SFInputStream *sistream = new SFInputStream ();
-    in_stream.reset (sistream);
-    Error err = sistream->open (infile);
-    if (err)
-      {
-        fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-        return 1;
-      }
-  }
-  int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
-  info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
+  if (Params::input_format == Format::AUTO)
+    {
+      SFInputStream *sistream = new SFInputStream();
+      in_stream.reset (sistream);
+      Error err = sistream->open (infile);
+      if (err)
+        {
+          fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+          return 1;
+        }
+    }
+  else
+    {
+      RawInputStream *ristream = new RawInputStream();
+      in_stream.reset (ristream);
+      Error err = ristream->open (infile);
+      if (err)
+        {
+          fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+          return 1;
+        }
+    }
+  if (in_stream->n_frames() == AudioStream::N_FRAMES_UNKNOWN)
+    {
+      info ("Time:         unknown\n");
+    }
+  else
+    {
+      int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
+      info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
+    }
   info ("Sample Rate:  %d\n", in_stream->sample_rate());
   info ("Channels:     %d\n", in_stream->n_channels());
 
