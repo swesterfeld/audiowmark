@@ -60,6 +60,9 @@ namespace Params
 
   static Format input_format     = Format::AUTO;
   static Format output_format    = Format::AUTO;
+
+  static RawFormat raw_input_format;
+  static RawFormat raw_output_format;
 }
 
 void
@@ -220,6 +223,34 @@ parse_options (int   *argc_p,
       else if (check_arg (argc, argv, &i, "--format", &opt_arg))
         {
           Params::input_format = Params::output_format = parse_format (opt_arg);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-input-bits", &opt_arg))
+        {
+          int b = atoi (opt_arg);
+          Params::raw_input_format.set_bit_depth (b);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-output-bits", &opt_arg))
+        {
+          int b = atoi (opt_arg);
+          Params::raw_output_format.set_bit_depth (b);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-bits", &opt_arg))
+        {
+          int b = atoi (opt_arg);
+          Params::raw_input_format.set_bit_depth (b);
+          Params::raw_output_format.set_bit_depth (b);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-channels", &opt_arg))
+        {
+          int c = atoi (opt_arg);
+          Params::raw_input_format.set_channels (c);
+          Params::raw_output_format.set_channels (c);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-rate", &opt_arg))
+        {
+          int r = atoi (opt_arg);
+          Params::raw_input_format.set_sample_rate (r);
+          Params::raw_output_format.set_sample_rate (r);
         }
     }
 
@@ -1140,7 +1171,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       RawInputStream *ristream = new RawInputStream();
       in_stream.reset (ristream);
-      Error err = ristream->open (infile);
+      Error err = ristream->open (infile, Params::raw_input_format);
       if (err)
         {
           fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());

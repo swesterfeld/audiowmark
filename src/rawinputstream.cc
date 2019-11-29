@@ -5,16 +5,51 @@
 using std::string;
 using std::vector;
 
+RawFormat::RawFormat()
+{
+}
+
+RawFormat::RawFormat (int n_channels, int sample_rate, int bit_depth) :
+  m_n_channels (n_channels),
+  m_sample_rate (sample_rate),
+  m_bit_depth (bit_depth)
+{
+}
+
+void
+RawFormat::set_channels (int channels)
+{
+  m_n_channels = channels;
+}
+
+void
+RawFormat::set_sample_rate (int rate)
+{
+  m_sample_rate = rate;
+}
+
+void
+RawFormat::set_bit_depth (int bits)
+{
+  m_bit_depth = bits;
+}
+
 RawInputStream::~RawInputStream()
 {
   close();
 }
 
 Error
-RawInputStream::open (const string& filename)
+RawInputStream::open (const string& filename, const RawFormat& format)
 {
   assert (m_state == State::NEW);
 
+  if (!format.n_channels())
+    return Error ("RawInputStream: input format: missing number of channels");
+  if (!format.bit_depth())
+    return Error ("RawInputStream: input format: missing bit depth");
+  if (!format.sample_rate())
+    return Error ("RawInputStream: input format: missing sample rate");
 #if 0
   SF_INFO sfinfo = { 0, };
 
@@ -65,20 +100,21 @@ RawInputStream::open (const string& filename)
     }
 #endif
 
-  m_state       = State::OPEN;
+  m_format = format;
+  m_state  = State::OPEN;
   return Error::Code::NONE;
 }
 
 int
 RawInputStream::sample_rate() const
 {
-  return 44100;
+  return m_format.sample_rate();
 }
 
 int
 RawInputStream::bit_depth() const
 {
-  return 16;
+  return m_format.bit_depth();
 }
 
 size_t
@@ -90,7 +126,7 @@ RawInputStream::n_frames() const
 int
 RawInputStream::n_channels() const
 {
-  return 2;
+  return m_format.n_channels();
 }
 
 Error
@@ -98,12 +134,15 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
-  vector<unsigned char> input_bytes (count * n_channels() * (bit_depth() / 8));
-  size_t r_count = fread (input_bytes.data(), n_channels() * (bit_depth() / 8), count, stdin);
+  const int n_channels   = m_format.n_channels();
+  const int sample_width = m_format.bit_depth() / 8;
+
+  vector<unsigned char> input_bytes (count * n_channels * sample_width);
+  size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, stdin);
 
   unsigned char *ptr = reinterpret_cast<unsigned char *> (input_bytes.data());
 
-  samples.resize (r_count * n_channels());
+  samples.resize (r_count * n_channels);
   const double norm = 1.0 / 0x80000000LL;
   for (size_t i = 0; i < samples.size(); i++)
     {
