@@ -2,6 +2,7 @@
 #define AUDIOWMARK_RAW_INPUT_STREAM_HH
 
 #include <string>
+#include <memory>
 
 #include <sndfile.h>
 
@@ -25,6 +26,8 @@ public:
   void set_bit_depth (int bits);
 };
 
+class RawConverter;
+
 class RawInputStream : public AudioInputStream
 {
   enum class State {
@@ -36,6 +39,8 @@ class RawInputStream : public AudioInputStream
   RawFormat   m_format;
   FILE       *m_input_file = nullptr;
   bool        m_close_file = false;
+
+  std::unique_ptr<RawConverter> m_raw_converter;
 
 public:
   ~RawInputStream();

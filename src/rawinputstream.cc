@@ -1,4 +1,5 @@
 #include "rawinputstream.hh"
+#include "rawconverter.hh"
 
 #include <assert.h>
 
@@ -51,6 +52,13 @@ RawInputStream::open (const string& filename, const RawFormat& format)
   if (!format.sample_rate())
     return Error ("RawInputStream: input format: missing sample rate");
 
+  Error err = Error::Code::NONE;
+  RawConverter *rc = RawConverter::create (format, err);
+  if (err)
+    return err;
+  assert (rc);
+  m_raw_converter.reset (rc);
+
   if (filename == "-")
     {
       m_input_file = stdin;
@@ -101,17 +109,9 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
 
   vector<unsigned char> input_bytes (count * n_channels * sample_width);
   size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, m_input_file);
+  input_bytes.resize (r_count * n_channels * sample_width);
 
-  unsigned char *ptr = reinterpret_cast<unsigned char *> (input_bytes.data());
-
-  samples.resize (r_count * n_channels);
-  const double norm = 1.0 / 0x80000000LL;
-  for (size_t i = 0; i < samples.size(); i++)
-    {
-      int s32 = (ptr[1] << 24) + (ptr[0] << 16);
-      samples[i] = s32 * norm;
-      ptr += 2;
-    }
+  m_raw_converter->from_raw (input_bytes, samples);
 
   return Error::Code::NONE;
 }
