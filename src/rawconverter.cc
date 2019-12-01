@@ -60,13 +60,21 @@ void
 RawConverterImpl<BIT_DEPTH>::from_raw (const vector<unsigned char>& input_bytes, vector<float>& samples)
 {
   const unsigned char *ptr = input_bytes.data();
+  const int sample_width = BIT_DEPTH / 8;
 
-  samples.resize (input_bytes.size() / (BIT_DEPTH / 8));
+  samples.resize (input_bytes.size() / sample_width);
   const double norm = 1.0 / 0x80000000LL;
   for (size_t i = 0; i < samples.size(); i++)
     {
-      int s32 = (ptr[1] << 24) + (ptr[0] << 16);
+      int s32;
+
+      if (BIT_DEPTH == 16)
+        s32 = (ptr[1] << 24) + (ptr[0] << 16);
+
+      if (BIT_DEPTH == 24)
+        s32 = (ptr[2] << 24) + (ptr[1] << 16) + (ptr[0] << 8);
+
       samples[i] = s32 * norm;
-      ptr += 2;
+      ptr += sample_width;
     }
 }
