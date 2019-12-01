@@ -11,7 +11,6 @@ class StdoutWavOutputStream : public AudioOutputStream
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   int         m_n_channels = 0;
-  size_t      m_n_frames = 0;
   size_t      m_close_padding = 0;
 
   enum class State {
@@ -30,10 +29,6 @@ public:
   int  sample_rate() const override;
   int  bit_depth() const override;
   int  n_channels() const override;
-  size_t n_frames() const override
-  {
-    return m_n_frames;
-  }
 
   const char *error_blurb() const
   {

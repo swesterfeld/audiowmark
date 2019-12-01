@@ -15,6 +15,7 @@
 #include "sfoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
 #include "rawinputstream.hh"
+#include "rawoutputstream.hh"
 
 #include <zita-resampler/resampler.h>
 #include <zita-resampler/vresampler.h>
@@ -1178,7 +1179,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           return 1;
         }
     }
-  if (in_stream->n_frames() == AudioStream::N_FRAMES_UNKNOWN)
+  if (in_stream->n_frames() == AudioInputStream::N_FRAMES_UNKNOWN)
     {
       info ("Time:         unknown\n");
     }
@@ -1192,7 +1193,18 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
   std::unique_ptr<AudioOutputStream> out_stream;
-  if (outfile == "-")
+  if (Params::output_format == Format::RAW)
+    {
+      RawOutputStream *rostream = new RawOutputStream();
+      out_stream.reset (rostream);
+      Error err = rostream->open (outfile, Params::raw_output_format);
+      if (err)
+        {
+          fprintf (stderr, "audiowmark: error opening %s: %s\n", outfile.c_str(), err.message());
+          return 1;
+        }
+    }
+  else if (outfile == "-")
     {
       StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
       out_stream.reset (swstream);

@@ -18,7 +18,6 @@ SFOutputStream::open (const string& filename, int n_channels, int sample_rate, i
   assert (m_state == State::NEW);
 
   m_sample_rate = sample_rate;
-  m_n_frames    = n_frames;
   m_n_channels  = n_channels;
 
   SF_INFO sfinfo = {0,};
@@ -103,10 +102,4 @@ int
 SFOutputStream::n_channels() const
 {
   return m_n_channels;
-}
-
-size_t
-SFOutputStream::n_frames() const
-{
-  return m_n_frames;
 }

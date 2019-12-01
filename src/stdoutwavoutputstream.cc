@@ -62,7 +62,7 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
     {
       return Error ("StdoutWavOutputStream::open: unsupported bit depth");
     }
-  if (n_frames == N_FRAMES_UNKNOWN)
+  if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN)
     {
       return Error ("unable to write wav format to standard out without input length information");
     }
@@ -94,7 +94,6 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
 
   m_bit_depth = bit_depth;
-  m_n_frames  = n_frames;
   m_state     = State::OPEN;
 
   return Error::Code::NONE;

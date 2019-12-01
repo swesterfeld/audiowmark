@@ -13,7 +13,6 @@ class SFOutputStream : public AudioOutputStream
   std::string m_error_blurb;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
-  size_t      m_n_frames = 0;
   int         m_n_channels = 0;
 
   enum class State {
@@ -32,7 +31,6 @@ public:
   int    bit_depth() const override;
   int    sample_rate() const override;
   int    n_channels() const override;
-  size_t n_frames() const override;
 };
 
 #endif /* AUDIOWMARK_SF_OUTPUT_STREAM_HH */

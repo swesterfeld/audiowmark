@@ -7,12 +7,8 @@
 class AudioStream
 {
 public:
-  // for streams that do not know the number of frames in advance (i.e. raw input stream)
-  static constexpr size_t N_FRAMES_UNKNOWN = ~size_t (0);
-
   virtual int     bit_depth()   const = 0;
   virtual int     sample_rate() const = 0;
-  virtual size_t  n_frames()    const = 0;
   virtual int     n_channels()  const = 0;
 
   virtual ~AudioStream();
@@ -21,6 +17,10 @@ public:
 class AudioInputStream : public AudioStream
 {
 public:
+  // for streams that do not know the number of frames in advance (i.e. raw input stream)
+  static constexpr size_t N_FRAMES_UNKNOWN = ~size_t (0);
+  virtual size_t n_frames() const = 0;
+
   virtual Error read_frames (std::vector<float>& samples, size_t count) = 0;
 };
 
