@@ -2,6 +2,7 @@
 #include "rawconverter.hh"
 
 #include <assert.h>
+#include <string.h>
 
 using std::string;
 using std::vector;
@@ -53,11 +54,9 @@ RawInputStream::open (const string& filename, const RawFormat& format)
     return Error ("RawInputStream: input format: missing sample rate");
 
   Error err = Error::Code::NONE;
-  RawConverter *rc = RawConverter::create (format, err);
+  m_raw_converter.reset (RawConverter::create (format, err));
   if (err)
     return err;
-  assert (rc);
-  m_raw_converter.reset (rc);
 
   if (filename == "-")
     {
@@ -67,6 +66,9 @@ RawInputStream::open (const string& filename, const RawFormat& format)
   else
     {
       m_input_file = fopen (filename.c_str(), "r");
+      if (!m_input_file)
+        return Error (strerror (errno));
+
       m_close_file = true;
     }
 
