@@ -34,6 +34,8 @@ class RawInputStream : public AudioInputStream
   };
   State       m_state = State::NEW;
   RawFormat   m_format;
+  FILE       *m_input_file = nullptr;
+  bool        m_close_file = false;
 
 public:
   ~RawInputStream();

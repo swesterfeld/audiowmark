@@ -50,55 +50,17 @@ RawInputStream::open (const string& filename, const RawFormat& format)
     return Error ("RawInputStream: input format: missing bit depth");
   if (!format.sample_rate())
     return Error ("RawInputStream: input format: missing sample rate");
-#if 0
-  SF_INFO sfinfo = { 0, };
 
-  m_sndfile = sf_open (filename.c_str(), SFM_READ, &sfinfo);
-
-  int error = sf_error (m_sndfile);
-  if (error)
+  if (filename == "-")
     {
-      Error err (sf_strerror (m_sndfile));
-      if (m_sndfile)
-        {
-          m_sndfile = nullptr;
-          sf_close (m_sndfile);
-        }
-      return err;
+      m_input_file = stdin;
+      m_close_file = false;
     }
-
-  m_n_channels  = sfinfo.channels;
-  m_n_values    = sfinfo.frames * sfinfo.channels;
-  m_sample_rate = sfinfo.samplerate;
-
-  switch (sfinfo.format & SF_FORMAT_SUBMASK)
+  else
     {
-      case SF_FORMAT_PCM_U8:
-      case SF_FORMAT_PCM_S8:
-          m_bit_depth = 8;
-          break;
-
-      case SF_FORMAT_PCM_16:
-          m_bit_depth = 16;
-          break;
-
-      case SF_FORMAT_PCM_24:
-          m_bit_depth = 24;
-          break;
-
-      case SF_FORMAT_FLOAT:
-      case SF_FORMAT_PCM_32:
-          m_bit_depth = 32;
-          break;
-
-      case SF_FORMAT_DOUBLE:
-          m_bit_depth = 64;
-          break;
-
-      default:
-          m_bit_depth = 32; /* unknown */
+      m_input_file = fopen (filename.c_str(), "r");
+      m_close_file = true;
     }
-#endif
 
   m_format = format;
   m_state  = State::OPEN;
@@ -138,7 +100,7 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
   const int sample_width = m_format.bit_depth() / 8;
 
   vector<unsigned char> input_bytes (count * n_channels * sample_width);
-  size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, stdin);
+  size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, m_input_file);
 
   unsigned char *ptr = reinterpret_cast<unsigned char *> (input_bytes.data());
 
@@ -159,10 +121,12 @@ RawInputStream::close()
 {
   if (m_state == State::OPEN)
     {
-#if 0
-      assert (m_sndfile);
-      sf_close (m_sndfile);
-#endif
+      if (m_close_file && m_input_file)
+        {
+          fclose (m_input_file);
+          m_input_file = nullptr;
+          m_close_file = false;
+        }
 
       m_state = State::CLOSED;
     }
