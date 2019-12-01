@@ -66,6 +66,15 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
     {
       return Error ("unable to write wav format to standard out without input length information");
     }
+
+  RawFormat format;
+  format.set_bit_depth (bit_depth);
+
+  Error err = Error::Code::NONE;
+  m_raw_converter.reset (RawConverter::create (format, err));
+  if (err)
+    return err;
+
   vector<unsigned char> header_bytes;
 
   size_t data_size = n_frames * n_channels * ((bit_depth + 7) / 8);
@@ -99,50 +108,12 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   return Error::Code::NONE;
 }
 
-template<int BIT_DEPTH> void
-convert_frames (const vector<float>& samples, vector<unsigned char>& output_bytes)
-{
-  for (size_t i = 0; i < samples.size(); i++)
-    {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
-
-      const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
-
-      if (BIT_DEPTH == 16)
-        {
-          // write 16-bit little endian value
-          output_bytes[i * 2]     = sample >> 16;
-          output_bytes[i * 2 + 1] = sample >> 24;
-        }
-      else if (BIT_DEPTH == 24)
-        {
-          // write 24-bit little endian value
-          output_bytes[i * 3]     = sample >> 8;
-          output_bytes[i * 3 + 1] = sample >> 16;
-          output_bytes[i * 3 + 2] = sample >> 24;
-        }
-    }
-}
-
 Error
 StdoutWavOutputStream::write_frames (const vector<float>& samples)
 {
-  vector<unsigned char> output_bytes (samples.size() * (m_bit_depth / 8));
+  vector<unsigned char> output_bytes;
 
-  if (m_bit_depth == 16)
-    {
-      convert_frames<16> (samples, output_bytes);
-    }
-  else if (m_bit_depth == 24)
-    {
-      convert_frames<24> (samples, output_bytes);
-    }
-  else
-    {
-      assert (false);
-    }
+  m_raw_converter->to_raw (samples, output_bytes);
 
   fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
   return Error::Code::NONE;

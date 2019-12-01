@@ -2,6 +2,7 @@
 #define AUDIOWMARK_STDOUT_WAV_STREAM_HH
 
 #include "audiostream.hh"
+#include "rawconverter.hh"
 
 #include <string>
 
@@ -19,6 +20,8 @@ class StdoutWavOutputStream : public AudioOutputStream
     CLOSED
   };
   State       m_state = State::NEW;
+
+  std::unique_ptr<RawConverter> m_raw_converter;
 
 public:
   ~StdoutWavOutputStream();
