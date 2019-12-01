@@ -4,6 +4,7 @@
 
 using std::vector;
 
+template<int BIT_DEPTH>
 class RawConverterImpl : public RawConverter
 {
 public:
@@ -18,13 +19,20 @@ RawConverter *
 RawConverter::create (const RawFormat& raw_format, Error& error)
 {
   error = Error::Code::NONE;
-  return new RawConverterImpl;
+  switch (raw_format.bit_depth())
+    {
+      case 16: return new RawConverterImpl<16>();
+      case 24: return new RawConverterImpl<24>();
+      default: error = Error ("unsupported bit depth");
+               return nullptr;
+    }
 }
 
+template<int BIT_DEPTH>
 void
-RawConverterImpl::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
+RawConverterImpl<BIT_DEPTH>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
 {
-  output_bytes.resize (2 * samples.size());
+  output_bytes.resize (BIT_DEPTH / 8 * samples.size());
 
   for (size_t i = 0; i < samples.size(); i++)
     {
@@ -34,8 +42,18 @@ RawConverterImpl::to_raw (const vector<float>& samples, vector<unsigned char>& o
 
       const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
 
-      // write 16-bit little endian value
-      output_bytes[i * 2]     = sample >> 16;
-      output_bytes[i * 2 + 1] = sample >> 24;
+      if (BIT_DEPTH == 16)
+        {
+          // write 16-bit little endian value
+          output_bytes[i * 2]     = sample >> 16;
+          output_bytes[i * 2 + 1] = sample >> 24;
+        }
+      else if (BIT_DEPTH == 24)
+        {
+          // write 24-bit little endian value
+          output_bytes[i * 3]     = sample >> 8;
+          output_bytes[i * 3 + 1] = sample >> 16;
+          output_bytes[i * 3 + 2] = sample >> 24;
+        }
     }
 }
