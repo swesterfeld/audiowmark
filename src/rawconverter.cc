@@ -4,7 +4,7 @@
 
 using std::vector;
 
-template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
+template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 class RawConverterImpl : public RawConverter
 {
 public:
@@ -12,14 +12,27 @@ public:
   void from_raw (const std::vector<unsigned char>& bytes, std::vector<float>& samples);
 };
 
+template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
+static RawConverter *
+create_with_bits_endian (const RawFormat& raw_format, Error& error)
+{
+  switch (raw_format.encoding())
+    {
+      case RawFormat::SIGNED:   return new RawConverterImpl<BIT_DEPTH, ENDIAN, RawFormat::SIGNED>();
+      case RawFormat::UNSIGNED: return new RawConverterImpl<BIT_DEPTH, ENDIAN, RawFormat::UNSIGNED>();
+    }
+  error = Error ("unsupported encoding");
+  return nullptr;
+}
+
 template<int BIT_DEPTH>
 static RawConverter *
 create_with_bits (const RawFormat& raw_format, Error& error)
 {
   switch (raw_format.endian())
     {
-      case RawFormat::LITTLE: return new RawConverterImpl<BIT_DEPTH, RawFormat::LITTLE>();
-      case RawFormat::BIG:    return new RawConverterImpl<BIT_DEPTH, RawFormat::BIG>();
+      case RawFormat::LITTLE: return create_with_bits_endian <BIT_DEPTH, RawFormat::LITTLE> (raw_format, error);
+      case RawFormat::BIG:    return create_with_bits_endian <BIT_DEPTH, RawFormat::BIG> (raw_format, error);
     }
   error = Error ("unsupported endianness");
   return nullptr;
@@ -58,12 +71,13 @@ make_endian_shift ()
     }
 }
 
-template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
+template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
-RawConverterImpl<BIT_DEPTH, ENDIAN>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
+RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
 {
   constexpr int  sample_width = BIT_DEPTH / 8;
   constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
+  constexpr unsigned char sign_flip = ENCODING == RawFormat::SIGNED ? 0x00 : 0x80;
 
   output_bytes.resize (sample_width * samples.size());
 
@@ -78,7 +92,7 @@ RawConverterImpl<BIT_DEPTH, ENDIAN>::to_raw (const vector<float>& samples, vecto
       const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
 
       if (eshift[0] >= 0)
-        ptr[0] = sample >> eshift[0];
+        ptr[0] = (sample >> eshift[0]) ^ sign_flip;
       if (eshift[1] >= 0)
         ptr[1] = sample >> eshift[1];
       if (eshift[2] >= 0)
@@ -88,13 +102,14 @@ RawConverterImpl<BIT_DEPTH, ENDIAN>::to_raw (const vector<float>& samples, vecto
     }
 }
 
-template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
+template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
-RawConverterImpl<BIT_DEPTH, ENDIAN>::from_raw (const vector<unsigned char>& input_bytes, vector<float>& samples)
+RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const vector<unsigned char>& input_bytes, vector<float>& samples)
 {
   const unsigned char *ptr = input_bytes.data();
   constexpr int sample_width = BIT_DEPTH / 8;
   constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
+  constexpr unsigned char sign_flip = ENCODING == RawFormat::SIGNED ? 0x00 : 0x80;
 
   samples.resize (input_bytes.size() / sample_width);
   const double norm = 1.0 / 0x80000000LL;
@@ -103,7 +118,7 @@ RawConverterImpl<BIT_DEPTH, ENDIAN>::from_raw (const vector<unsigned char>& inpu
       int s32 = 0;
 
       if (eshift[0] >= 0)
-        s32 += ptr[0] << eshift[0];
+        s32 += (ptr[0] ^ sign_flip) << eshift[0];
       if (eshift[1] >= 0)
         s32 += ptr[1] << eshift[1];
       if (eshift[2] >= 0)

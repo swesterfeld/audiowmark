@@ -42,6 +42,12 @@ RawFormat::set_endian (Endian endian)
   m_endian = endian;
 }
 
+void
+RawFormat::set_encoding (Encoding encoding)
+{
+  m_encoding = encoding;
+}
+
 RawInputStream::~RawInputStream()
 {
   close();

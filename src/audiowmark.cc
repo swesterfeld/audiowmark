@@ -160,6 +160,17 @@ parse_endian (const string& str)
   exit (1);
 }
 
+RawFormat::Encoding
+parse_encoding (const string& str)
+{
+  if (str == "signed")
+    return RawFormat::Encoding::SIGNED;
+  if (str == "unsigned")
+    return RawFormat::Encoding::UNSIGNED;
+  error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
+  exit (1);
+}
+
 void
 parse_options (int   *argc_p,
                char **argv_p[])
@@ -267,6 +278,22 @@ parse_options (int   *argc_p,
           auto e = parse_endian (opt_arg);
           Params::raw_input_format.set_endian (e);
           Params::raw_output_format.set_endian (e);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-input-encoding", &opt_arg))
+        {
+          auto e = parse_encoding (opt_arg);
+          Params::raw_input_format.set_encoding (e);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-output-encoding", &opt_arg))
+        {
+          auto e = parse_encoding (opt_arg);
+          Params::raw_output_format.set_encoding (e);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-encoding", &opt_arg))
+        {
+          auto e = parse_encoding (opt_arg);
+          Params::raw_input_format.set_encoding (e);
+          Params::raw_output_format.set_encoding (e);
         }
       else if (check_arg (argc, argv, &i, "--raw-channels", &opt_arg))
         {
