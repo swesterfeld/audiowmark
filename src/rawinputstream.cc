@@ -36,6 +36,12 @@ RawFormat::set_bit_depth (int bits)
   m_bit_depth = bits;
 }
 
+void
+RawFormat::set_endian (Endian endian)
+{
+  m_endian = endian;
+}
+
 RawInputStream::~RawInputStream()
 {
   close();

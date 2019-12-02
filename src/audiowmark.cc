@@ -149,6 +149,17 @@ parse_format (const string& str)
   exit (1);
 }
 
+RawFormat::Endian
+parse_endian (const string& str)
+{
+  if (str == "little")
+    return RawFormat::Endian::LITTLE;
+  if (str == "big")
+    return RawFormat::Endian::BIG;
+  error ("audiowmark: unsupported endianness '%s'\n", str.c_str());
+  exit (1);
+}
+
 void
 parse_options (int   *argc_p,
                char **argv_p[])
@@ -240,6 +251,22 @@ parse_options (int   *argc_p,
           int b = atoi (opt_arg);
           Params::raw_input_format.set_bit_depth (b);
           Params::raw_output_format.set_bit_depth (b);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-input-endian", &opt_arg))
+        {
+          auto e = parse_endian (opt_arg);
+          Params::raw_input_format.set_endian (e);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-output-endian", &opt_arg))
+        {
+          auto e = parse_endian (opt_arg);
+          Params::raw_output_format.set_endian (e);
+        }
+      else if (check_arg (argc, argv, &i, "--raw-endian", &opt_arg))
+        {
+          auto e = parse_endian (opt_arg);
+          Params::raw_input_format.set_endian (e);
+          Params::raw_output_format.set_endian (e);
         }
       else if (check_arg (argc, argv, &i, "--raw-channels", &opt_arg))
         {

@@ -10,9 +10,16 @@
 
 class RawFormat
 {
-  int m_n_channels  = 0;
-  int m_sample_rate = 0;
-  int m_bit_depth   = 0;
+public:
+  enum Endian {
+    LITTLE,
+    BIG
+  };
+private:
+  int     m_n_channels  = 0;
+  int     m_sample_rate = 0;
+  int     m_bit_depth   = 0;
+  Endian  m_endian      = LITTLE;
 public:
   RawFormat();
   RawFormat (int n_channels, int sample_rate, int bit_depth);
@@ -20,10 +27,12 @@ public:
   int n_channels() const { return m_n_channels; }
   int sample_rate() const { return m_sample_rate; }
   int bit_depth() const { return m_bit_depth; }
+  Endian endian() const { return m_endian; }
 
   void set_channels (int channels);
   void set_sample_rate (int rate);
   void set_bit_depth (int bits);
+  void set_endian (Endian endian);
 };
 
 class RawConverter;
