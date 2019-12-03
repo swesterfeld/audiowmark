@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "utils.hh"
+
 class WavData
 {
   std::vector<float> m_samples;
@@ -16,7 +18,7 @@ public:
   WavData();
   WavData (const std::vector<float>& samples, int n_channels, int sample_rate, int bit_depth);
 
-  bool load (const std::string& filename);
+  Error load (const std::string& filename);
   bool save (const std::string& filename);
 
   int                         sample_rate() const;

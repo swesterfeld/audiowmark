@@ -1909,9 +1909,10 @@ int
 get_watermark (const string& infile, const string& orig_pattern)
 {
   WavData wav_data;
-  if (!wav_data.load (infile))
+  Error err = wav_data.load (infile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
 
@@ -1942,9 +1943,10 @@ gentest (const string& infile, const string& outfile)
   printf ("generating test sample from '%s' to '%s'\n", infile.c_str(), outfile.c_str());
 
   WavData wav_data;
-  if (!wav_data.load (infile))
+  Error err = wav_data.load (infile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
   const vector<float>& in_signal = wav_data.samples();
@@ -1976,9 +1978,10 @@ int
 cut_start (const string& infile, const string& outfile, const string& start_str)
 {
   WavData wav_data;
-  if (!wav_data.load (infile))
+  Error err = wav_data.load (infile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
 
@@ -2002,15 +2005,17 @@ int
 test_subtract (const string& infile1, const string& infile2, const string& outfile)
 {
   WavData in1_data;
-  if (!in1_data.load (infile1))
+  Error err = in1_data.load (infile1);
+  if (err)
     {
-      error ("audiowmark: error loading %s: %s\n", infile1.c_str(), in1_data.error_blurb());
+      error ("audiowmark: error loading %s: %s\n", infile1.c_str(), err.message());
       return 1;
     }
   WavData in2_data;
-  if (!in2_data.load (infile2))
+  err = in2_data.load (infile2);
+  if (err)
     {
-      error ("audiowmark: error loading %s: %s\n", infile2.c_str(), in2_data.error_blurb());
+      error ("audiowmark: error loading %s: %s\n", infile2.c_str(), err.message());
       return 1;
     }
   if (in1_data.n_values() != in2_data.n_values())

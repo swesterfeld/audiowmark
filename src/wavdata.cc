@@ -24,7 +24,7 @@ WavData::WavData (const vector<float>& samples, int n_channels, int sample_rate,
   m_bit_depth   = bit_depth;
 }
 
-bool
+Error
 WavData::load (const string& filename)
 {
   std::unique_ptr<AudioInputStream> in_stream; // FIXME: virtual constructor
@@ -39,26 +39,18 @@ WavData::load (const string& filename)
 
       err = mistream->open (filename);
       if (err)
-        {
-          m_error_blurb = err.message();
-          return false;
-        }
+        return err;
     }
   else if (err)
-    {
-      m_error_blurb = err.message();
-      return false;
-    }
+    return err;
 
   vector<float> m_buffer;
   while (true)
     {
       err = in_stream->read_frames (m_buffer, 1024);
       if (err)
-        {
-          m_error_blurb = err.message();
-          return false;
-        }
+        return err;
+
       if (!m_buffer.size())
         {
           /* reached eof */
@@ -70,7 +62,7 @@ WavData::load (const string& filename)
   m_n_channels  = in_stream->n_channels();
   m_bit_depth   = in_stream->bit_depth();
 
-  return true;
+  return Error::Code::NONE;
 }
 
 bool
