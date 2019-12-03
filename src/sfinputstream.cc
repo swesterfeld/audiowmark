@@ -114,6 +114,7 @@ SFInputStream::close()
       assert (m_sndfile);
       sf_close (m_sndfile);
 
+      m_sndfile = nullptr;
       m_state = State::CLOSED;
     }
 }

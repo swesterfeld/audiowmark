@@ -16,6 +16,8 @@
 #include "stdoutwavoutputstream.hh"
 #include "rawinputstream.hh"
 #include "rawoutputstream.hh"
+#include "mp3.hh"
+#include "mp3inputstream.hh"
 
 #include <zita-resampler/resampler.h>
 #include <zita-resampler/vresampler.h>
@@ -1216,7 +1218,19 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       SFInputStream *sistream = new SFInputStream();
       in_stream.reset (sistream);
       Error err = sistream->open (infile);
-      if (err)
+      if (err && mp3_detect (infile))
+        {
+          MP3InputStream *mistream = new MP3InputStream();
+          in_stream.reset (mistream);
+
+          err = mistream->open (infile);
+          if (err)
+            {
+              fprintf (stderr, "audiowmark: error opening mp3 %s: %s\n", infile.c_str(), err.message());
+              return 1;
+            }
+        }
+      else if (err)
         {
           fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
           return 1;
@@ -1330,6 +1344,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
       total_output_frames += samples.size() / n_channels;
     }
+  fprintf (stderr, "total output: %zd, expected: %zd\n", total_output_frames, in_stream->n_frames());
 #if 0
   if (Params::snr)
     {
