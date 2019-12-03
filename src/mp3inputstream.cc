@@ -79,8 +79,7 @@ MP3InputStream::open (const std::string& filename)
 Error
 MP3InputStream::read_frames (std::vector<float>& samples, size_t count)
 {
-  bool eof = false;
-  while (m_read_buffer.size() < count * m_n_channels)
+  while (!m_eof && m_read_buffer.size() < count * m_n_channels)
     {
       size_t buffer_bytes = mpg123_outblock (m_handle);
       assert (buffer_bytes % sizeof (float) == 0);
@@ -96,14 +95,12 @@ MP3InputStream::read_frames (std::vector<float>& samples, size_t count)
         }
       else if (err == MPG123_DONE)
         {
-          eof = true;
-          break;
+          m_eof = true;
         }
       else if (err == MPG123_NEED_MORE)
         {
           // some mp3s have this error before reaching eof -> harmless
-          eof = true;
-          break;
+          m_eof = true;
         }
       else
         {
@@ -111,17 +108,12 @@ MP3InputStream::read_frames (std::vector<float>& samples, size_t count)
         }
     }
   /* pad zero samples at end if necessary to match the number of frames we promised to deliver */
-  if (eof && m_read_buffer.size() < m_frames_left * m_n_channels)
-    {
-      fprintf (stderr, "mp3: padding %zd frames at end\n", m_frames_left - m_read_buffer.size() / m_n_channels);
-      m_read_buffer.resize (m_frames_left * m_n_channels);
-    }
+  if (m_eof && m_read_buffer.size() < m_frames_left * m_n_channels)
+    m_read_buffer.resize (m_frames_left * m_n_channels);
+
   /* never read past the promised number of frames */
   if (count > m_frames_left)
-    {
-      fprintf (stderr, "mp3: ignoring read request: %zd frames at end\n", count - m_frames_left);
-      count = m_frames_left;
-    }
+    count = m_frames_left;
 
   const auto begin = m_read_buffer.begin();
   const auto end   = begin + min (count * m_n_channels, m_read_buffer.size());

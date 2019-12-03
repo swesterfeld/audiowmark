@@ -18,6 +18,7 @@ class MP3InputStream : public AudioInputStream
   int         m_sample_rate = 0;
   int         m_frames_left = 0;
   bool        m_need_close = false;
+  bool        m_eof = false;
   State       m_state = State::NEW;
 
   mpg123_handle     *m_handle = nullptr;
