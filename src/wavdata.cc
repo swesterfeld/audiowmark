@@ -3,6 +3,7 @@
 #include "utils.hh"
 #include "audiostream.hh"
 #include "sfinputstream.hh"
+#include "sfoutputstream.hh"
 #include "mp3inputstream.hh"
 
 #include <memory>
@@ -68,61 +69,21 @@ WavData::load (const string& filename)
 bool
 WavData::save (const string& filename)
 {
-  SF_INFO sfinfo = {0,};
+  std::unique_ptr<AudioOutputStream> out_stream; // FIXME: virtual constructor
 
-  sfinfo.samplerate = m_sample_rate;
-  sfinfo.channels   = m_n_channels;
-
-  if (m_bit_depth > 16)
-    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
-  else
-    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
-
-  SNDFILE *sndfile = sf_open (filename.c_str(), SFM_WRITE, &sfinfo);
-  int error = sf_error (sndfile);
-  if (error)
+  SFOutputStream *sostream = new SFOutputStream();
+  out_stream.reset (sostream);
+  Error err = sostream->open (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels);
+  if (err)
     {
-      m_error_blurb = sf_strerror (sndfile);
-      if (sndfile)
-        sf_close (sndfile);
-
+      m_error_blurb = err.message();
       return false;
     }
 
-  vector<int> isamples (m_samples.size());
-  for (size_t i = 0; i < m_samples.size(); i++)
+  err = sostream->write_frames (m_samples);
+  if (err)
     {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
-
-      isamples[i] = lrint (bound<double> (min_value, m_samples[i] * norm, max_value));
-    }
-
-  sf_count_t frames = m_samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (sndfile, &isamples[0], frames);
-
-  error = sf_error (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_strerror (sndfile);
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  if (count != frames)
-    {
-      m_error_blurb = "writing sample data failed: short write";
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  error = sf_close (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_error_number (error);
+      m_error_blurb = err.message();
       return false;
     }
   return true;
