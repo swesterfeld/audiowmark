@@ -44,10 +44,16 @@ WavData::load (const string& filename)
   else if (err)
     return err;
 
+  return load (in_stream.get());
+}
+
+Error
+WavData::load (AudioInputStream *in_stream)
+{
   vector<float> m_buffer;
   while (true)
     {
-      err = in_stream->read_frames (m_buffer, 1024);
+      Error err = in_stream->read_frames (m_buffer, 1024);
       if (err)
         return err;
 

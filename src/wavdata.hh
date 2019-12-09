@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "utils.hh"
+#include "audiostream.hh"
 
 class WavData
 {
@@ -17,6 +18,7 @@ public:
   WavData();
   WavData (const std::vector<float>& samples, int n_channels, int sample_rate, int bit_depth);
 
+  Error load (AudioInputStream *in_stream);
   Error load (const std::string& filename);
   Error save (const std::string& filename);
 

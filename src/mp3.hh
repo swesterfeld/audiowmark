@@ -6,7 +6,6 @@
 #include "wavdata.hh"
 
 bool        mp3_detect (const std::string& filename);
-std::string mp3_load   (const std::string& filename, WavData& wav_data);
 void        mp3_init();
 
 #endif /* AUDIOWMARK_MP3_HH */

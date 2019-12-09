@@ -54,7 +54,9 @@ MP3InputStream::open (const std::string& filename)
   m_need_close = true;
 
   /* scan headers to get best possible length estimate */
-  mpg123_scan (m_handle);
+  err = mpg123_scan (m_handle);
+  if (err != MPG123_OK)
+    return Error (mpg123_strerror (m_handle));
 
   long rate;
   int channels;
