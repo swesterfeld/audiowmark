@@ -1967,9 +1967,10 @@ gentest (const string& infile, const string& outfile)
       out_signal.push_back (in_signal[i + offset]);
     }
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-  if (!out_wav_data.save (outfile))
+  err = out_wav_data.save (outfile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;
@@ -1994,9 +1995,10 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
     out_signal.push_back (in_signal[i]);
 
   WavData out_wav_data (out_signal, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-  if (!out_wav_data.save (outfile))
+  err = out_wav_data.save (outfile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;
@@ -2038,9 +2040,10 @@ test_subtract (const string& infile1, const string& infile2, const string& outfi
     out_signal.push_back (in1_signal[i] - in2_signal[i]);
 
   WavData out_wav_data (out_signal, in1_data.n_channels(), in1_data.sample_rate(), in1_data.bit_depth());
-  if (!out_wav_data.save (outfile))
+  err = out_wav_data.save (outfile);
+  if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), out_wav_data.error_blurb());
+      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;

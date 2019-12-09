@@ -8,7 +8,6 @@
 
 #include <memory>
 #include <math.h>
-#include <sndfile.h>
 
 using std::string;
 using std::vector;
@@ -66,7 +65,7 @@ WavData::load (const string& filename)
   return Error::Code::NONE;
 }
 
-bool
+Error
 WavData::save (const string& filename)
 {
   std::unique_ptr<AudioOutputStream> out_stream; // FIXME: virtual constructor
@@ -75,18 +74,13 @@ WavData::save (const string& filename)
   out_stream.reset (sostream);
   Error err = sostream->open (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels);
   if (err)
-    {
-      m_error_blurb = err.message();
-      return false;
-    }
+    return err;
 
   err = sostream->write_frames (m_samples);
   if (err)
-    {
-      m_error_blurb = err.message();
-      return false;
-    }
-  return true;
+    return err;
+
+  return Error::Code::NONE;
 }
 
 int
@@ -105,10 +99,4 @@ void
 WavData::set_samples (const vector<float>& samples)
 {
   m_samples = samples;
-}
-
-const char *
-WavData::error_blurb() const
-{
-  return m_error_blurb.c_str();
 }
