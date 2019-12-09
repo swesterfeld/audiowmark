@@ -5,4 +5,4 @@ streaming:
 - need explicit Error objects
 - logging
 - raw streams
-- mp3 indexing
+- mp3 indexing / detect (resync-limit)

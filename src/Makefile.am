@@ -6,7 +6,7 @@ COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc mp3.c
 	     rawconverter.cc rawconverter.hh mp3inputstream.cc mp3inputstream.hh
 COMMON_LIBS = $(SNDFILE_LIBS) $(FFTW_LIBS) $(LIBGCRYPT_LIBS) $(LIBMPG123_LIBS)
 
-audiowmark_SOURCES = audiowmark.cc fft.cc fft.hh $(COMMON_SRC)
+audiowmark_SOURCES = audiowmark.cc fft.cc fft.hh wmget.cc wmadd.cc wmcommon.hh wmcommon.cc $(COMMON_SRC)
 audiowmark_LDFLAGS = $(COMMON_LIBS)
 
 noinst_PROGRAMS = testconvcode testrandom testmp3 teststream
