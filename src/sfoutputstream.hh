@@ -10,7 +10,6 @@
 class SFOutputStream : public AudioOutputStream
 {
   SNDFILE    *m_sndfile = nullptr;
-  std::string m_error_blurb;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   int         m_n_channels = 0;
@@ -25,7 +24,7 @@ class SFOutputStream : public AudioOutputStream
 public:
   ~SFOutputStream();
 
-  bool   open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   Error  write_frames (const std::vector<float>& frames) override;
   void   close();
   int    bit_depth() const override;

@@ -1287,9 +1287,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       SFOutputStream *sfostream = new SFOutputStream();
       out_stream.reset (sfostream);
-      if (!sfostream->open (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames()))
+      Error err = sfostream->open (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames());
+      if (err)
         {
-          error ("audiowmark: error writing to %s\n", outfile.c_str()); // FIXME, sfostream->error_blurb());
+          error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
           return 1;
         }
     }

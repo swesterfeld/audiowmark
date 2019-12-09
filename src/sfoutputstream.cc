@@ -12,7 +12,7 @@ SFOutputStream::~SFOutputStream()
   close();
 }
 
-bool
+Error
 SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames)
 {
   assert (m_state == State::NEW);
@@ -39,14 +39,14 @@ SFOutputStream::open (const string& filename, int n_channels, int sample_rate, i
   int error = sf_error (m_sndfile);
   if (error)
     {
-      m_error_blurb = sf_strerror (m_sndfile);
+      string msg = sf_strerror (m_sndfile);
       if (m_sndfile)
         sf_close (m_sndfile);
 
-      return false;
+      return Error (msg);
     }
   m_state       = State::OPEN;
-  return true;
+  return Error::Code::NONE;
 }
 
 void
