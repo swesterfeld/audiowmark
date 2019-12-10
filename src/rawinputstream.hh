@@ -20,9 +20,9 @@ public:
     UNSIGNED
   };
 private:
-  int       m_n_channels  = 0;
+  int       m_n_channels  = 2;
   int       m_sample_rate = 0;
-  int       m_bit_depth   = 0;
+  int       m_bit_depth   = 16;
   Endian    m_endian      = LITTLE;
   Encoding  m_encoding    = SIGNED;
 public:
