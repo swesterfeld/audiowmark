@@ -647,6 +647,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           return 1;
         }
     }
+
+  if (out_stream->sample_rate() != in_stream->sample_rate())
+    {
+      error ("audiowmark: input sample rate (%d) and output sample rate (%d) don't match\n", in_stream->sample_rate(), out_stream->sample_rate());
+      return 1;
+    }
   vector<float> samples;
 
   const int n_channels = in_stream->n_channels();
