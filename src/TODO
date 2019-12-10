@@ -6,3 +6,10 @@ streaming:
 - logging
 - raw streams
 - mp3 indexing / detect (resync-limit)
+- stdio error handling
+- document in README
+- final documentation
+- print raw format
+- --snr
+- --quiet
+- ab init lazy
