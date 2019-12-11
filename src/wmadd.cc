@@ -534,6 +534,15 @@ public:
   }
 };
 
+void
+info_format (const string& label, const RawFormat& format)
+{
+  info ("%-13s %d Hz, %d Channels, %d Bit (%s %s-endian)\n", (label + ":").c_str(),
+      format.sample_rate(), format.n_channels(), format.bit_depth(),
+      format.encoding() == RawFormat::Encoding::SIGNED ? "signed" : "unsigned",
+      format.endian() == RawFormat::Endian::LITTLE ? "little" : "big");
+}
+
 int
 add_watermark (const string& infile, const string& outfile, const string& bits)
 {
@@ -557,7 +566,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       bitvec = expanded_bitvec;
     }
   info ("Input:        %s\n", infile.c_str());
+  if (Params::input_format == Format::RAW)
+    info_format ("Raw Input", Params::raw_input_format);
   info ("Output:       %s\n", outfile.c_str());
+  if (Params::output_format == Format::RAW)
+    info_format ("Raw Output", Params::raw_output_format);
   info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
   info ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
