@@ -549,12 +549,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   auto bitvec = bit_str_to_vec (bits);
   if (bitvec.empty())
     {
-      fprintf (stderr, "audiowmark: cannot parse bits %s\n", bits.c_str());
+      error ("audiowmark: cannot parse bits %s\n", bits.c_str());
       return 1;
     }
   if (bitvec.size() > Params::payload_size)
     {
-      fprintf (stderr, "audiowmark: number of bits in message '%s' larger than payload size\n", bits.c_str());
+      error ("audiowmark: number of bits in message '%s' larger than payload size\n", bits.c_str());
       return 1;
     }
   if (bitvec.size() < Params::payload_size)
@@ -592,13 +592,13 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
           err = mistream->open (infile);
           if (err)
             {
-              fprintf (stderr, "audiowmark: error opening mp3 %s: %s\n", infile.c_str(), err.message());
+              error ("audiowmark: error opening mp3 %s: %s\n", infile.c_str(), err.message());
               return 1;
             }
         }
       else if (err)
         {
-          fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+          error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
           return 1;
         }
     }
@@ -609,7 +609,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       Error err = ristream->open (infile, Params::raw_input_format);
       if (err)
         {
-          fprintf (stderr, "audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+          error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
           return 1;
         }
     }
@@ -634,7 +634,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       Error err = rostream->open (outfile, Params::raw_output_format);
       if (err)
         {
-          fprintf (stderr, "audiowmark: error opening %s: %s\n", outfile.c_str(), err.message());
+          error ("audiowmark: error opening %s: %s\n", outfile.c_str(), err.message());
           return 1;
         }
     }

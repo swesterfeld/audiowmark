@@ -284,7 +284,7 @@ gentest (const string& infile, const string& outfile)
   Error err = wav_data.load (infile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
+      error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
   const vector<float>& in_signal = wav_data.samples();
@@ -296,7 +296,7 @@ gentest (const string& infile, const string& outfile)
   const size_t n_samples = 165 * wav_data.n_channels() * wav_data.sample_rate();
   if (in_signal.size() < (offset + n_samples))
     {
-      fprintf (stderr, "audiowmark: input file %s too short\n", infile.c_str());
+      error ("audiowmark: input file %s too short\n", infile.c_str());
       return 1;
     }
   for (size_t i = 0; i < n_samples; i++)
@@ -307,7 +307,7 @@ gentest (const string& infile, const string& outfile)
   err = out_wav_data.save (outfile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
+      error ("audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;
@@ -320,7 +320,7 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
   Error err = wav_data.load (infile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
+      error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
 
@@ -335,7 +335,7 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
   err = out_wav_data.save (outfile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
+      error ("audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;
@@ -380,7 +380,7 @@ test_subtract (const string& infile1, const string& infile2, const string& outfi
   err = out_wav_data.save (outfile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
+      error ("audiowmark: error saving %s: %s\n", outfile.c_str(), err.message());
       return 1;
     }
   return 0;
@@ -392,7 +392,7 @@ gen_key (const string& outfile)
   FILE *f = fopen (outfile.c_str(), "w");
   if (!f)
     {
-      fprintf (stderr, "audiowmark: error writing to file %s\n", outfile.c_str());
+      error ("audiowmark: error writing to file %s\n", outfile.c_str());
       return 1;
     }
   fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
@@ -407,7 +407,7 @@ main (int argc, char **argv)
 
   if (Params::have_key > 1)
     {
-      fprintf (stderr, "audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
       return 1;
     }
   string op = (argc >= 2) ? argv[1] : "";
@@ -442,7 +442,7 @@ main (int argc, char **argv)
     }
   else
     {
-      fprintf (stderr, "audiowmark: error parsing commandline args (use audiowmark -h)\n");
+      error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
       return 1;
     }
 }

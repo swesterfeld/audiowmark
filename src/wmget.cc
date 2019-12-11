@@ -74,7 +74,7 @@ resample (const WavData& wav_data, int rate)
       process_resampler (vresampler, in, out);
       return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
     }
-  fprintf (stderr, "audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
+  error ("audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
   exit (1);
 }
 
@@ -607,7 +607,7 @@ get_watermark (const string& infile, const string& orig_pattern)
   Error err = wav_data.load (infile);
   if (err)
     {
-      fprintf (stderr, "audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
+      error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
       return 1;
     }
 

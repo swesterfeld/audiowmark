@@ -20,7 +20,7 @@ gcrypt_init()
       /* version check: start libgcrypt initialization */
       if (!gcry_check_version (GCRYPT_VERSION))
         {
-          fprintf (stderr, "audiowmark: libgcrypt version mismatch\n");
+          error ("audiowmark: libgcrypt version mismatch\n");
           exit (1);
         }
 
@@ -144,11 +144,11 @@ Random::refill_buffer()
 }
 
 void
-Random::die_on_error (const char *func, gcry_error_t error)
+Random::die_on_error (const char *func, gcry_error_t err)
 {
-  if (error)
+  if (err)
     {
-      fprintf (stderr, "%s failed: %s/%s\n", func, gcry_strsource (error), gcry_strerror (error));
+      error ("%s failed: %s/%s\n", func, gcry_strsource (err), gcry_strerror (err));
 
       exit (1); /* can't recover here */
     }
@@ -166,7 +166,7 @@ Random::load_global_key (const string& key_file)
   FILE *f = fopen (key_file.c_str(), "r");
   if (!f)
     {
-      fprintf (stderr, "audiowmark: error opening key file: '%s'\n", key_file.c_str());
+      error ("audiowmark: error opening key file: '%s'\n", key_file.c_str());
       exit (1);
     }
 
@@ -191,7 +191,7 @@ Random::load_global_key (const string& key_file)
           vector<unsigned char> key = hex_str_to_vec (match[1].str());
           if (key.size() != aes_key.size())
             {
-              fprintf (stderr, "audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
+              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
               exit (1);
             }
           aes_key = key;
@@ -199,7 +199,7 @@ Random::load_global_key (const string& key_file)
         }
       else
         {
-          fprintf (stderr, "audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
+          error ("audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
           exit (1);
         }
       line++;
@@ -208,12 +208,12 @@ Random::load_global_key (const string& key_file)
 
   if (keys > 1)
     {
-      fprintf (stderr, "audiowmark: key file '%s' contains more than one key\n", key_file.c_str());
+      error ("audiowmark: key file '%s' contains more than one key\n", key_file.c_str());
       exit (1);
     }
   if (keys == 0)
     {
-      fprintf (stderr, "audiowmark: key file '%s' contains no key\n", key_file.c_str());
+      error ("audiowmark: key file '%s' contains no key\n", key_file.c_str());
       exit (1);
     }
 }

@@ -32,7 +32,7 @@ mp3_init()
       int err = mpg123_init();
       if (err != MPG123_OK)
         {
-          fprintf (stderr, "audiowmark: init mpg123 lib failed\n");
+          error ("audiowmark: init mpg123 lib failed\n");
           exit (1);
         }
       mpg123_init_ok = true;
