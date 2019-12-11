@@ -8,7 +8,6 @@
 
 class StdoutWavOutputStream : public AudioOutputStream
 {
-  std::string m_error_blurb;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   int         m_n_channels = 0;
@@ -32,11 +31,6 @@ public:
   int  sample_rate() const override;
   int  bit_depth() const override;
   int  n_channels() const override;
-
-  const char *error_blurb() const
-  {
-    return m_error_blurb.c_str();
-  }
 };
 
 #endif

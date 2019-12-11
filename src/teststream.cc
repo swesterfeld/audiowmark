@@ -24,9 +24,10 @@ main (int argc, char **argv)
       fprintf (stderr, "teststream: open input failed: %s\n", err.message());
       return 1;
     }
-  if (!out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames()))
+  err = out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames());
+  if (err)
     {
-      fprintf (stderr, "teststream: open output failed: %s\n", out.error_blurb());
+      fprintf (stderr, "teststream: open output failed: %s\n", err.message());
       return 1;
     }
   vector<float> samples;

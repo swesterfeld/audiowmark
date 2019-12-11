@@ -2,12 +2,9 @@ possible improvements:
 - dynamic bit strength
 
 streaming:
-- need explicit Error objects
 - logging
-- raw streams
+- raw streams -> document in -h?
 - mp3 indexing / detect (resync-limit)
-- stdio error handling
-- document in README
 - final documentation
 - --snr
 - --quiet
