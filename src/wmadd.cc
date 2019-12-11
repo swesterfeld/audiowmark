@@ -717,7 +717,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
       total_output_frames += samples.size() / n_channels;
     }
-  fprintf (stderr, "total output: %zd, expected: %zd\n", total_output_frames, in_stream->n_frames());
+  if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
+    {
+      if (total_output_frames != in_stream->n_frames())
+        {
+          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", in_stream->n_frames(), total_output_frames);
+          return 1;
+        }
+    }
 
   Error err = out_stream->close();
   if (err)
