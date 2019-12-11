@@ -7,5 +7,4 @@ streaming:
 - mp3 indexing / detect (resync-limit)
 - final documentation
 - --snr
-- --quiet
 - ab init lazy

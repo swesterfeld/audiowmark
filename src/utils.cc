@@ -91,18 +91,27 @@ vec_to_hex_str (const vector<unsigned char>& vec)
   return s;
 }
 
-enum class Log { ERROR, WARNING, INFO, DEBUG };
+static Log log_level = Log::INFO;
+
+void
+set_log_level (Log level)
+{
+  log_level = level;
+}
 
 static void
 logv (Log log, const char *format, va_list vargs)
 {
-  char buffer[1024];
+  if (log >= log_level)
+    {
+      char buffer[1024];
 
-  vsnprintf (buffer, sizeof (buffer), format, vargs);
+      vsnprintf (buffer, sizeof (buffer), format, vargs);
 
-  /* could support custom log function here */
-  fprintf (stderr, "%s", buffer);
-  fflush (stderr);
+      /* could support custom log function here */
+      fprintf (stderr, "%s", buffer);
+      fflush (stderr);
+    }
 }
 
 void

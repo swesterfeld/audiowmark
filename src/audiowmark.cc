@@ -41,6 +41,7 @@ print_usage()
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
+  printf ("  -q, --quiet           disable information messages\n");
 }
 
 static bool
@@ -259,6 +260,11 @@ parse_options (int   *argc_p,
           int r = atoi (opt_arg);
           Params::raw_input_format.set_sample_rate (r);
           Params::raw_output_format.set_sample_rate (r);
+        }
+      else if (check_arg (argc, argv, &i, "--quiet")
+            || check_arg (argc, argv, &i, "-q"))
+        {
+          set_log_level (Log::WARNING);
         }
     }
 

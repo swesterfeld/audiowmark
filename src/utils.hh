@@ -37,6 +37,10 @@ void warning (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void info (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void debug (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 
+enum class Log { ERROR = 3, WARNING = 2, INFO = 1, DEBUG = 0 };
+
+void set_log_level (Log level);
+
 class Error
 {
 public:
