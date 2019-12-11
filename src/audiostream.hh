@@ -28,6 +28,7 @@ class AudioOutputStream : public AudioStream
 {
 public:
   virtual Error write_frames (const std::vector<float>& frames) = 0;
+  virtual Error close() = 0;
 };
 
 #endif /* AUDIOWMARK_AUDIO_STREAM_HH */

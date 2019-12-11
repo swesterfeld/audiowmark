@@ -718,6 +718,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       total_output_frames += samples.size() / n_channels;
     }
   fprintf (stderr, "total output: %zd, expected: %zd\n", total_output_frames, in_stream->n_frames());
+
+  Error err = out_stream->close();
+  if (err)
+    error ("audiowmark: closing output stream failed: %s\n", err.message());
+
 #if 0
   if (Params::snr)
     {

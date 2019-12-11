@@ -74,22 +74,34 @@ RawOutputStream::write_frames (const vector<float>& samples)
   m_raw_converter->to_raw (samples, bytes);
 
   fwrite (&bytes[0], 1, bytes.size(), m_output_file);
+  if (ferror (m_output_file))
+    return Error ("write sample data failed");
 
   return Error::Code::NONE;
 }
 
-void
+Error
 RawOutputStream::close()
 {
   if (m_state == State::OPEN)
     {
+      if (m_output_file)
+        {
+          fflush (m_output_file);
+          if (ferror (m_output_file))
+            return Error ("error during flush");
+        }
+
       if (m_close_file && m_output_file)
         {
-          fclose (m_output_file);
+          if (fclose (m_output_file) != 0)
+            return Error ("error during close");
+
           m_output_file = nullptr;
           m_close_file = false;
         }
 
       m_state = State::CLOSED;
     }
+  return Error::Code::NONE;
 }

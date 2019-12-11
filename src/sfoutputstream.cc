@@ -49,16 +49,18 @@ SFOutputStream::open (const string& filename, int n_channels, int sample_rate, i
   return Error::Code::NONE;
 }
 
-void
+Error
 SFOutputStream::close()
 {
   if (m_state == State::OPEN)
     {
       assert (m_sndfile);
-      sf_close (m_sndfile);
+      if (sf_close (m_sndfile))
+        return Error ("sf_close returned an error");
 
       m_state = State::CLOSED;
     }
+  return Error::Code::NONE;
 }
 
 Error

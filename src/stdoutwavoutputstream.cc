@@ -101,6 +101,8 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   header_append_u32 (header_bytes, data_size);
 
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
+  if (ferror (stdout))
+    return Error ("write wav header failed");
 
   m_bit_depth   = bit_depth;
   m_sample_rate = sample_rate;
@@ -118,19 +120,28 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
   m_raw_converter->to_raw (samples, output_bytes);
 
   fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
+  if (ferror (stdout))
+    return Error ("write sample data failed");
+
   return Error::Code::NONE;
 }
 
-void
+Error
 StdoutWavOutputStream::close()
 {
   if (m_state == State::OPEN)
     {
       for (size_t i = 0; i < m_close_padding; i++)
-        fputc (0, stdout);
+        {
+          fputc (0, stdout);
+          if (ferror (stdout))
+            return Error ("write wav padding failed");
+        }
+      fflush (stdout);
+      if (ferror (stdout))
+        return Error ("error during flush");
 
       m_state = State::CLOSED;
     }
+  return Error::Code::NONE;
 }
-
-

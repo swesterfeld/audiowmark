@@ -26,7 +26,7 @@ public:
 
   Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   Error  write_frames (const std::vector<float>& frames) override;
-  void   close();
+  Error  close() override;
   int    bit_depth() const override;
   int    sample_rate() const override;
   int    n_channels() const override;
