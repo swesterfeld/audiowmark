@@ -150,6 +150,109 @@ watermark. Fractional strengths (like 7.5) are possible.
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
 
+== Output as Stream
+
+Usually, an input file is read, watermarked and an output file is written.
+This means that it takes some time before the watermarked file can be used.
+
+An alternative is to output the watermarked file as stream to stdout. One use
+case is sending the watermarked file to a user via network while the
+watermarker is still working on the rest of the file. Here is an example how to
+watermark a wav file to stdout:
+
+  audiowmark add in.wav - 0123456789abcdef0011223344556677 | play -
+
+In this case the file in.wav is read, watermarked, and the output is sent
+to stdout. The "play -" can start playing the watermarked stream while the
+rest of the file is being watermarked.
+
+If - is used as output, the output is a valid .wav file, so the programs
+running after audiowmark will be able to determine sample rate, number of
+channels, bit depth, encoding and so on from the wav header.
+
+Note that all input formats supported by audiowmark can be used in this way,
+for instance flac/mp3:
+
+  audiowmark add in.flac - 0123456789abcdef0011223344556677 | play -
+  audiowmark add in.mp3 - 0123456789abcdef0011223344556677 | play -
+
+== Input from Stream
+
+Similar to the output, the audiowmark input can be a stream. In this case,
+the input must be a valid .wav file. The watermarker will be able to
+start watermarking the input stream before all data is available. An
+example would be:
+
+  cat in.wav | audiowmark add - out.wav 0123456789abcdef0011223344556677
+
+It is possible to do both, input from stream and output as stream.
+
+  cat in.wav | audiowmark add - - 0123456789abcdef0011223344556677 | play -
+
+== Raw Streams
+
+So far, all streams described here are essentially wav streams, which means
+that the wav header allows audiowmark to determine sample rate, number of
+channels, bit depth, encoding and so forth from the stream itself, and the a
+wav header is written for the program after audiowmark, so that this can
+figure out the parameters of the stream.
+
+There are two cases where this is problematic. The first case is if the full
+length of the stream is not known at the time processing starts. Then a wav
+header cannot be used, as the wav file contains the length of the stream.  The
+second case is that the program before or after audiowmark doesn't support wav
+headers.
+
+For these two cases, raw streams are available. The idea is to set all
+information that is needed like sample rate, number of channels,... manually.
+Then, headerless data can be processed from stdin and/or sent to stdout.
+
+--input-format raw::
+--output-format raw::
+--format raw::
+
+These can be used to set the input format or output format to raw. The
+last version sets both, input and output format to raw.
+
+--raw-rate <rate>::
+
+This should be used to set the sample rate. The input sample rate and
+the output sample rate will always be the same (no resampling is
+done by the watermarker). There is no default for the sampling rate,
+so this parameter must always be specified for raw streams.
+
+--raw-input-bits <bits>::
+--raw-output-bits <bits>::
+--raw-bits <bits>::
+
+The options can be used to set the input number of bits, the output number
+of bits or both. The number of bits can either be `16` or `24`. The default
+number of bits is `16`.
+
+--raw-input-endian <endian>::
+--raw-output-endian <endian>::
+--raw-endian <endian>::
+
+These options can be used to set the input/output endianness or both.
+The <endian> parameter can either be `little` or `big`. The default
+endianness is `little`.
+
+--raw-input-encoding <encoding>::
+--raw-output-encoding <encoding>::
+--raw-encoding <encoding>::
+
+These options can be used to set the input/output encoding or both.
+The <encoding> parameter can either be `signed` or `unsigned`. The
+default encoding is `signed`.
+
+--raw-channels <channels>::
+
+This can be used to set the number of channels. Note that the number
+of input channels and the number of output channels must always be the
+same. The watermarker has been designed and tested for stereo files,
+so the number of channels should really be `2`. This is also the
+default.
+
 == Dependencies
 
 If you compile from source, audiowmark needs the following libraries:
