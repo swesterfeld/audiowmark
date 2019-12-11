@@ -265,7 +265,6 @@ public:
     bitvec_b (bitvec_b)
   {
     init_pad_mod_vec (pad_mod_vec);
-    init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
   }
   vector<float>
   run (const vector<float>& samples)
@@ -298,6 +297,10 @@ public:
           {
             state = WATERMARK;
             frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+
+            // initialize a-block frame mod vector here to minimize startup latency
+            assert (frame_mod_vec_a.empty());
+            init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
           }
         else if (state == WATERMARK)
           {
@@ -306,7 +309,7 @@ public:
 
             if (frame_mod_vec_b.empty())
               {
-                // we initialize this only when we need it to minimize startup latency
+                // initialize b-block frame mod vector here to minimize startup latency
                 init_frame_mod_vec (frame_mod_vec_b, 1, bitvec_b);
               }
           }
