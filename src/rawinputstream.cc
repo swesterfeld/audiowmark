@@ -123,6 +123,9 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
 
   vector<unsigned char> input_bytes (count * n_channels * sample_width);
   size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, m_input_file);
+  if (ferror (m_input_file))
+    return Error ("error reading sample data");
+
   input_bytes.resize (r_count * n_channels * sample_width);
 
   m_raw_converter->from_raw (input_bytes, samples);
