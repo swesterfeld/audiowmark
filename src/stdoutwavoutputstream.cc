@@ -102,8 +102,10 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
 
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
 
-  m_bit_depth = bit_depth;
-  m_state     = State::OPEN;
+  m_bit_depth   = bit_depth;
+  m_sample_rate = sample_rate;
+  m_n_channels  = n_channels;
+  m_state       = State::OPEN;
 
   return Error::Code::NONE;
 }
