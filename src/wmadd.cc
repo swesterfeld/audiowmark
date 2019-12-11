@@ -677,6 +677,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (!wm_resampler.init_ok())
     return 1;
 
+  /* for signal to noise ratio */
+  double snr_delta_power = 0;
+  double snr_signal_power = 0;
+
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
   while (true)
@@ -705,6 +709,17 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       vector<float> orig_samples  = audio_buffer.read_frames (to_read);
       assert (samples.size() == orig_samples.size());
 
+      if (Params::snr)
+        {
+          for (size_t i = 0; i < samples.size(); i++)
+            {
+              const double orig  = orig_samples[i]; // original sample
+              const double delta = samples[i];      // watermark
+
+              snr_delta_power += delta * delta;
+              snr_signal_power += orig * orig;
+            }
+        }
       for (size_t i = 0; i < samples.size(); i++)
         samples[i] += orig_samples[i];
 
@@ -733,47 +748,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (err)
     error ("audiowmark: closing output stream failed: %s\n", err.message());
 
-#if 0
   if (Params::snr)
-    {
-      /* compute/show signal to noise ratio */
-      double delta_power = 0;
-      double signal_power = 0;
-      for (size_t i = 0; i < samples.size(); i++)
-        {
-          const double orig_scaled = samples[i];      // original sample
-          const double delta       = out_signal[i];   // watermark
+    info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
 
-          delta_power += delta * delta;
-          signal_power += orig_scaled * orig_scaled;
-        }
-      delta_power /= samples.size();
-      signal_power /= samples.size();
-
-      printf ("SNR:          %f dB\n", 10 * log10 (signal_power / delta_power));
-    }
-  float max_value = 1e-6;
-  for (size_t i = 0; i < samples.size(); i++)
-    {
-      /* Typically the original samples are already in range [-1;1]. However in
-       * some cases (mp3 loader), the samples are not fully normalized; in those
-       * cases, for volume normalization we treat them as-if they had been
-       * clipped already; final clipping will be done while saving.
-       */
-      const float x = bound<float> (-1, samples[i], 1);
-      const float value = fabsf (x + out_signal[i]);
-      if (value > max_value)
-        max_value = value;
-    }
-
-  // scale (samples + watermark) down if necessary to avoid clipping
-  const float scale = min (1.0 / max_value, 1.0);
-  for (size_t i = 0; i < samples.size(); i++)
-    samples[i] = (samples[i] + out_signal[i]) * scale;
-
-  printf ("Data Blocks:  %d\n", data_blocks);
-  printf ("Volume Norm:  %.3f (%.2f dB)\n", scale, db_from_factor (scale, -96));
-#endif
+  //info ("Data Blocks:  %d\n", data_blocks);
   return 0;
 }
 
