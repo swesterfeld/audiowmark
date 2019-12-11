@@ -2,7 +2,6 @@ possible improvements:
 - dynamic bit strength
 
 streaming:
-- logging
 - raw streams -> document in -h?
 - mp3 indexing / detect (resync-limit)
 - final documentation
