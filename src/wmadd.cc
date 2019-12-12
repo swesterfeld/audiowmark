@@ -247,6 +247,7 @@ class WatermarkGen
   int                       frame_number = 0;
   int                       frame_bound = Params::frames_pad_start;
   int                       ab = 0;
+  int                       m_data_blocks = 0;
 
   FFTAnalyzer               fft_analyzer;
   WatermarkSynth            wm_synth;
@@ -306,6 +307,7 @@ public:
           {
             ab = (ab + 1) & 1; // write A|B|A|B|...
             frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+            m_data_blocks++;
 
             if (frame_mod_vec_b.empty())
               {
@@ -315,6 +317,11 @@ public:
           }
       }
     return wm_synth.run (fft_delta_spect);
+  }
+  int
+  data_blocks() const
+  {
+    return m_data_blocks;
   }
 };
 
@@ -535,6 +542,11 @@ public:
     size_t to_read = out_resampler->can_read_frames();
     return out_resampler->read_frames (to_read);
   }
+  int
+  data_blocks() const
+  {
+    return wm_gen.data_blocks();
+  }
 };
 
 void
@@ -751,7 +763,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (Params::snr)
     info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
 
-  //info ("Data Blocks:  %d\n", data_blocks);
+  info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
   return 0;
 }
 
