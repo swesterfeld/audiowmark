@@ -77,7 +77,7 @@ mp3_detect (const string& filename)
   size_t buffer_bytes = mpg123_outblock (mh);
   unsigned char buffer[buffer_bytes];
 
-  for (size_t i = 0; i < 10; i++)
+  for (size_t i = 0; i < 30; i++)
     {
       size_t done;
       err = mpg123_read (mh, buffer, buffer_bytes, &done);
