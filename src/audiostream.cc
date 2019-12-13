@@ -20,7 +20,7 @@ AudioInputStream::create (const string& filename, Error& err)
     {
       SFInputStream *sistream = new SFInputStream();
       in_stream.reset (sistream);
-      Error err = sistream->open (filename);
+      err = sistream->open (filename);
       if (err && mp3_detect (filename))
         {
           MP3InputStream *mistream = new MP3InputStream();
