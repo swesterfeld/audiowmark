@@ -593,40 +593,12 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
   auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
-  std::unique_ptr<AudioInputStream> in_stream; // FIXME: virtual constructor
-  if (Params::input_format == Format::AUTO)
+  Error err;
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
+  if (err)
     {
-      SFInputStream *sistream = new SFInputStream();
-      in_stream.reset (sistream);
-      Error err = sistream->open (infile);
-      if (err && mp3_detect (infile))
-        {
-          MP3InputStream *mistream = new MP3InputStream();
-          in_stream.reset (mistream);
-
-          err = mistream->open (infile);
-          if (err)
-            {
-              error ("audiowmark: error opening mp3 %s: %s\n", infile.c_str(), err.message());
-              return 1;
-            }
-        }
-      else if (err)
-        {
-          error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-          return 1;
-        }
-    }
-  else
-    {
-      RawInputStream *ristream = new RawInputStream();
-      in_stream.reset (ristream);
-      Error err = ristream->open (infile, Params::raw_input_format);
-      if (err)
-        {
-          error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-          return 1;
-        }
+      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+      return 1;
     }
   if (in_stream->n_frames() == AudioInputStream::N_FRAMES_UNKNOWN)
     {
@@ -646,7 +618,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     {
       RawOutputStream *rostream = new RawOutputStream();
       out_stream.reset (rostream);
-      Error err = rostream->open (outfile, Params::raw_output_format);
+      err = rostream->open (outfile, Params::raw_output_format);
       if (err)
         {
           error ("audiowmark: error opening %s: %s\n", outfile.c_str(), err.message());
@@ -756,7 +728,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
     }
 
-  Error err = out_stream->close();
+  err = out_stream->close();
   if (err)
     error ("audiowmark: closing output stream failed: %s\n", err.message());
 

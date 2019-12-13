@@ -48,7 +48,7 @@ public:
     NONE,
     STR
   };
-  Error (Code code) :
+  Error (Code code = Code::NONE) :
     m_code (code)
   {
     switch (code)

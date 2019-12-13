@@ -27,21 +27,10 @@ WavData::WavData (const vector<float>& samples, int n_channels, int sample_rate,
 Error
 WavData::load (const string& filename)
 {
-  std::unique_ptr<AudioInputStream> in_stream; // FIXME: virtual constructor
+  Error err;
 
-  SFInputStream *sistream = new SFInputStream();
-  in_stream.reset (sistream);
-  Error err = sistream->open (filename);
-  if (err && mp3_detect (filename))
-    {
-      MP3InputStream *mistream = new MP3InputStream();
-      in_stream.reset (mistream);
-
-      err = mistream->open (filename);
-      if (err)
-        return err;
-    }
-  else if (err)
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (filename, err);
+  if (err)
     return err;
 
   return load (in_stream.get());
