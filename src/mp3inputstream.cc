@@ -138,7 +138,7 @@ MP3InputStream::read_frames (std::vector<float>& samples, size_t count)
   const auto end   = begin + min (count * m_n_channels, m_read_buffer.size());
   samples.assign (begin, end);
   m_read_buffer.erase (begin, end);
-  m_frames_left -= samples.size() / m_n_channels;
+  m_frames_left -= count;
   return Error::Code::NONE;
 }
 
