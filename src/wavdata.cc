@@ -1,5 +1,4 @@
 #include "wavdata.hh"
-#include "mp3.hh"
 #include "utils.hh"
 #include "audiostream.hh"
 #include "sfinputstream.hh"

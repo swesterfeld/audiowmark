@@ -12,7 +12,6 @@
 #include "rawinputstream.hh"
 #include "rawoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
-#include "mp3.hh"
 
 using std::string;
 using std::vector;

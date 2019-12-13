@@ -2,7 +2,6 @@
 #include "wmcommon.hh"
 #include "sfinputstream.hh"
 #include "sfoutputstream.hh"
-#include "mp3.hh"
 #include "mp3inputstream.hh"
 #include "rawconverter.hh"
 #include "rawoutputstream.hh"

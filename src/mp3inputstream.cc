@@ -1,5 +1,4 @@
 #include "mp3inputstream.hh"
-#include "mp3.hh"
 
 #include <mpg123.h>
 #include <assert.h>
