@@ -143,8 +143,12 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
   for (auto& frame_mod : frame_mod_vec)
     frame_mod.resize (Params::max_band + 1);
 
+  /* forward error correction */
+  ConvBlockType block_type  = ab ? ConvBlockType::b : ConvBlockType::a;
+  vector<int>   bitvec_fec  = randomize_bit_order (conv_encode (block_type, bitvec), /* encode */ true);
+
   mark_sync (frame_mod_vec, ab);
-  mark_data (frame_mod_vec, bitvec);
+  mark_data (frame_mod_vec, bitvec_fec);
 }
 
 /* synthesizes a watermark stream (overlap add with synthesis window)
@@ -252,18 +256,16 @@ class WatermarkGen
   FFTAnalyzer               fft_analyzer;
   WatermarkSynth            wm_synth;
 
-  vector<int>               bitvec_a;
-  vector<int>               bitvec_b;
+  vector<int>               bitvec;
   vector<vector<FrameMod>>  pad_mod_vec;
   vector<vector<FrameMod>>  frame_mod_vec_a;
   vector<vector<FrameMod>>  frame_mod_vec_b;
 public:
-  WatermarkGen (int n_channels, const vector<int>& bitvec_a, const vector<int>& bitvec_b) :
+  WatermarkGen (int n_channels, const vector<int>& bitvec) :
     n_channels (n_channels),
     fft_analyzer (n_channels),
     wm_synth (n_channels),
-    bitvec_a (bitvec_a),
-    bitvec_b (bitvec_b)
+    bitvec (bitvec)
   {
     init_pad_mod_vec (pad_mod_vec);
   }
@@ -301,7 +303,7 @@ public:
 
             // initialize a-block frame mod vector here to minimize startup latency
             assert (frame_mod_vec_a.empty());
-            init_frame_mod_vec (frame_mod_vec_a, 0, bitvec_a);
+            init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
           }
         else if (state == WATERMARK)
           {
@@ -312,7 +314,7 @@ public:
             if (frame_mod_vec_b.empty())
               {
                 // initialize b-block frame mod vector here to minimize startup latency
-                init_frame_mod_vec (frame_mod_vec_b, 1, bitvec_b);
+                init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
               }
           }
       }
@@ -498,8 +500,8 @@ class WatermarkResampler
   WatermarkGen                   wm_gen;
   bool                           need_resampler = false;
 public:
-  WatermarkResampler (int n_channels, int input_rate, vector<int>& bitvec_a, vector<int>& bitvec_b) :
-    wm_gen (n_channels , bitvec_a, bitvec_b)
+  WatermarkResampler (int n_channels, int input_rate, const vector<int>& bitvec) :
+    wm_gen (n_channels, bitvec)
   {
     need_resampler = (input_rate != Params::mark_sample_rate);
 
@@ -580,9 +582,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
       bitvec = expanded_bitvec;
     }
-  /* add forward error correction, bitvec will now be a lot larger */
-  auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
-  auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
 
   /* open input stream */
   Error err;
@@ -641,7 +640,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int n_channels = in_stream->n_channels();
   AudioBuffer audio_buffer (n_channels);
-  WatermarkResampler wm_resampler (n_channels, in_stream->sample_rate(), bitvec_a, bitvec_b);
+  WatermarkResampler wm_resampler (n_channels, in_stream->sample_rate(), bitvec);
   if (!wm_resampler.init_ok())
     return 1;
 
