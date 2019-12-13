@@ -1,6 +1,6 @@
 bin_PROGRAMS = audiowmark
 
-COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc mp3.cc mp3.hh wavdata.cc wavdata.hh \
+COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc wavdata.cc wavdata.hh \
 	     audiostream.cc audiostream.hh sfinputstream.cc sfinputstream.hh stdoutwavoutputstream.cc stdoutwavoutputstream.hh \
 	     sfoutputstream.cc sfoutputstream.hh rawinputstream.cc rawinputstream.hh rawoutputstream.cc rawoutputstream.hh \
 	     rawconverter.cc rawconverter.hh mp3inputstream.cc mp3inputstream.hh wmcommon.cc wmcommon.hh fft.cc fft.hh

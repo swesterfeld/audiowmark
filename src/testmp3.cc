@@ -1,5 +1,5 @@
-#include "mp3.hh"
 #include "mp3inputstream.hh"
+#include "wavdata.hh"
 
 using std::string;
 
@@ -9,7 +9,7 @@ main (int argc, char **argv)
   WavData wd;
   if (argc >= 2)
     {
-      if (mp3_detect (argv[1]))
+      if (MP3InputStream::detect (argv[1]))
         {
           MP3InputStream m3i;
           Error err = m3i.open (argv[1]);

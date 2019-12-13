@@ -35,6 +35,7 @@ public:
   int     n_channels()  const override;
   size_t  n_frames() const override;
 
+  static bool detect (const std::string& filename);
 };
 
 #endif /* AUDIOWMARK_MP3_INPUT_STREAM_HH */
