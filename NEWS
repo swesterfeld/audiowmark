@@ -1,0 +1,9 @@
+Overview of Changes in audiowmark-0.2.0:
+
+* support input/output streams
+* support raw streams
+* some performance optimizations
+
+Overview of Changes in audiowmark-0.1.0:
+
+* initial release
