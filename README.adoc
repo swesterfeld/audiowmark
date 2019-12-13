@@ -167,7 +167,7 @@ to stdout. The "play -" can start playing the watermarked stream while the
 rest of the file is being watermarked.
 
 If - is used as output, the output is a valid .wav file, so the programs
-running after audiowmark will be able to determine sample rate, number of
+running after `audiowmark` will be able to determine sample rate, number of
 channels, bit depth, encoding and so on from the wav header.
 
 Note that all input formats supported by audiowmark can be used in this way,
@@ -178,7 +178,7 @@ for instance flac/mp3:
 
 == Input from Stream
 
-Similar to the output, the audiowmark input can be a stream. In this case,
+Similar to the output, the `audiowmark` input can be a stream. In this case,
 the input must be a valid .wav file. The watermarker will be able to
 start watermarking the input stream before all data is available. An
 example would be:
@@ -189,18 +189,22 @@ It is possible to do both, input from stream and output as stream.
 
   cat in.wav | audiowmark add - - 0123456789abcdef0011223344556677 | play -
 
+Streaming input is also supported for watermark detection.
+
+  cat in.wav | audiowmark get -
+
 == Raw Streams
 
 So far, all streams described here are essentially wav streams, which means
-that the wav header allows audiowmark to determine sample rate, number of
+that the wav header allows `audiowmark` to determine sample rate, number of
 channels, bit depth, encoding and so forth from the stream itself, and the a
-wav header is written for the program after audiowmark, so that this can
+wav header is written for the program after `audiowmark`, so that this can
 figure out the parameters of the stream.
 
 There are two cases where this is problematic. The first case is if the full
 length of the stream is not known at the time processing starts. Then a wav
 header cannot be used, as the wav file contains the length of the stream.  The
-second case is that the program before or after audiowmark doesn't support wav
+second case is that the program before or after `audiowmark` doesn't support wav
 headers.
 
 For these two cases, raw streams are available. The idea is to set all
@@ -255,7 +259,7 @@ default.
 
 == Dependencies
 
-If you compile from source, audiowmark needs the following libraries:
+If you compile from source, `audiowmark` needs the following libraries:
 
 * libfftw3
 * libsndfile
@@ -265,7 +269,7 @@ If you compile from source, audiowmark needs the following libraries:
 
 == Building fftw
 
-audiowmark needs the single prevision variant of fftw3.
+`audiowmark` needs the single prevision variant of fftw3.
 
 If you are building fftw3 from source, use the `--enable-float`
 configure parameter to build it, e.g.::
@@ -284,7 +288,7 @@ or, when building from git
 
 == Docker Build
 
-You should be able to execute audiowmark via Docker.
+You should be able to execute `audiowmark` via Docker.
 Example that outputs the usage message:
 
   docker build -t audiowmark .
