@@ -1,0 +1,12 @@
+Overview of Changes in audiowmark-0.2.0:
+
+* support input/output streams
+* support raw streams
+* some performance optimizations
+* unified logging and --quiet option
+* improved mp3 detection to avoid false positives
+* split up watermarking source (wmadd/wmget/wmcommon)
+
+Overview of Changes in audiowmark-0.1.0:
+
+* initial release

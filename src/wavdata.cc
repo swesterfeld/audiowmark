@@ -1,9 +1,12 @@
 #include "wavdata.hh"
-#include "mp3.hh"
 #include "utils.hh"
+#include "audiostream.hh"
+#include "sfinputstream.hh"
+#include "sfoutputstream.hh"
+#include "mp3inputstream.hh"
 
+#include <memory>
 #include <math.h>
-#include <sndfile.h>
 
 using std::string;
 using std::vector;
@@ -20,174 +23,58 @@ WavData::WavData (const vector<float>& samples, int n_channels, int sample_rate,
   m_bit_depth   = bit_depth;
 }
 
-bool
+Error
 WavData::load (const string& filename)
 {
-  SF_INFO sfinfo = { 0, };
+  Error err;
 
-  SNDFILE *sndfile = sf_open (filename.c_str(), SFM_READ, &sfinfo);
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (filename, err);
+  if (err)
+    return err;
 
-  int error = sf_error (sndfile);
-  if (error)
-    {
-      if (mp3_detect (filename))
-        {
-          string error = mp3_load (filename, *this);
-          if (error == "")
-            {
-              return true;  // mp3 loaded successfully
-            }
-          else
-            {
-              m_error_blurb = "mp3 load error: " + error;
-              return false;
-            }
-        }
-      else
-        {
-          m_error_blurb = sf_strerror (sndfile);
-          if (sndfile)
-            sf_close (sndfile);
-
-          return false;
-        }
-    }
-
-  vector<int> isamples (sfinfo.frames * sfinfo.channels);
-  sf_count_t count = sf_readf_int (sndfile, &isamples[0], sfinfo.frames);
-
-  error = sf_error (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_strerror (sndfile);
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  if (count != sfinfo.frames)
-    {
-      m_error_blurb = "reading sample data failed: short read";
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  m_samples.resize (sfinfo.frames * sfinfo.channels);
-
-  /* reading a wav file and saving it again with the libsndfile float API will
-   * change some values due to normalization issues:
-   *   http://www.mega-nerd.com/libsndfile/FAQ.html#Q010
-   *
-   * to avoid the problem, we use the int API and do the conversion beween int
-   * and float manually - the important part is that the normalization factors
-   * used during read and write are identical
-   */
-  const double norm = 1.0 / 0x80000000LL;
-  for (size_t i = 0; i < m_samples.size(); i++)
-    m_samples[i] = isamples[i] * norm;
-
-  m_sample_rate = sfinfo.samplerate;
-  m_n_channels  = sfinfo.channels;
-
-  switch (sfinfo.format & SF_FORMAT_SUBMASK)
-    {
-      case SF_FORMAT_PCM_U8:
-      case SF_FORMAT_PCM_S8:
-          m_bit_depth = 8;
-          break;
-
-      case SF_FORMAT_PCM_16:
-          m_bit_depth = 16;
-          break;
-
-      case SF_FORMAT_PCM_24:
-          m_bit_depth = 24;
-          break;
-
-      case SF_FORMAT_FLOAT:
-      case SF_FORMAT_PCM_32:
-          m_bit_depth = 32;
-          break;
-
-      case SF_FORMAT_DOUBLE:
-          m_bit_depth = 64;
-          break;
-
-      default:
-          m_bit_depth = 32; /* unknown */
-    }
-
-  error = sf_close (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_error_number (error);
-      return false;
-    }
-  return true;
+  return load (in_stream.get());
 }
 
-bool
+Error
+WavData::load (AudioInputStream *in_stream)
+{
+  vector<float> m_buffer;
+  while (true)
+    {
+      Error err = in_stream->read_frames (m_buffer, 1024);
+      if (err)
+        return err;
+
+      if (!m_buffer.size())
+        {
+          /* reached eof */
+          break;
+        }
+      m_samples.insert (m_samples.end(), m_buffer.begin(), m_buffer.end());
+    }
+  m_sample_rate = in_stream->sample_rate();
+  m_n_channels  = in_stream->n_channels();
+  m_bit_depth   = in_stream->bit_depth();
+
+  return Error::Code::NONE;
+}
+
+Error
 WavData::save (const string& filename)
 {
-  SF_INFO sfinfo = {0,};
+  std::unique_ptr<AudioOutputStream> out_stream;
+  Error err;
 
-  sfinfo.samplerate = m_sample_rate;
-  sfinfo.channels   = m_n_channels;
+  out_stream = AudioOutputStream::create (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels, err);
+  if (err)
+    return err;
 
-  if (m_bit_depth > 16)
-    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
-  else
-    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
+  err = out_stream->write_frames (m_samples);
+  if (err)
+    return err;
 
-  SNDFILE *sndfile = sf_open (filename.c_str(), SFM_WRITE, &sfinfo);
-  int error = sf_error (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_strerror (sndfile);
-      if (sndfile)
-        sf_close (sndfile);
-
-      return false;
-    }
-
-  vector<int> isamples (m_samples.size());
-  for (size_t i = 0; i < m_samples.size(); i++)
-    {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
-
-      isamples[i] = lrint (bound<double> (min_value, m_samples[i] * norm, max_value));
-    }
-
-  sf_count_t frames = m_samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (sndfile, &isamples[0], frames);
-
-  error = sf_error (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_strerror (sndfile);
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  if (count != frames)
-    {
-      m_error_blurb = "writing sample data failed: short write";
-      sf_close (sndfile);
-
-      return false;
-    }
-
-  error = sf_close (sndfile);
-  if (error)
-    {
-      m_error_blurb = sf_error_number (error);
-      return false;
-    }
-  return true;
+  err = out_stream->close();
+  return err;
 }
 
 int
@@ -206,10 +93,4 @@ void
 WavData::set_samples (const vector<float>& samples)
 {
   m_samples = samples;
-}
-
-const char *
-WavData::error_blurb() const
-{
-  return m_error_blurb.c_str();
 }

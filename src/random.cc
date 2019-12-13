@@ -20,7 +20,7 @@ gcrypt_init()
       /* version check: start libgcrypt initialization */
       if (!gcry_check_version (GCRYPT_VERSION))
         {
-          fprintf (stderr, "audiowmark: libgcrypt version mismatch\n");
+          error ("audiowmark: libgcrypt version mismatch\n");
           exit (1);
         }
 
@@ -78,13 +78,9 @@ print (const string& label, const vector<unsigned char>& data)
 }
 #endif
 
-Random::Random (uint64_t seed, Stream stream)
+Random::Random (uint64_t start_seed, Stream stream)
 {
   gcrypt_init();
-
-  vector<unsigned char> ctr = get_start_counter (seed, stream);
-
-  // print ("CTR", ctr);
 
   gcry_error_t gcry_ret = gcry_cipher_open (&aes_ctr_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_CTR, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
@@ -92,43 +88,40 @@ Random::Random (uint64_t seed, Stream stream)
   gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, &aes_key[0], aes_key.size());
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
-  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &ctr[0], ctr.size());
+  gcry_ret = gcry_cipher_open (&seed_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
+  die_on_error ("gcry_cipher_open", gcry_ret);
+
+  gcry_ret = gcry_cipher_setkey (seed_cipher, &aes_key[0], aes_key.size());
+  die_on_error ("gcry_cipher_setkey", gcry_ret);
+
+  seed (start_seed, stream);
+}
+
+void
+Random::seed (uint64_t seed, Stream stream)
+{
+  buffer_pos = 0;
+  buffer.clear();
+
+  unsigned char plain_text[aes_key.size()] = { 0, };
+  unsigned char cipher_text[aes_key.size()];
+
+  uint64_to_buffer (seed, &plain_text[0]);
+
+  plain_text[8] = uint8_t (stream);
+
+  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], aes_key.size(),
+                                                            &plain_text[0],  aes_key.size());
+  die_on_error ("gcry_cipher_encrypt", gcry_ret);
+
+  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], aes_key.size());
   die_on_error ("gcry_cipher_setctr", gcry_ret);
 }
 
 Random::~Random()
 {
   gcry_cipher_close (aes_ctr_cipher);
-}
-
-vector<unsigned char>
-Random::get_start_counter (uint64_t seed, Stream stream)
-{
-  gcry_error_t     gcry_ret;
-  gcry_cipher_hd_t cipher_hd;
-
-  gcry_ret = gcry_cipher_open (&cipher_hd, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
-  die_on_error ("gcry_cipher_open", gcry_ret);
-
-  gcry_ret = gcry_cipher_setkey (cipher_hd, &aes_key[0], aes_key.size());
-  die_on_error ("gcry_cipher_setkey", gcry_ret);
-
-  vector<unsigned char> cipher_text (16);
-  vector<unsigned char> plain_text (16);
-
-  uint64_to_buffer (seed, &plain_text[0]);
-
-  plain_text[8] = uint8_t (stream);
-
-  // print ("SEED", plain_text);
-
-  gcry_ret = gcry_cipher_encrypt (cipher_hd, &cipher_text[0], cipher_text.size(),
-                                             &plain_text[0],  plain_text.size());
-  die_on_error ("gcry_cipher_encrypt", gcry_ret);
-
-  gcry_cipher_close (cipher_hd);
-
-  return cipher_text;
+  gcry_cipher_close (seed_cipher);
 }
 
 void
@@ -151,11 +144,11 @@ Random::refill_buffer()
 }
 
 void
-Random::die_on_error (const char *func, gcry_error_t error)
+Random::die_on_error (const char *func, gcry_error_t err)
 {
-  if (error)
+  if (err)
     {
-      fprintf (stderr, "%s failed: %s/%s\n", func, gcry_strsource (error), gcry_strerror (error));
+      error ("%s failed: %s/%s\n", func, gcry_strsource (err), gcry_strerror (err));
 
       exit (1); /* can't recover here */
     }
@@ -173,7 +166,7 @@ Random::load_global_key (const string& key_file)
   FILE *f = fopen (key_file.c_str(), "r");
   if (!f)
     {
-      fprintf (stderr, "audiowmark: error opening key file: '%s'\n", key_file.c_str());
+      error ("audiowmark: error opening key file: '%s'\n", key_file.c_str());
       exit (1);
     }
 
@@ -198,7 +191,7 @@ Random::load_global_key (const string& key_file)
           vector<unsigned char> key = hex_str_to_vec (match[1].str());
           if (key.size() != aes_key.size())
             {
-              fprintf (stderr, "audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
+              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
               exit (1);
             }
           aes_key = key;
@@ -206,7 +199,7 @@ Random::load_global_key (const string& key_file)
         }
       else
         {
-          fprintf (stderr, "audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
+          error ("audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
           exit (1);
         }
       line++;
@@ -215,12 +208,12 @@ Random::load_global_key (const string& key_file)
 
   if (keys > 1)
     {
-      fprintf (stderr, "audiowmark: key file '%s' contains more than one key\n", key_file.c_str());
+      error ("audiowmark: key file '%s' contains more than one key\n", key_file.c_str());
       exit (1);
     }
   if (keys == 0)
     {
-      fprintf (stderr, "audiowmark: key file '%s' contains no key\n", key_file.c_str());
+      error ("audiowmark: key file '%s' contains no key\n", key_file.c_str());
       exit (1);
     }
 }

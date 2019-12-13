@@ -4,24 +4,26 @@
 #include <string>
 #include <vector>
 
+#include "utils.hh"
+#include "audiostream.hh"
+
 class WavData
 {
   std::vector<float> m_samples;
   int                m_sample_rate = 0;
   int                m_n_channels  = 0;
   int                m_bit_depth   = 0;
-  std::string        m_error_blurb;
 
 public:
   WavData();
   WavData (const std::vector<float>& samples, int n_channels, int sample_rate, int bit_depth);
 
-  bool load (const std::string& filename);
-  bool save (const std::string& filename);
+  Error load (AudioInputStream *in_stream);
+  Error load (const std::string& filename);
+  Error save (const std::string& filename);
 
   int                         sample_rate() const;
   int                         bit_depth() const;
-  const char                 *error_blurb() const;
 
   int
   n_channels() const

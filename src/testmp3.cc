@@ -1,4 +1,5 @@
-#include "mp3.hh"
+#include "mp3inputstream.hh"
+#include "wavdata.hh"
 
 using std::string;
 
@@ -8,10 +9,18 @@ main (int argc, char **argv)
   WavData wd;
   if (argc >= 2)
     {
-      if (mp3_detect (argv[1]))
+      if (MP3InputStream::detect (argv[1]))
         {
-          string error = mp3_load (argv[1], wd);
-          if (error == "")
+          MP3InputStream m3i;
+          Error err = m3i.open (argv[1]);
+          if (err)
+            {
+              printf ("mp3 open %s failed: %s\n", argv[1], err.message());
+              return 1;
+            }
+
+          err = wd.load (&m3i);
+          if (!err)
             {
               int sec = wd.n_values() / wd.n_channels() / wd.sample_rate();
 
@@ -24,7 +33,7 @@ main (int argc, char **argv)
             }
           else
             {
-              printf ("mp3 load %s failed: %s\n", argv[1], error.c_str());
+              printf ("mp3 load %s failed: %s\n", argv[1], err.message());
               return 1;
             }
         }
