@@ -580,6 +580,42 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
       bitvec = expanded_bitvec;
     }
+  /* add forward error correction, bitvec will now be a lot larger */
+  auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
+  auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
+
+  /* open input stream */
+  Error err;
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
+  if (err)
+    {
+      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+      return 1;
+    }
+
+  /* open output stream */
+  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
+  std::unique_ptr<AudioOutputStream> out_stream;
+  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
+  if (err)
+    {
+      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
+      return 1;
+    }
+
+  /* sanity checks */
+  if (in_stream->sample_rate() != out_stream->sample_rate())
+    {
+      error ("audiowmark: input sample rate (%d) and output sample rate (%d) don't match\n", in_stream->sample_rate(), out_stream->sample_rate());
+      return 1;
+    }
+  if (in_stream->n_channels() != out_stream->n_channels())
+    {
+      error ("audiowmark: input channels (%d) and output channels (%d) don't match\n", in_stream->n_channels(), out_stream->n_channels());
+      return 1;
+    }
+
+  /* write some informational messages */
   info ("Input:        %s\n", infile.c_str());
   if (Params::input_format == Format::RAW)
     info_format ("Raw Input", Params::raw_input_format);
@@ -589,17 +625,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
   info ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
-  /* add forward error correction, bitvec will now be a lot larger */
-  auto bitvec_a = randomize_bit_order (conv_encode (ConvBlockType::a, bitvec), /* encode */ true);
-  auto bitvec_b = randomize_bit_order (conv_encode (ConvBlockType::b, bitvec), /* encode */ true);
-
-  Error err;
-  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
-  if (err)
-    {
-      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-      return 1;
-    }
   if (in_stream->n_frames() == AudioInputStream::N_FRAMES_UNKNOWN)
     {
       info ("Time:         unknown\n");
@@ -612,20 +637,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   info ("Sample Rate:  %d\n", in_stream->sample_rate());
   info ("Channels:     %d\n", in_stream->n_channels());
 
-  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
-  std::unique_ptr<AudioOutputStream> out_stream;
-  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
-  if (err)
-    {
-      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
-      return 1;
-    }
-
-  if (out_stream->sample_rate() != in_stream->sample_rate())
-    {
-      error ("audiowmark: input sample rate (%d) and output sample rate (%d) don't match\n", in_stream->sample_rate(), out_stream->sample_rate());
-      return 1;
-    }
   vector<float> samples;
 
   const int n_channels = in_stream->n_channels();
@@ -642,8 +653,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   size_t total_output_frames = 0;
   while (true)
     {
-      Error err = Error::Code::NONE;
-
       err = in_stream->read_frames (samples, Params::frame_size);
       if (err)
         {
