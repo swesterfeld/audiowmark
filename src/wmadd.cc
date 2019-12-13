@@ -614,38 +614,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
   std::unique_ptr<AudioOutputStream> out_stream;
-  if (Params::output_format == Format::RAW)
+  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
+  if (err)
     {
-      RawOutputStream *rostream = new RawOutputStream();
-      out_stream.reset (rostream);
-      err = rostream->open (outfile, Params::raw_output_format);
-      if (err)
-        {
-          error ("audiowmark: error opening %s: %s\n", outfile.c_str(), err.message());
-          return 1;
-        }
-    }
-  else if (outfile == "-")
-    {
-      StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
-      out_stream.reset (swstream);
-      Error err = swstream->open (in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames());
-      if (err)
-        {
-          error ("audiowmark: error writing to -: %s\n", err.message());
-          return 1;
-        }
-    }
-  else
-    {
-      SFOutputStream *sfostream = new SFOutputStream();
-      out_stream.reset (sfostream);
-      Error err = sfostream->open (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames());
-      if (err)
-        {
-          error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
-          return 1;
-        }
+      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
+      return 1;
     }
 
   if (out_stream->sample_rate() != in_stream->sample_rate())

@@ -63,19 +63,19 @@ WavData::load (AudioInputStream *in_stream)
 Error
 WavData::save (const string& filename)
 {
-  std::unique_ptr<AudioOutputStream> out_stream; // FIXME: virtual constructor
+  std::unique_ptr<AudioOutputStream> out_stream;
+  Error err;
 
-  SFOutputStream *sostream = new SFOutputStream();
-  out_stream.reset (sostream);
-  Error err = sostream->open (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels);
+  out_stream = AudioOutputStream::create (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels, err);
   if (err)
     return err;
 
-  err = sostream->write_frames (m_samples);
+  err = out_stream->write_frames (m_samples);
   if (err)
     return err;
 
-  return Error::Code::NONE;
+  err = out_stream->close();
+  return err;
 }
 
 int

@@ -30,6 +30,9 @@ public:
 class AudioOutputStream : public AudioStream
 {
 public:
+  static std::unique_ptr<AudioOutputStream> create (const std::string& filename,
+    int n_channels, int sample_rate, int bit_depth, size_t n_frames, Error& err);
+
   virtual Error write_frames (const std::vector<float>& frames) = 0;
   virtual Error close() = 0;
 };

@@ -1,9 +1,12 @@
 #include "audiostream.hh"
 #include "wmcommon.hh"
 #include "sfinputstream.hh"
+#include "sfoutputstream.hh"
 #include "mp3.hh"
 #include "mp3inputstream.hh"
 #include "rawconverter.hh"
+#include "rawoutputstream.hh"
+#include "stdoutwavoutputstream.hh"
 
 using std::string;
 
@@ -43,4 +46,36 @@ AudioInputStream::create (const string& filename, Error& err)
         return nullptr;
     }
   return in_stream;
+}
+
+std::unique_ptr<AudioOutputStream>
+AudioOutputStream::create (const string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames, Error& err)
+{
+  std::unique_ptr<AudioOutputStream> out_stream;
+
+  if (Params::output_format == Format::RAW)
+    {
+      RawOutputStream *rostream = new RawOutputStream();
+      out_stream.reset (rostream);
+      err = rostream->open (filename, Params::raw_output_format);
+      if (err)
+        return nullptr;
+    }
+  else if (filename == "-")
+    {
+      StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
+      out_stream.reset (swstream);
+      err = swstream->open (n_channels, sample_rate, bit_depth, n_frames);
+      if (err)
+        return nullptr;
+    }
+  else
+    {
+      SFOutputStream *sfostream = new SFOutputStream();
+      out_stream.reset (sfostream);
+      err = sfostream->open (filename, n_channels, sample_rate, bit_depth, n_frames);
+      if (err)
+        return nullptr;
+    }
+  return out_stream;
 }
