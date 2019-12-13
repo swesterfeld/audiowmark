@@ -42,6 +42,13 @@ print_usage()
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --key <file>          load watermarking key from file\n");
   printf ("  -q, --quiet           disable information messages\n");
+  printf ("\n");
+  printf ("  --input-format raw    use raw stream as input\n");
+  printf ("  --output-format raw   use raw stream as output\n");
+  printf ("  --format raw          use raw stream as input and output\n");
+  printf ("\n");
+  printf ("The options to set the raw stream parameters (such as --raw-rate\n");
+  printf ("or --raw-channels) are documented in the README file.\n");
 }
 
 static bool
