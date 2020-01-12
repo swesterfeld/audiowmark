@@ -400,6 +400,44 @@ test_subtract (const string& infile1, const string& infile2, const string& outfi
 }
 
 int
+test_snr (const string& orig_file, const string& wm_file)
+{
+  WavData orig_data;
+  Error err = orig_data.load (orig_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", orig_file.c_str(), err.message());
+      return 1;
+    }
+  WavData wm_data;
+  err = wm_data.load (wm_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", wm_file.c_str(), err.message());
+      return 1;
+    }
+  assert (orig_data.n_values() == wm_data.n_values());
+  assert (orig_data.n_channels() == orig_data.n_channels());
+
+  const auto& orig_signal = orig_data.samples();
+  const auto& wm_signal = wm_data.samples();
+
+  double snr_delta_power = 0;
+  double snr_signal_power = 0;
+
+  for (size_t i = 0; i < orig_signal.size(); i++)
+    {
+      const double orig  = orig_signal[i];                // original sample
+      const double delta = orig_signal[i] - wm_signal[i]; // watermark
+
+      snr_delta_power += delta * delta;
+      snr_signal_power += orig * orig;
+    }
+  printf ("%f\n", 10 * log10 (snr_signal_power / snr_delta_power));
+  return 0;
+}
+
+int
 gen_key (const string& outfile)
 {
   FILE *f = fopen (outfile.c_str(), "w");
@@ -448,6 +486,10 @@ main (int argc, char **argv)
   else if (op == "test-subtract" && argc == 5)
     {
       test_subtract (argv[2], argv[3], argv[4]);
+    }
+  else if (op == "test-snr" && argc == 4)
+    {
+      test_snr (argv[2], argv[3]);
     }
   else if (op == "gen-key" && argc == 3)
     {
