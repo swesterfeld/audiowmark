@@ -16,6 +16,7 @@ using std::min;
 class Limiter
 {
   float mx = 1;
+  double decay_coeff;
   uint look_ahead = 0;
   vector<float> max_buffer;
   vector<float> buffer;
@@ -24,6 +25,8 @@ public:
   {
     look_ahead = sample_rate * 0.005;
     assert (look_ahead >= 1);
+
+    decay_coeff = exp (log (0.5) / (sample_rate * 0.05));
   }
   vector<float>
   process (const vector<float>& samples)
@@ -54,7 +57,7 @@ public:
         size_t todo = buffer.size() - look_ahead;
         for (size_t i = 0; i < todo; i++)
           {
-            mx = mx * 0.99 + max_buffer[i] * 0.01;
+            mx = mx * decay_coeff + max_buffer[i] * (1 - decay_coeff);
             if (mx < max_buffer[i])
               mx = max_buffer[i];
 
