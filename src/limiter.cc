@@ -7,17 +7,31 @@
 using std::vector;
 using std::max;
 
-Limiter::Limiter (int sample_rate)
+Limiter::Limiter (int sample_rate) :
+  sample_rate (sample_rate)
 {
-  look_ahead = sample_rate * 0.005;
-  assert (look_ahead >= 1);
+}
 
-  decay_coeff = exp (log (0.5) / (sample_rate * 0.05));
+void
+Limiter::set_attack (double attack_ms)
+{
+  look_ahead = sample_rate / 1000.0 * attack_ms;
+  look_ahead = max (look_ahead, 1u);
+}
+
+void
+Limiter::set_release (double release_ms)
+{
+  release_factor = exp (log (0.5) / (sample_rate / 1000.0 * release_ms));
+  release_factor = max (release_factor, 0.5);
 }
 
 vector<float>
 Limiter::process (const vector<float>& samples)
 {
+  assert (look_ahead >= 1);
+  assert (release_factor > 0 && release_factor < 1);
+
   for (size_t i = 0; i < samples.size(); i++)
     {
       buffer.push_back (samples[i]);
@@ -44,7 +58,7 @@ Limiter::process (const vector<float>& samples)
       size_t todo = buffer.size() - look_ahead;
       for (size_t i = 0; i < todo; i++)
         {
-          maximum = maximum * decay_coeff + max_buffer[i] * (1 - decay_coeff);
+          maximum = maximum * release_factor + max_buffer[i] * (1 - release_factor);
           if (maximum < max_buffer[i])
             maximum = max_buffer[i];
 

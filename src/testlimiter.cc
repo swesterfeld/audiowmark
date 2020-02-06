@@ -34,6 +34,8 @@ main (int argc, char **argv)
       return 1;
     }
   Limiter limiter (in.sample_rate());
+  limiter.set_attack (5);
+  limiter.set_release (50);
   vector<float> samples;
   do
     {

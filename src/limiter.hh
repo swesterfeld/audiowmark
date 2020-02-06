@@ -6,14 +6,18 @@
 
 class Limiter
 {
-  float maximum       = 1;
-  double decay_coeff  = 1;
-  uint look_ahead     = 0;
+  double maximum        = 1;
+  double release_factor = 0;
+  uint look_ahead       = 0;
+  uint sample_rate      = 0;
 
   std::vector<float> max_buffer;
   std::vector<float> buffer;
 public:
   Limiter (int sample_rate);
+
+  void set_release (double value_ms);
+  void set_attack (double value_ms);
 
   std::vector<float> process (const std::vector<float>& samples);
 };
