@@ -1,7 +1,6 @@
 possible improvements:
 - dynamic bit strength
 
-streaming:
-- final documentation
-- merge mp3 code
-- fix virtual constructor FIXMEs
+limiter:
+- flush
+- multi-channel support
