@@ -36,14 +36,15 @@ main (int argc, char **argv)
   Limiter limiter (in.sample_rate());
   limiter.set_attack (5);
   limiter.set_release (50);
-  vector<float> samples;
+  vector<float> in_samples;
   do
     {
-      in.read_frames (samples, 1024);
-      for (auto& s: samples)
+      in.read_frames (in_samples, 1024);
+      for (auto& s: in_samples)
         s *= 1.1;
-      samples = limiter.process (samples);
-      out.write_frames (samples);
+
+      vector<float> out_samples = limiter.process (in_samples);
+      out.write_frames (out_samples);
     }
-  while (samples.size());
+  while (in_samples.size());
 }
