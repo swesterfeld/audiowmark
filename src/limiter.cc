@@ -43,7 +43,7 @@ Limiter::process (const vector<float>& samples)
         {
           for (uint j = 0; j < look_ahead; j++)
             {
-              if (int (i) - int (j) > 0)
+              if (int (i) - int (j) >= 0)
                 {
                   double alpha = double (j) / look_ahead;
                   max_buffer[i - j] = max<float> (max_buffer[i - j], fabs (buffer[i]) * (1 - alpha) + 1 * alpha);
