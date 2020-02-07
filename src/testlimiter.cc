@@ -36,6 +36,7 @@ main (int argc, char **argv)
   Limiter limiter (in.sample_rate());
   limiter.set_attack (5);
   limiter.set_release (50);
+  limiter.set_ceiling (0.9);
   vector<float> in_samples;
   do
     {
