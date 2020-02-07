@@ -6,6 +6,7 @@
 
 class Limiter
 {
+  double ceiling        = 1;
   double maximum        = 1;
   double release_factor = 0;
   uint look_ahead       = 0;
@@ -18,6 +19,7 @@ public:
 
   void set_release (double value_ms);
   void set_attack (double value_ms);
+  void set_ceiling (double ceiling);
 
   std::vector<float> process (const std::vector<float>& samples);
 };

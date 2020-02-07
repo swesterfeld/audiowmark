@@ -26,6 +26,13 @@ Limiter::set_release (double release_ms)
   release_factor = max (release_factor, 0.5);
 }
 
+void
+Limiter::set_ceiling (double new_ceiling)
+{
+  ceiling = new_ceiling;
+  maximum = ceiling;
+}
+
 vector<float>
 Limiter::process (const vector<float>& samples)
 {
@@ -35,18 +42,18 @@ Limiter::process (const vector<float>& samples)
   for (size_t i = 0; i < samples.size(); i++)
     {
       buffer.push_back (samples[i]);
-      max_buffer.push_back (1);
+      max_buffer.push_back (ceiling);
     }
   for (size_t i = 0; i < buffer.size(); i++)
     {
-      if (fabs (buffer[i]) > 1)
+      if (fabs (buffer[i]) > ceiling)
         {
           for (uint j = 0; j < look_ahead; j++)
             {
               if (int (i) - int (j) >= 0)
                 {
                   double alpha = double (j) / look_ahead;
-                  max_buffer[i - j] = max<float> (max_buffer[i - j], fabs (buffer[i]) * (1 - alpha) + 1 * alpha);
+                  max_buffer[i - j] = max<float> (max_buffer[i - j], fabs (buffer[i]) * (1 - alpha) + ceiling * alpha);
                 }
             }
         }
@@ -62,7 +69,7 @@ Limiter::process (const vector<float>& samples)
           if (maximum < max_buffer[i])
             maximum = max_buffer[i];
 
-          out.push_back (buffer[i] / maximum);
+          out.push_back (buffer[i] / maximum * ceiling);
           //printf ("%f %f\n", buffer[i], out.back());
         }
 
