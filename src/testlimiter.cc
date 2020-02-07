@@ -24,16 +24,16 @@ main (int argc, char **argv)
   Error err = in.open (argv[1]);
   if (err)
     {
-      fprintf (stderr, "teststream: open input failed: %s\n", err.message());
+      fprintf (stderr, "testlimiter: open input failed: %s\n", err.message());
       return 1;
     }
   err = out.open (argv[2], in.n_channels(), in.sample_rate(), 16, in.n_frames());
   if (err)
     {
-      fprintf (stderr, "teststream: open output failed: %s\n", err.message());
+      fprintf (stderr, "testlimiter: open output failed: %s\n", err.message());
       return 1;
     }
-  Limiter limiter (in.sample_rate());
+  Limiter limiter (in.n_channels(), in.sample_rate());
   limiter.set_attack (5);
   limiter.set_release (50);
   limiter.set_ceiling (0.9);

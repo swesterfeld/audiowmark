@@ -7,7 +7,8 @@
 using std::vector;
 using std::max;
 
-Limiter::Limiter (int sample_rate) :
+Limiter::Limiter (int n_channels, int sample_rate) :
+  n_channels (n_channels),
   sample_rate (sample_rate)
 {
 }
@@ -39,37 +40,47 @@ Limiter::process (const vector<float>& samples)
   assert (look_ahead >= 1);
   assert (release_factor > 0 && release_factor < 1);
 
-  for (size_t i = 0; i < samples.size(); i++)
+  const size_t n_frames = samples.size() / n_channels;
+  assert (n_frames * n_channels == samples.size());    // need all channels of each frame
+
+  for (size_t i = 0; i < n_frames; i++)
     {
-      buffer.push_back (samples[i]);
+      for (uint c = 0; c < n_channels; c++)
+        buffer.push_back (samples[i * n_channels + c]);
+
       max_buffer.push_back (ceiling);
     }
-  for (size_t i = 0; i < buffer.size(); i++)
+  for (size_t i = 0; i < n_frames; i++)
     {
-      if (fabs (buffer[i]) > ceiling)
+      float channel_max = 0;
+      for (uint c = 0; c < n_channels; c++)
+        channel_max = max (channel_max, fabs (samples[i * n_channels + c]));
+
+      if (channel_max > ceiling)
         {
           for (uint j = 0; j < look_ahead; j++)
             {
               if (int (i) - int (j) >= 0)
                 {
                   double alpha = double (j) / look_ahead;
-                  max_buffer[i - j] = max<float> (max_buffer[i - j], fabs (buffer[i]) * (1 - alpha) + ceiling * alpha);
+                  max_buffer[i - j] = max<float> (max_buffer[i - j], channel_max * (1 - alpha) + ceiling * alpha);
                 }
             }
         }
     }
 
   vector<float> out;
-  if (buffer.size() > look_ahead)
+  if (max_buffer.size() > look_ahead)
     {
-      size_t todo = buffer.size() - look_ahead;
+      size_t todo = max_buffer.size() - look_ahead;
       for (size_t i = 0; i < todo; i++)
         {
           maximum = maximum * release_factor + max_buffer[i] * (1 - release_factor);
           if (maximum < max_buffer[i])
             maximum = max_buffer[i];
 
-          out.push_back (buffer[i] / maximum * ceiling);
+          for (uint c = 0; c < n_channels; c++)
+            out.push_back (buffer[i * n_channels + c] / maximum * ceiling);
           //printf ("%f %f\n", buffer[i], out.back());
         }
 

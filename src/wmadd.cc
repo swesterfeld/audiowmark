@@ -644,7 +644,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (!wm_resampler.init_ok())
     return 1;
 
-  Limiter limiter (in_stream->sample_rate());
+  Limiter limiter (n_channels, in_stream->sample_rate());
   limiter.set_attack (Params::limiter_attack_ms);
   limiter.set_release (Params::limiter_release_ms);
   limiter.set_ceiling (Params::limiter_ceiling);
