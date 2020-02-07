@@ -84,7 +84,7 @@ Limiter::process (const vector<float>& samples)
           //printf ("%f %f\n", buffer[i], out.back());
         }
 
-      buffer.erase (buffer.begin(), buffer.begin() + todo);
+      buffer.erase (buffer.begin(), buffer.begin() + todo * n_channels);
       max_buffer.erase (max_buffer.begin(), max_buffer.begin() + todo);
     }
   return out;
