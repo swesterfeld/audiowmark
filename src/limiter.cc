@@ -43,13 +43,9 @@ Limiter::process (const vector<float>& samples)
   const size_t n_frames = samples.size() / n_channels;
   assert (n_frames * n_channels == samples.size());    // need all channels of each frame
 
-  for (size_t i = 0; i < n_frames; i++)
-    {
-      for (uint c = 0; c < n_channels; c++)
-        buffer.push_back (samples[i * n_channels + c]);
+  buffer.insert (buffer.end(), samples.begin(), samples.end());
+  max_buffer.insert (max_buffer.end(), n_frames, ceiling);
 
-      max_buffer.push_back (ceiling);
-    }
   for (size_t i = 0; i < n_frames; i++)
     {
       float channel_max = 0;
