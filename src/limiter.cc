@@ -50,7 +50,7 @@ Limiter::process (const vector<float>& samples)
     {
       float channel_max = 0;
       for (uint c = 0; c < n_channels; c++)
-        channel_max = max (channel_max, fabs (samples[i * n_channels + c]));
+        channel_max = max (channel_max, fabs (buffer[i * n_channels + c]));
 
       if (channel_max > ceiling)
         {
