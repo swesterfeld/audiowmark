@@ -65,23 +65,24 @@ Limiter::process (const vector<float>& samples)
         }
     }
 
-  vector<float> out;
-  if (max_buffer.size() > look_ahead)
+  if (max_buffer.size() <= look_ahead)
+    return {};
+
+  const size_t todo = max_buffer.size() - look_ahead;
+  vector<float> out (todo * n_channels);
+
+  for (size_t i = 0; i < todo; i++)
     {
-      size_t todo = max_buffer.size() - look_ahead;
-      for (size_t i = 0; i < todo; i++)
-        {
-          maximum = maximum * release_factor + max_buffer[i] * (1 - release_factor);
-          if (maximum < max_buffer[i])
-            maximum = max_buffer[i];
+      maximum = maximum * release_factor + max_buffer[i] * (1 - release_factor);
+      if (maximum < max_buffer[i])
+        maximum = max_buffer[i];
 
-          for (uint c = 0; c < n_channels; c++)
-            out.push_back (buffer[i * n_channels + c] / maximum * ceiling);
-          //printf ("%f %f\n", buffer[i], out.back());
-        }
-
-      buffer.erase (buffer.begin(), buffer.begin() + todo * n_channels);
-      max_buffer.erase (max_buffer.begin(), max_buffer.begin() + todo);
+      for (uint c = 0; c < n_channels; c++)
+        out[i * n_channels + c] = buffer[i * n_channels + c] / maximum * ceiling;
     }
+
+  buffer.erase (buffer.begin(), buffer.begin() + todo * n_channels);
+  max_buffer.erase (max_buffer.begin(), max_buffer.begin() + todo);
+
   return out;
 }
