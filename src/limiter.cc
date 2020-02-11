@@ -46,7 +46,7 @@ Limiter::process (const vector<float>& samples)
   buffer.insert (buffer.end(), samples.begin(), samples.end());
   max_buffer.insert (max_buffer.end(), n_frames, ceiling);
 
-  for (size_t i = 0; i < n_frames; i++)
+  for (size_t i = 0; i < max_buffer.size(); i++)
     {
       float channel_max = 0;
       for (uint c = 0; c < n_channels; c++)
