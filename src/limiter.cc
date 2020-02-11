@@ -77,8 +77,9 @@ Limiter::process (const vector<float>& samples)
       if (maximum < max_buffer[i])
         maximum = max_buffer[i];
 
+      const float scale = ceiling / maximum;
       for (uint c = 0; c < n_channels; c++)
-        out[i * n_channels + c] = buffer[i * n_channels + c] / maximum * ceiling;
+        out[i * n_channels + c] = buffer[i * n_channels + c] * scale;
     }
 
   buffer.erase (buffer.begin(), buffer.begin() + todo * n_channels);
