@@ -49,10 +49,44 @@ perf()
 }
 
 int
+impulses()
+{
+  Limiter limiter (2, 44100);
+  limiter.set_attack (5);
+  limiter.set_release (10);
+  limiter.set_ceiling (0.9);
+
+  vector<float> in_all, out_all;
+  int pos = 0;
+  for (int block = 0; block < 10; block++)
+    {
+      vector<float> in_samples;
+      for (int i = 0; i < 1024; i++)
+        {
+          double d = (pos++ % 441) == 440 ? 1.0 : 0.5;
+          in_samples.push_back (d);
+          in_samples.push_back (d); /* stereo */
+        }
+      vector<float> out_samples = limiter.process (in_samples);
+
+      in_all.insert (in_all.end(), in_samples.begin(), in_samples.end());
+      out_all.insert (out_all.end(), out_samples.begin(), out_samples.end());
+    }
+  for (size_t i = 0; i < min (in_all.size(), out_all.size()); i += 2)
+    {
+      assert (out_all[i] == out_all[i + 1]); /* stereo */
+      printf ("%f %f\n", in_all[i], out_all[i]);
+    }
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   if (argc == 2 && strcmp (argv[1], "perf") == 0)
     return perf();
+  if (argc == 2 && strcmp (argv[1], "impulses") == 0)
+    return impulses();
 
   SFInputStream in;
   SFOutputStream out;
