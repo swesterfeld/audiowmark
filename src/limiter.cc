@@ -14,21 +14,21 @@ Limiter::Limiter (int n_channels, int sample_rate) :
 }
 
 void
-Limiter::set_attack (double attack_ms)
+Limiter::set_attack (float attack_ms)
 {
   look_ahead = sample_rate / 1000.0 * attack_ms;
   look_ahead = max (look_ahead, 1u);
 }
 
 void
-Limiter::set_release (double release_ms)
+Limiter::set_release (float release_ms)
 {
   release_factor = exp (log (0.5) / (sample_rate / 1000.0 * release_ms));
-  release_factor = max (release_factor, 0.5);
+  release_factor = max (release_factor, 0.5f);
 }
 
 void
-Limiter::set_ceiling (double new_ceiling)
+Limiter::set_ceiling (float new_ceiling)
 {
   ceiling = new_ceiling;
   maximum = ceiling;
@@ -58,8 +58,8 @@ Limiter::process (const vector<float>& samples)
             {
               if (int (i) - int (j) >= 0)
                 {
-                  double alpha = double (j) / look_ahead;
-                  max_buffer[i - j] = max<float> (max_buffer[i - j], channel_max * (1 - alpha) + ceiling * alpha);
+                  float alpha = float (j) / look_ahead;
+                  max_buffer[i - j] = max (max_buffer[i - j], channel_max * (1 - alpha) + ceiling * alpha);
                 }
             }
         }
