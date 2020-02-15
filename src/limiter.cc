@@ -14,76 +14,53 @@ Limiter::Limiter (int n_channels, int sample_rate) :
 }
 
 void
-Limiter::set_attack (float attack_ms)
+Limiter::set_block_size_ms (int ms)
 {
-  look_ahead = sample_rate / 1000.0 * attack_ms;
-  look_ahead = max (look_ahead, 1u);
-}
-
-void
-Limiter::set_release (float release_ms)
-{
-  release_factor = exp (log (0.5) / (sample_rate / 1000.0 * release_ms));
-  release_factor = max (release_factor, 0.5f);
+  block_size = sample_rate * ms / 1000;
 }
 
 void
 Limiter::set_ceiling (float new_ceiling)
 {
   ceiling = new_ceiling;
-  maximum = ceiling;
 }
 
 vector<float>
 Limiter::process (const vector<float>& samples)
 {
-  assert (look_ahead >= 1);
-  assert (release_factor > 0 && release_factor < 1);
+  assert (block_size >= 1);
 
   const size_t n_frames = samples.size() / n_channels;
   assert (n_frames * n_channels == samples.size());    // need all channels of each frame
 
   buffer.insert (buffer.end(), samples.begin(), samples.end());
-  max_buffer.insert (max_buffer.end(), n_frames, ceiling);
 
-  for (size_t i = 0; i < max_buffer.size(); i++)
-    {
-      float channel_max = 0;
-      for (uint c = 0; c < n_channels; c++)
-        channel_max = max (channel_max, fabs (buffer[i * n_channels + c]));
-
-      if (channel_max > ceiling)
-        {
-          for (uint j = 0; j < look_ahead; j++)
-            {
-              if (int (i) - int (j) >= 0)
-                {
-                  float alpha = float (j) / look_ahead;
-                  max_buffer[i - j] = max (max_buffer[i - j], channel_max * (1 - alpha) + ceiling * alpha);
-                }
-            }
-        }
-    }
-
-  if (max_buffer.size() <= look_ahead)
+  /* need at least two complete blocks in buffer to produce output */
+  if (buffer.size() / n_channels < 2 * block_size)
     return {};
 
-  const size_t todo = max_buffer.size() - look_ahead;
-  vector<float> out (todo * n_channels);
+  vector<float> out (block_size * n_channels);
 
-  for (size_t i = 0; i < todo; i++)
+  float block_max = ceiling;
+  float block_max2 = ceiling;
+  for (size_t x = 0; x < block_size * n_channels; x++)
     {
-      maximum = maximum * release_factor + max_buffer[i] * (1 - release_factor);
-      if (maximum < max_buffer[i])
-        maximum = max_buffer[i];
+      block_max = max (block_max, fabs (buffer[x]));
+      block_max2 = max (block_max2, fabs (buffer[x + block_size * n_channels]));
+    }
+  float left_max = max (last_block_max, block_max);
+  float right_max = max (block_max, block_max2);
+  for (size_t i = 0; i < block_size; i++)
+    {
+      const float alpha = float (i) / block_size;
+      const float scale = ceiling / (left_max * (1 - alpha) + right_max * alpha);
 
-      const float scale = ceiling / maximum;
       for (uint c = 0; c < n_channels; c++)
         out[i * n_channels + c] = buffer[i * n_channels + c] * scale;
     }
+  last_block_max = block_max;
 
-  buffer.erase (buffer.begin(), buffer.begin() + todo * n_channels);
-  max_buffer.erase (max_buffer.begin(), max_buffer.begin() + todo);
+  buffer.erase (buffer.begin(), buffer.begin() + block_size * n_channels);
 
   return out;
 }

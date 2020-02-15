@@ -30,9 +30,7 @@ perf()
 {
   Limiter limiter (2, 44100);
 
-  limiter.set_attack (5);
-  limiter.set_release (50);
-  limiter.set_ceiling (1.0);
+  limiter.set_block_size_ms (1000);
 
   vector<float> samples (2 * 1024);
 
@@ -52,8 +50,7 @@ int
 impulses()
 {
   Limiter limiter (2, 44100);
-  limiter.set_attack (5);
-  limiter.set_release (10);
+  limiter.set_block_size_ms (5);
   limiter.set_ceiling (0.9);
 
   vector<float> in_all, out_all;
@@ -104,8 +101,7 @@ main (int argc, char **argv)
       return 1;
     }
   Limiter limiter (in.n_channels(), in.sample_rate());
-  limiter.set_attack (5);
-  limiter.set_release (50);
+  limiter.set_block_size_ms (1000);
   limiter.set_ceiling (0.9);
   vector<float> in_samples;
   do

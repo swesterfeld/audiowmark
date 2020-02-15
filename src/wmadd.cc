@@ -645,8 +645,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     return 1;
 
   Limiter limiter (n_channels, in_stream->sample_rate());
-  limiter.set_attack (Params::limiter_attack_ms);
-  limiter.set_release (Params::limiter_release_ms);
+  limiter.set_block_size_ms (Params::limiter_block_size_ms);
   limiter.set_ceiling (Params::limiter_ceiling);
 
   /* for signal to noise ratio */
