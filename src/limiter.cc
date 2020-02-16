@@ -41,12 +41,21 @@ Limiter::process (const vector<float>& samples)
 
   vector<float> out (block_size * n_channels);
 
+  process_block (&buffer[0], &out[0]);
+  buffer.erase (buffer.begin(), buffer.begin() + block_size * n_channels);
+
+  return out;
+}
+
+void
+Limiter::process_block (const float *in, float *out)
+{
   float block_max = ceiling;
   float block_max2 = ceiling;
   for (size_t x = 0; x < block_size * n_channels; x++)
     {
-      block_max = max (block_max, fabs (buffer[x]));
-      block_max2 = max (block_max2, fabs (buffer[x + block_size * n_channels]));
+      block_max = max (block_max, fabs (in[x]));
+      block_max2 = max (block_max2, fabs (in[x + block_size * n_channels]));
     }
   float left_max = max (last_block_max, block_max);
   float right_max = max (block_max, block_max2);
@@ -56,11 +65,7 @@ Limiter::process (const vector<float>& samples)
       const float scale = ceiling / (left_max * (1 - alpha) + right_max * alpha);
 
       for (uint c = 0; c < n_channels; c++)
-        out[i * n_channels + c] = buffer[i * n_channels + c] * scale;
+        out[i * n_channels + c] = in[i * n_channels + c] * scale;
     }
   last_block_max = block_max;
-
-  buffer.erase (buffer.begin(), buffer.begin() + block_size * n_channels);
-
-  return out;
 }

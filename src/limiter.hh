@@ -13,6 +13,7 @@ class Limiter
   uint  sample_rate     = 0;
 
   std::vector<float> buffer;
+  void process_block (const float *in, float *out);
 public:
   Limiter (int n_channels, int sample_rate);
 
