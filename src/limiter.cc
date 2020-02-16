@@ -61,12 +61,12 @@ Limiter::process_block (const float *in, float *out)
       block_max = max (block_max, fabs (in[x]));
       block_max2 = max (block_max2, fabs (in[x + block_size * n_channels]));
     }
-  float left_max = max (last_block_max, block_max);
-  float right_max = max (block_max, block_max2);
+  const float scale_start = ceiling / max (last_block_max, block_max);
+  const float scale_end = ceiling / max (block_max, block_max2);
   for (size_t i = 0; i < block_size; i++)
     {
       const float alpha = float (i) / block_size;
-      const float scale = ceiling / (left_max * (1 - alpha) + right_max * alpha);
+      const float scale = scale_start * (1 - alpha) + scale_end * alpha;
 
       // debug_scale (scale);
       for (uint c = 0; c < n_channels; c++)

@@ -50,7 +50,7 @@ int
 impulses()
 {
   Limiter limiter (2, 44100);
-  limiter.set_block_size_ms (5);
+  limiter.set_block_size_ms (3);
   limiter.set_ceiling (0.9);
 
   vector<float> in_all, out_all;
