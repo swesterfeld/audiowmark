@@ -64,8 +64,20 @@ Limiter::process_block (const float *in, float *out)
       const float alpha = float (i) / block_size;
       const float scale = ceiling / (left_max * (1 - alpha) + right_max * alpha);
 
+      // debug_scale (scale);
       for (uint c = 0; c < n_channels; c++)
         out[i * n_channels + c] = in[i * n_channels + c] * scale;
     }
   last_block_max = block_max;
+}
+
+void
+Limiter::debug_scale (float scale)
+{
+  static int debug_scale_samples = 0;
+
+  if (debug_scale_samples % (sample_rate / 1000) == 0)
+    printf ("%f %f\n", double (debug_scale_samples) / sample_rate, scale);
+
+  debug_scale_samples++;
 }

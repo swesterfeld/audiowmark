@@ -14,6 +14,7 @@ class Limiter
 
   std::vector<float> buffer;
   void process_block (const float *in, float *out);
+  void debug_scale (float scale);
 public:
   Limiter (int n_channels, int sample_rate);
 
