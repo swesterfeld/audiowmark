@@ -3,5 +3,4 @@ possible improvements:
 
 limiter:
 - flush
-- allow processing multiple blocks in inner loop
 - interpolate scale factor directly

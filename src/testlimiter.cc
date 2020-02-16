@@ -36,7 +36,7 @@ perf()
 
   int n_frames = 0;
   double start = gettime();
-  for (int i = 0; i < 10000; i++)
+  for (int i = 0; i < 100000; i++)
     {
       n_frames += samples.size() / 2;
       vector<float> out_samples = limiter.process (samples);

@@ -36,13 +36,17 @@ Limiter::process (const vector<float>& samples)
   buffer.insert (buffer.end(), samples.begin(), samples.end());
 
   /* need at least two complete blocks in buffer to produce output */
-  if (buffer.size() / n_channels < 2 * block_size)
+  const uint buffered_blocks = buffer.size() / n_channels / block_size;
+  if (buffered_blocks < 2)
     return {};
 
-  vector<float> out (block_size * n_channels);
+  const uint blocks_todo = buffered_blocks - 1;
 
-  process_block (&buffer[0], &out[0]);
-  buffer.erase (buffer.begin(), buffer.begin() + block_size * n_channels);
+  vector<float> out (blocks_todo * block_size * n_channels);
+  for (uint b = 0; b < blocks_todo; b++)
+    process_block (&buffer[b * block_size * n_channels], &out[b * block_size * n_channels]);
+
+  buffer.erase (buffer.begin(), buffer.begin() + blocks_todo * block_size * n_channels);
 
   return out;
 }
