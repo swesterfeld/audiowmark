@@ -13,6 +13,7 @@ class Limiter
   uint  block_size        = 0;
   uint  n_channels        = 0;
   uint  sample_rate       = 0;
+  size_t buffered_frames  = 0;
 
   std::vector<float> buffer;
   void process_block (const float *in, float *out);
@@ -25,6 +26,7 @@ public:
   void set_ceiling (float ceiling);
 
   std::vector<float> process (const std::vector<float>& samples);
+  std::vector<float> flush();
 };
 
 #endif /* AUDIOWMARK_LIMITER_HH */

@@ -97,3 +97,21 @@ Limiter::debug_scale (float scale)
 
   debug_scale_samples++;
 }
+
+vector<float>
+Limiter::flush()
+{
+  vector<float> out;
+  vector<float> zblock (1024 * n_channels);
+
+  size_t todo = buffer.size();
+  while (todo > 0)
+    {
+      vector<float> block = process (zblock);
+      if (block.size() > todo)
+        block.resize (todo);
+      out.insert (out.end(), block.begin(), block.end());
+      todo -= block.size();
+    }
+  return out;
+}

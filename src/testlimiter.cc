@@ -69,7 +69,10 @@ impulses()
       in_all.insert (in_all.end(), in_samples.begin(), in_samples.end());
       out_all.insert (out_all.end(), out_samples.begin(), out_samples.end());
     }
-  for (size_t i = 0; i < min (in_all.size(), out_all.size()); i += 2)
+  vector<float> out_samples = limiter.flush();
+  out_all.insert (out_all.end(), out_samples.begin(), out_samples.end());
+  assert (in_all.size() == out_all.size());
+  for (size_t i = 0; i < out_all.size(); i += 2)
     {
       assert (out_all[i] == out_all[i + 1]); /* stereo */
       printf ("%f %f\n", in_all[i], out_all[i]);
@@ -114,4 +117,6 @@ main (int argc, char **argv)
       out.write_frames (out_samples);
     }
   while (in_samples.size());
+
+  out.write_frames (limiter.flush());
 }
