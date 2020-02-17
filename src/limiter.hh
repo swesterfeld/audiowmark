@@ -13,7 +13,6 @@ class Limiter
   uint  block_size        = 0;
   uint  n_channels        = 0;
   uint  sample_rate       = 0;
-  size_t buffered_frames  = 0;
 
   std::vector<float> buffer;
   void process_block (const float *in, float *out);
