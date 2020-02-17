@@ -51,18 +51,27 @@ Limiter::process (const vector<float>& samples)
   return out;
 }
 
+float
+Limiter::block_max (const float *in)
+{
+  float maximum = ceiling;
+  for (uint x = 0; x < block_size * n_channels; x++)
+    maximum = max (maximum, fabs (in[x]));
+  return maximum;
+}
+
 void
 Limiter::process_block (const float *in, float *out)
 {
-  float block_max = ceiling;
-  float block_max2 = ceiling;
-  for (size_t x = 0; x < block_size * n_channels; x++)
-    {
-      block_max = max (block_max, fabs (in[x]));
-      block_max2 = max (block_max2, fabs (in[x + block_size * n_channels]));
-    }
-  const float scale_start = ceiling / max (last_block_max, block_max);
-  const float scale_end = ceiling / max (block_max, block_max2);
+  if (block_max_last < ceiling)
+    block_max_last = ceiling;
+  if (block_max_current < ceiling)
+    block_max_current = block_max (in);
+  if (block_max_next < ceiling)
+    block_max_next = block_max (in + block_size * n_channels);
+
+  const float scale_start = ceiling / max (block_max_last, block_max_current);
+  const float scale_end = ceiling / max (block_max_current, block_max_next);
   const float scale_step = (scale_end - scale_start) / block_size;
   for (size_t i = 0; i < block_size; i++)
     {
@@ -72,7 +81,10 @@ Limiter::process_block (const float *in, float *out)
       for (uint c = 0; c < n_channels; c++)
         out[i * n_channels + c] = in[i * n_channels + c] * scale;
     }
-  last_block_max = block_max;
+
+  block_max_last = block_max_current;
+  block_max_current = block_max_next;
+  block_max_next = 0;
 }
 
 void
