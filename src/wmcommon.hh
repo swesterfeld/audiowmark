@@ -38,7 +38,7 @@ public:
   static constexpr int mark_sample_rate = 44100; // watermark generation and detection sample rate
 
   static constexpr double limiter_block_size_ms = 1000;
-  static constexpr double limiter_ceiling       = 1.0;
+  static constexpr double limiter_ceiling       = 0.99;
 
   static           int test_cut; // for sync test
   static           bool test_no_sync;
