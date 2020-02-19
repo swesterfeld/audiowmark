@@ -192,6 +192,10 @@ parse_options (int   *argc_p,
         {
           Params::test_no_sync = true;
         }
+      else if (check_arg (argc, argv, &i, "--test-no-limiter"))
+        {
+          Params::test_no_limiter = true;
+        }
       else if (check_arg (argc, argv, &i, "--test-truncate", &opt_arg))
 	{
           Params::test_truncate = atoi (opt_arg);

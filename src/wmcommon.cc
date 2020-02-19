@@ -10,6 +10,7 @@ bool   Params::snr             = false; // compute/show snr while adding waterma
 int    Params::have_key        = 0;
 int    Params::test_cut        = 0; // for sync test
 bool   Params::test_no_sync    = false; // disable sync
+bool   Params::test_no_limiter = false; // disable limiter
 int    Params::test_truncate   = 0;
 
 Format Params::input_format     = Format::AUTO;

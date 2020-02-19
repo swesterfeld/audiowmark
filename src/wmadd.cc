@@ -6,6 +6,7 @@
 #include "wmcommon.hh"
 #include "fft.hh"
 #include "convcode.hh"
+#include "limiter.hh"
 #include "sfinputstream.hh"
 #include "sfoutputstream.hh"
 #include "mp3inputstream.hh"
@@ -643,6 +644,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (!wm_resampler.init_ok())
     return 1;
 
+  Limiter limiter (n_channels, in_stream->sample_rate());
+  limiter.set_block_size_ms (Params::limiter_block_size_ms);
+  limiter.set_ceiling (Params::limiter_ceiling);
+
   /* for signal to noise ratio */
   double snr_delta_power = 0;
   double snr_signal_power = 0;
@@ -686,6 +691,9 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
         }
       for (size_t i = 0; i < samples.size(); i++)
         samples[i] += orig_samples[i];
+
+      if (!Params::test_no_limiter)
+        samples = limiter.process (samples);
 
       size_t max_write_frames = total_input_frames - total_output_frames;
       if (samples.size() > max_write_frames * n_channels)

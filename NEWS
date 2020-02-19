@@ -1,3 +1,7 @@
+Overview of Changes in audiowmark-0.2.1:
+
+* add limiter to avoid clipping during watermark generation
+
 Overview of Changes in audiowmark-0.2.0:
 
 * support input/output streams

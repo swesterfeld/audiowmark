@@ -37,8 +37,12 @@ public:
   static constexpr size_t frames_pad_start = 250; // padding at start, in case track starts with silence
   static constexpr int mark_sample_rate = 44100; // watermark generation and detection sample rate
 
+  static constexpr double limiter_block_size_ms = 1000;
+  static constexpr double limiter_ceiling       = 0.99;
+
   static           int test_cut; // for sync test
   static           bool test_no_sync;
+  static           bool test_no_limiter;
   static           int test_truncate;
 
   static           Format input_format;
