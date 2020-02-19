@@ -692,7 +692,8 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       for (size_t i = 0; i < samples.size(); i++)
         samples[i] += orig_samples[i];
 
-      samples = limiter.process (samples);
+      if (!Params::test_no_limiter)
+        samples = limiter.process (samples);
 
       size_t max_write_frames = total_input_frames - total_output_frames;
       if (samples.size() > max_write_frames * n_channels)

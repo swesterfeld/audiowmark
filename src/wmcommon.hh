@@ -42,6 +42,7 @@ public:
 
   static           int test_cut; // for sync test
   static           bool test_no_sync;
+  static           bool test_no_limiter;
   static           int test_truncate;
 
   static           Format input_format;
