@@ -29,9 +29,7 @@ vector<float>
 Limiter::process (const vector<float>& samples)
 {
   assert (block_size >= 1);
-
-  const size_t n_frames = samples.size() / n_channels;
-  assert (n_frames * n_channels == samples.size());    // need all channels of each frame
+  assert (samples.size() % n_channels == 0);    // process should be called with whole frames
 
   buffer.insert (buffer.end(), samples.begin(), samples.end());
 
