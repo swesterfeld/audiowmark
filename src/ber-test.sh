@@ -90,6 +90,11 @@ do
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
+    if [ "x${AWM_CLIP}" != "x" ]; then
+      audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
+      rm $OUT_FILE
+      OUT_FILE=${OUT_FILE}.clip.wav
+    fi
     echo
     if [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
