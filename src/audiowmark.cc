@@ -442,6 +442,45 @@ test_snr (const string& orig_file, const string& wm_file)
 }
 
 int
+test_clip (const string& in_file, const string& out_file, int seed, int time_seconds)
+{
+  WavData in_data;
+  Error err = in_data.load (in_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", in_file.c_str(), err.message());
+      return 1;
+    }
+  bool done = false;
+  Random rng (seed, /* there is no stream for this test */ Random::Stream::data_up_down);
+  size_t start_point, end_point;
+  do
+    {
+      // this is unbiased only if 2 * block_size + time_seconds is smaller than overall file length
+      const size_t values_per_block = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size * in_data.n_channels();
+      start_point = 2 * values_per_block * (double(rng()) / UINT64_MAX);
+      start_point /= in_data.n_channels();
+
+      end_point = start_point + time_seconds * in_data.sample_rate();
+      if (end_point < in_data.n_values() / in_data.n_channels())
+        done = true;
+    }
+  while (!done);
+  //printf ("%.3f %.3f\n", start_point / double (in_data.sample_rate()), end_point / double (in_data.sample_rate()));
+
+  vector<float> out_signal (in_data.samples().begin() + start_point * in_data.n_channels(),
+                            in_data.samples().begin() + end_point * in_data.n_channels());
+  WavData out_wav_data (out_signal, in_data.n_channels(), in_data.sample_rate(), in_data.bit_depth());
+  err = out_wav_data.save (out_file);
+  if (err)
+    {
+      error ("audiowmark: error saving %s: %s\n", out_file.c_str(), err.message());
+      return 1;
+    }
+  return 0;
+}
+
+int
 gen_key (const string& outfile)
 {
   FILE *f = fopen (outfile.c_str(), "w");
@@ -494,6 +533,10 @@ main (int argc, char **argv)
   else if (op == "test-snr" && argc == 4)
     {
       test_snr (argv[2], argv[3]);
+    }
+  else if (op == "test-clip" && argc == 6)
+    {
+      test_clip (argv[2], argv[3], atoi (argv[4]), atoi (argv[5]));
     }
   else if (op == "gen-key" && argc == 3)
     {
