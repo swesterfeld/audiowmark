@@ -644,6 +644,36 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
         }
       const int seconds = sync_score.index / wav_data.sample_rate();
       printf ("pattern %2d:%02d L:%s %.3f\n", seconds / 60, seconds % 60, block_str.c_str(), sync_score.quality);
+
+      const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+      const size_t index = sync_score.index;
+      auto fft_range_out1 = fft_analyzer.fft_range (wav_data.samples(), index, count);
+      auto fft_range_out2 = fft_analyzer.fft_range (wav_data.samples(), index + count * Params::frame_size, count);
+      if (fft_range_out1.size() && fft_range_out2.size())
+        {
+          // FIXME: doesn't do linear decode
+          const auto raw_bit_vec1 = randomize_bit_order (mix_decode (fft_range_out1, wav_data.n_channels()), /* encode */ false);
+          const auto raw_bit_vec2 = randomize_bit_order (mix_decode (fft_range_out2, wav_data.n_channels()), /* encode */ false);
+          const size_t bits_per_block = raw_bit_vec1.size();
+          vector<float> raw_bit_vec;
+          for (size_t i = 0; i < bits_per_block; i++)
+            {
+              if (sync_score.block_type == ConvBlockType::a)
+                {
+                  raw_bit_vec.push_back (raw_bit_vec1[i]);
+                  raw_bit_vec.push_back (raw_bit_vec2[i]);
+                }
+              else
+                {
+                  raw_bit_vec.push_back (raw_bit_vec2[i]);
+                  raw_bit_vec.push_back (raw_bit_vec1[i]);
+                }
+            }
+
+          float decode_error = 0;
+          vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
+          printf ("  => %s %f\n", bit_vec_to_str (bit_vec).c_str(), decode_error);
+        }
     }
   return 0;
 }
