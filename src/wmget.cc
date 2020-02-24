@@ -197,11 +197,15 @@ normalize_sync_quality (double raw_quality)
 
 class SyncFinder
 {
+public:
+  enum class BlockLength { NORMAL, LONG };
+
+private:
   vector<vector<int>> up;
   vector<vector<int>> down;
 
   void
-  init_up_down (const WavData& wav_data)
+  init_up_down (const WavData& wav_data, BlockLength block_length)
   {
     up.clear();
     down.clear();
@@ -209,6 +213,9 @@ class SyncFinder
     up.resize (Params::sync_bits);
     down.resize (Params::sync_bits);
 
+    // "long" blocks consist of two "normal" blocks, which means
+    //   the sync bits pattern is repeated after the end of the first block
+    const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
     UpDownGen up_down_gen (Random::Stream::sync_up_down);
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int bit = 0; bit < Params::sync_bits; bit++)
@@ -219,10 +226,24 @@ class SyncFinder
             up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
             for (auto u : frame_up)
-              up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
+              {
+                up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
+                if (block_length == BlockLength::LONG)
+                  {
+                    // FIXME: may not be cache friendly
+                    down[bit].push_back (u - Params::min_band + (first_block_end + sync_frame_pos (f + bit * Params::sync_frames_per_bit)) * n_bands * wav_data.n_channels());
+                  }
+              }
 
             for (auto d : frame_down)
-              down[bit].push_back (d - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
+              {
+                down[bit].push_back (d - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
+                if (block_length == BlockLength::LONG)
+                  {
+                    // FIXME: may not be cache friendly
+                    up[bit].push_back (d - Params::min_band + (first_block_end + sync_frame_pos (f + bit * Params::sync_frames_per_bit)) * n_bands * wav_data.n_channels());
+                  }
+              }
           }
         sort (up[bit].begin(), up[bit].end());
         sort (down[bit].begin(), down[bit].end());
@@ -284,7 +305,7 @@ public:
     ConvBlockType block_type;
   };
   vector<Score>
-  search (const WavData& wav_data)
+  search (const WavData& wav_data, BlockLength block_length)
   {
     vector<Score> result_scores;
     vector<Score> sync_scores;
@@ -301,19 +322,23 @@ public:
 
         return result_scores;
       }
-    init_up_down (wav_data);
+    init_up_down (wav_data, block_length);
 
     vector<float> fft_db;
 
     // compute multiple time-shifted fft vectors
     size_t n_bands = Params::max_band - Params::min_band + 1;
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    const int first_block_end = total_frame_count;
+    if (block_length == BlockLength::LONG)
+      total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
         sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, /* want all frames */ {});
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + mark_sync_frame_count() + mark_data_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
+            if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
                 double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
@@ -324,9 +349,13 @@ public:
       }
     sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
 
-    vector<int> want_frames (mark_sync_frame_count() + mark_data_frame_count());
+    vector<int> want_frames (total_frame_count);
     for (size_t f = 0; f < mark_sync_frame_count(); f++)
-      want_frames[sync_frame_pos (f)] = 1;
+      {
+        want_frames[sync_frame_pos (f)] = 1;
+        if (block_length == BlockLength::LONG)
+          want_frames[first_block_end + sync_frame_pos (f)] = 1;
+      }
 
     /* for strength 8 and above:
      *   -> more false positive candidates are rejected, so we can use a lower threshold
@@ -364,7 +393,7 @@ public:
                 int end   = sync_scores[i].index + Params::sync_search_step;
                 for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
                   {
-                    sync_fft (wav_data, fine_index, mark_sync_frame_count() + mark_data_frame_count(), fft_db, want_frames);
+                    sync_fft (wav_data, fine_index, total_frame_count, fft_db, want_frames);
                     if (fft_db.size())
                       {
                         ConvBlockType block_type;
@@ -450,7 +479,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   int match_count = 0, total_count = 0, sync_match = 0;
 
   SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
 
   auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
   {
@@ -596,6 +625,25 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             }
         }
       printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+    }
+  // L-blocks
+  SyncFinder                sync_finder_l;
+  vector<SyncFinder::Score> sync_scores_l = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
+
+  for (auto sync_score : sync_scores_l)
+    {
+      string block_str;
+      switch (sync_score.block_type)
+        {
+          case ConvBlockType::a:  block_str = "A";
+                                  break;
+          case ConvBlockType::b:  block_str = "B";
+                                  break;
+          case ConvBlockType::ab: block_str = "AB";
+                                  break;
+        }
+      const int seconds = sync_score.index / wav_data.sample_rate();
+      printf ("pattern %2d:%02d L:%s %.3f\n", seconds / 60, seconds % 60, block_str.c_str(), sync_score.quality);
     }
   return 0;
 }
