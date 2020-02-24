@@ -700,6 +700,10 @@ get_watermark (const string& infile, const string& orig_pattern)
           wav_data.set_samples (short_samples);
         }
     }
+  auto ext_samples = wav_data.samples();
+  ext_samples.insert (ext_samples.begin(), wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
+  ext_samples.insert (ext_samples.end(),   wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
+  wav_data.set_samples (ext_samples);
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
       return decode_and_report (wav_data, orig_pattern);
