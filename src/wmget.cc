@@ -229,10 +229,13 @@ private:
 
             FrameBit frame_bit;
             frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit);
-            for (auto u : frame_up)
-              frame_bit.up.push_back (u - Params::min_band);
-            for (auto d : frame_down)
-              frame_bit.down.push_back (d - Params::min_band);
+            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              {
+                for (auto u : frame_up)
+                  frame_bit.up.push_back (u - Params::min_band + n_bands * ch);
+                for (auto d : frame_down)
+                  frame_bit.down.push_back (d - Params::min_band + n_bands * ch);
+              }
             std::sort (frame_bit.up.begin(), frame_bit.up.end());
             std::sort (frame_bit.down.begin(), frame_bit.down.end());
             frame_bits.push_back (frame_bit);
@@ -256,14 +259,10 @@ private:
         for (const auto& frame_bit : frame_bits)
           {
             int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            for (size_t i = 0; i < frame_bit.up.size(); i++)
               {
-                for (size_t i = 0; i < frame_bit.up.size(); i++)
-                  {
-                    umag += fft_out_db[index + frame_bit.up[i]];
-                    dmag += fft_out_db[index + frame_bit.down[i]];
-                  }
-                index += n_bands;
+                umag += fft_out_db[index + frame_bit.up[i]];
+                dmag += fft_out_db[index + frame_bit.down[i]];
               }
           }
         /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
