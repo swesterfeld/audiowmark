@@ -201,17 +201,18 @@ public:
   enum class BlockLength { NORMAL, LONG };
 
 private:
-  vector<vector<int>> up;
-  vector<vector<int>> down;
+  struct FrameBit
+  {
+    int frame;
+    vector<int> up;
+    vector<int> down;
+  };
+  vector<vector<FrameBit>> sync_bits;
 
   void
   init_up_down (const WavData& wav_data, BlockLength block_length)
   {
-    up.clear();
-    down.clear();
-
-    up.resize (Params::sync_bits);
-    down.resize (Params::sync_bits);
+    sync_bits.clear();
 
     // "long" blocks consist of two "normal" blocks, which means
     //   the sync bits pattern is repeated after the end of the first block
@@ -220,33 +221,24 @@ private:
     size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int bit = 0; bit < Params::sync_bits; bit++)
       {
+        vector<FrameBit> frame_bits;
         for (int f = 0; f < Params::sync_frames_per_bit; f++)
           {
             UpDownArray frame_up, frame_down;
             up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
+            FrameBit frame_bit;
+            frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit);
             for (auto u : frame_up)
-              {
-                up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
-                if (block_length == BlockLength::LONG)
-                  {
-                    // FIXME: may not be cache friendly
-                    down[bit].push_back (u - Params::min_band + (first_block_end + sync_frame_pos (f + bit * Params::sync_frames_per_bit)) * n_bands * wav_data.n_channels());
-                  }
-              }
-
+              frame_bit.up.push_back (u - Params::min_band);
             for (auto d : frame_down)
-              {
-                down[bit].push_back (d - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
-                if (block_length == BlockLength::LONG)
-                  {
-                    // FIXME: may not be cache friendly
-                    up[bit].push_back (d - Params::min_band + (first_block_end + sync_frame_pos (f + bit * Params::sync_frames_per_bit)) * n_bands * wav_data.n_channels());
-                  }
-              }
+              frame_bit.down.push_back (d - Params::min_band);
+            std::sort (frame_bit.up.begin(), frame_bit.up.end());
+            std::sort (frame_bit.down.begin(), frame_bit.down.end());
+            frame_bits.push_back (frame_bit);
           }
-        sort (up[bit].begin(), up[bit].end());
-        sort (down[bit].begin(), down[bit].end());
+        std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
+        sync_bits.push_back (frame_bits);
       }
   }
   double
@@ -254,28 +246,24 @@ private:
   {
     double sync_quality = 0;
 
-    int zbits = 0, lbits = 0;
     size_t n_bands = Params::max_band - Params::min_band + 1;
+    int lbits = 0;
     for (int bit = 0; bit < Params::sync_bits; bit++)
       {
+        const vector<FrameBit>& frame_bits = sync_bits[bit];
         float umag = 0, dmag = 0;
 
-        for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        for (const auto& frame_bit : frame_bits)
           {
-            const int index = (start_frame * wav_data.n_channels() + ch) * n_bands;
-
-            for (size_t i = 0; i < up[bit].size(); i++)
+            int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
+            for (int ch = 0; ch < wav_data.n_channels(); ch++)
               {
-                if (fft_out_db[index + up[bit][i]] < -90 && fft_out_db[index + down[bit][i]] < -90)
+                for (size_t i = 0; i < frame_bit.up.size(); i++)
                   {
-                    zbits++;
+                    umag += fft_out_db[index + frame_bit.up[i]];
+                    dmag += fft_out_db[index + frame_bit.down[i]];
                   }
-                else
-                  {
-                    umag += fft_out_db[index + up[bit][i]];
-                    dmag += fft_out_db[index + down[bit][i]];
-                    lbits++;
-                  }
+                index += n_bands;
               }
           }
         /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
@@ -406,9 +394,11 @@ public:
               }
           }
       }
+#if 0
     std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.len > nb2.len; });
     if (n_best.size() > 5)
       n_best.resize (5);
+#endif
     for (auto n : n_best)
       {
         size_t i = n.i;
@@ -524,7 +514,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   int match_count = 0, total_count = 0, sync_match = 0;
 
   SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores; // FIXME = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
 
   auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
   {
@@ -650,7 +640,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     }
   // L-blocks
   SyncFinder                sync_finder_l;
-  vector<SyncFinder::Score> sync_scores_l = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
+  vector<SyncFinder::Score> sync_scores_l; // FIXME = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
 
   for (auto sync_score : sync_scores_l)
     {
@@ -743,10 +733,12 @@ get_watermark (const string& infile, const string& orig_pattern)
           wav_data.set_samples (short_samples);
         }
     }
+#if 0
   auto ext_samples = wav_data.samples();
   ext_samples.insert (ext_samples.begin(), wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
   ext_samples.insert (ext_samples.end(),   wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
   wav_data.set_samples (ext_samples);
+#endif
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
       return decode_and_report (wav_data, orig_pattern);
