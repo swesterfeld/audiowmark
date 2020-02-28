@@ -217,31 +217,45 @@ private:
     // "long" blocks consist of two "normal" blocks, which means
     //   the sync bits pattern is repeated after the end of the first block
     const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
-    UpDownGen up_down_gen (Random::Stream::sync_up_down);
+    const int block_count = block_length == BlockLength::LONG ? 2 : 1;
     size_t n_bands = Params::max_band - Params::min_band + 1;
-    for (int bit = 0; bit < Params::sync_bits; bit++)
+    for (int block = 0; block < block_count; block++)
       {
-        vector<FrameBit> frame_bits;
-        for (int f = 0; f < Params::sync_frames_per_bit; f++)
+        UpDownGen up_down_gen (Random::Stream::sync_up_down);
+        for (int bit = 0; bit < Params::sync_bits; bit++)
           {
-            UpDownArray frame_up, frame_down;
-            up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
-
-            FrameBit frame_bit;
-            frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit);
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+            vector<FrameBit> frame_bits;
+            for (int f = 0; f < Params::sync_frames_per_bit; f++)
               {
-                for (auto u : frame_up)
-                  frame_bit.up.push_back (u - Params::min_band + n_bands * ch);
-                for (auto d : frame_down)
-                  frame_bit.down.push_back (d - Params::min_band + n_bands * ch);
+                UpDownArray frame_up, frame_down;
+                up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
+
+                FrameBit frame_bit;
+                frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
+                for (int ch = 0; ch < wav_data.n_channels(); ch++)
+                  {
+                    if (block == 0)
+                      {
+                        for (auto u : frame_up)
+                          frame_bit.up.push_back (u - Params::min_band + n_bands * ch);
+                        for (auto d : frame_down)
+                          frame_bit.down.push_back (d - Params::min_band + n_bands * ch);
+                      }
+                    else
+                      {
+                        for (auto u : frame_up)
+                          frame_bit.down.push_back (u - Params::min_band + n_bands * ch);
+                        for (auto d : frame_down)
+                          frame_bit.up.push_back (d - Params::min_band + n_bands * ch);
+                      }
+                  }
+                std::sort (frame_bit.up.begin(), frame_bit.up.end());
+                std::sort (frame_bit.down.begin(), frame_bit.down.end());
+                frame_bits.push_back (frame_bit);
               }
-            std::sort (frame_bit.up.begin(), frame_bit.up.end());
-            std::sort (frame_bit.down.begin(), frame_bit.down.end());
-            frame_bits.push_back (frame_bit);
+            std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
+            sync_bits.push_back (frame_bits);
           }
-        std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
-        sync_bits.push_back (frame_bits);
       }
   }
   double
@@ -251,7 +265,7 @@ private:
 
     size_t n_bands = Params::max_band - Params::min_band + 1;
     int lbits = 0;
-    for (int bit = 0; bit < Params::sync_bits; bit++)
+    for (size_t bit = 0; bit < sync_bits.size(); bit++)
       {
         const vector<FrameBit>& frame_bits = sync_bits[bit];
         float umag = 0, dmag = 0;
@@ -284,7 +298,7 @@ private:
         const double q = expect_data_bit ? raw_bit : -raw_bit;
         sync_quality += q;
       }
-    sync_quality /= Params::sync_bits;
+    sync_quality /= sync_bits.size();
     sync_quality = normalize_sync_quality (sync_quality);
 
     *len = lbits;
@@ -639,7 +653,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     }
   // L-blocks
   SyncFinder                sync_finder_l;
-  vector<SyncFinder::Score> sync_scores_l; // FIXME = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
+  vector<SyncFinder::Score> sync_scores_l = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
 
   for (auto sync_score : sync_scores_l)
     {
