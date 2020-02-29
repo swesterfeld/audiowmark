@@ -273,10 +273,14 @@ private:
         for (const auto& frame_bit : frame_bits)
           {
             int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
-            for (size_t i = 0; i < frame_bit.up.size(); i++)
+            if (fft_out_db[index] > -90)
               {
-                umag += fft_out_db[index + frame_bit.up[i]];
-                dmag += fft_out_db[index + frame_bit.down[i]];
+                for (size_t i = 0; i < frame_bit.up.size(); i++)
+                  {
+                    umag += fft_out_db[index + frame_bit.up[i]];
+                    dmag += fft_out_db[index + frame_bit.down[i]];
+                  }
+                lbits++;
               }
           }
         /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
@@ -490,12 +494,30 @@ private:
           }
         else
           {
-            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
+            bool zframe = true;
+            for (int i = 0; i < Params::frame_size * wav_data.n_channels(); i++)
+              {
+                if (samples[i + (index + f * Params::frame_size) * wav_data.n_channels()] != 0)
+                  {
+                    zframe = false;
+                    break;
+                  }
+              }
+            if (zframe)
+              {
+                for (int ch = 0; ch < wav_data.n_channels(); ch++)
+                  for (int i = Params::min_band; i <= Params::max_band; i++)
+                    fft_out_db[out_pos++] = min_db;
+              }
+            else
+              {
+                vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
 
-            /* computing db-magnitude is expensive, so we better do it here */
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
-              for (int i = Params::min_band; i <= Params::max_band; i++)
-                fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
+                /* computing db-magnitude is expensive, so we better do it here */
+                for (int ch = 0; ch < wav_data.n_channels(); ch++)
+                  for (int i = Params::min_band; i <= Params::max_band; i++)
+                    fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
+              }
           }
       }
   }
@@ -527,7 +549,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   int match_count = 0, total_count = 0, sync_match = 0;
 
   SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
+  vector<SyncFinder::Score> sync_scores; // = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
 
   auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
   {
@@ -746,12 +768,10 @@ get_watermark (const string& infile, const string& orig_pattern)
           wav_data.set_samples (short_samples);
         }
     }
-#if 0
   auto ext_samples = wav_data.samples();
   ext_samples.insert (ext_samples.begin(), wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
   ext_samples.insert (ext_samples.end(),   wav_data.sample_rate() * wav_data.n_channels() * 100, 0);
   wav_data.set_samples (ext_samples);
-#endif
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
       return decode_and_report (wav_data, orig_pattern);
