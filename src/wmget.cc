@@ -264,12 +264,13 @@ private:
     double sync_quality = 0;
 
     size_t n_bands = Params::max_band - Params::min_band + 1;
-    int lbits = 0;
+    int bit_count = 0;
     for (size_t bit = 0; bit < sync_bits.size(); bit++)
       {
         const vector<FrameBit>& frame_bits = sync_bits[bit];
         float umag = 0, dmag = 0;
 
+        int frame_bit_count = 0;
         for (const auto& frame_bit : frame_bits)
           {
             int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
@@ -280,7 +281,7 @@ private:
                     umag += fft_out_db[index + frame_bit.up[i]];
                     dmag += fft_out_db[index + frame_bit.down[i]];
                   }
-                lbits++;
+                frame_bit_count++;
               }
           }
         /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
@@ -300,12 +301,14 @@ private:
 
         const int expect_data_bit = bit & 1; /* expect 010101 */
         const double q = expect_data_bit ? raw_bit : -raw_bit;
-        sync_quality += q;
+        sync_quality += q * frame_bit_count;
+        bit_count += frame_bit_count;
       }
-    sync_quality /= sync_bits.size();
+    if (bit_count)
+      sync_quality /= bit_count;
     sync_quality = normalize_sync_quality (sync_quality);
 
-    *len = lbits;
+    *len = bit_count;
     if (sync_quality < 0)
       {
         *block_type = ConvBlockType::b;
@@ -411,11 +414,9 @@ public:
               }
           }
       }
-#if 0
     std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.len > nb2.len; });
     if (n_best.size() > 5)
       n_best.resize (5);
-#endif
     for (auto n : n_best)
       {
         size_t i = n.i;
