@@ -675,17 +675,19 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       report_pattern (score_all, bit_vec, decode_error);
     }
   // L-blocks
-  double wav_seconds = double (wav_data.n_values()) / (wav_data.sample_rate() * wav_data.n_channels());
-  if (wav_seconds < 120) /* clip decoder is only used for small wavs */
+  const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
+  const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
+  if (wav_frames < frames_per_block * 2.5) /* clip decoder is only used for small wavs */
     {
-      // clip decoder padding
-      double padding = 50;
-      if (100 - wav_seconds > 50)
-        padding = 100 - wav_seconds;
-      printf ("wav_seconds = %f, padding = %f\n", wav_seconds, padding);
+      // clip decoder padding:
+      //  - for longer clips:  at least one data block
+      //  - for smaller clips: available frames + padding is the length of one L-block
+      //  - 5 extra frames as safety
+      const int pad_frames = max (frames_per_block, frames_per_block * 2 - wav_frames) + 5;
+
       auto ext_samples = wav_data.samples();
-      ext_samples.insert (ext_samples.begin(), wav_data.sample_rate() * wav_data.n_channels() * int (padding), 0);
-      ext_samples.insert (ext_samples.end(),   wav_data.sample_rate() * wav_data.n_channels() * int (padding), 0);
+      ext_samples.insert (ext_samples.begin(), pad_frames * Params::frame_size * wav_data.n_channels(), 0);
+      ext_samples.insert (ext_samples.end(),   pad_frames * Params::frame_size * wav_data.n_channels(), 0);
 
       WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
 
