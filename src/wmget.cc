@@ -496,7 +496,7 @@ private:
         else
           {
             bool zframe = true;
-            for (int i = 0; i < Params::frame_size * wav_data.n_channels(); i++)
+            for (size_t i = 0; i < Params::frame_size * wav_data.n_channels(); i++)
               {
                 if (samples[i + (index + f * Params::frame_size) * wav_data.n_channels()] != 0)
                   {
@@ -706,7 +706,6 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
               case ConvBlockType::ab: block_str = "AB";
                                       break;
             }
-          const int seconds = sync_score.index / l_wav_data.sample_rate();
           const size_t count = mark_sync_frame_count() + mark_data_frame_count();
           const size_t index = sync_score.index;
           auto fft_range_out1 = fft_analyzer.fft_range (l_wav_data.samples(), index, count);
