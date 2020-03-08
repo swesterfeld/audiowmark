@@ -17,6 +17,7 @@
 using std::string;
 using std::vector;
 using std::complex;
+using std::max;
 
 enum class FrameMod : uint8_t {
   KEEP = 0,
@@ -118,20 +119,6 @@ mark_sync (vector<vector<FrameMod>>& frame_mod, int ab)
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
       prepare_frame_mod (up_down_gen, f, frame_mod[index], data_bit);
-    }
-}
-
-static void
-init_pad_mod_vec (vector<vector<FrameMod>>& pad_mod_vec)
-{
-  UpDownGen up_down_gen (Random::Stream::pad_up_down);
-
-  for (size_t f = 0; f < Params::frames_pad_start; f++)
-    {
-      vector<FrameMod> mod (Params::max_band + 1);
-
-      prepare_frame_mod (up_down_gen, f, mod, 0);
-      pad_mod_vec.push_back (mod);
     }
 }
 
@@ -245,11 +232,8 @@ public:
  */
 class WatermarkGen
 {
-  enum State { PAD, WATERMARK } state = State::PAD;
-
   const int                 n_channels = 0;
-  int                       frame_number = 0;
-  int                       frame_bound = Params::frames_pad_start;
+  size_t                    frame_number = 0;
   int                       ab = 0;
   int                       m_data_blocks = 0;
 
@@ -257,7 +241,6 @@ class WatermarkGen
   WatermarkSynth            wm_synth;
 
   vector<int>               bitvec;
-  vector<vector<FrameMod>>  pad_mod_vec;
   vector<vector<FrameMod>>  frame_mod_vec_a;
   vector<vector<FrameMod>>  frame_mod_vec_b;
 public:
@@ -267,7 +250,12 @@ public:
     wm_synth (n_channels),
     bitvec (bitvec)
   {
-    init_pad_mod_vec (pad_mod_vec);
+    /* start writing a partial B-block as padding */
+    init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
+
+    assert (frame_mod_vec_b.size() > Params::frames_pad_start);
+    frame_number = frame_mod_vec_b.size() - Params::frames_pad_start;
+    ab = 1;
   }
   vector<float>
   run (const vector<float>& samples)
@@ -280,50 +268,29 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
 
-    if (state == State::PAD)
-      {
-        for (int ch = 0; ch < n_channels; ch++)
-          apply_frame_mod (pad_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
-      }
-    else if (state == State::WATERMARK)
-      {
-        for (int ch = 0; ch < n_channels; ch++)
-          apply_frame_mod (ab ? frame_mod_vec_b[frame_number] : frame_mod_vec_a[frame_number], fft_out[ch], fft_delta_spect[ch]);
-      }
+    const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
+    for (int ch = 0; ch < n_channels; ch++)
+      apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
 
     frame_number++;
-    if (frame_number == frame_bound)
+    if (frame_number == frame_mod_vec.size())
       {
         frame_number = 0;
 
-        if (state == PAD)
-          {
-            state = WATERMARK;
-            frame_bound = mark_sync_frame_count() + mark_data_frame_count();
+        ab = (ab + 1) & 1; // write A|B|A|B|...
+        m_data_blocks++;
 
-            // initialize a-block frame mod vector here to minimize startup latency
-            assert (frame_mod_vec_a.empty());
-            init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
-          }
-        else if (state == WATERMARK)
-          {
-            ab = (ab + 1) & 1; // write A|B|A|B|...
-            frame_bound = mark_sync_frame_count() + mark_data_frame_count();
-            m_data_blocks++;
-
-            if (frame_mod_vec_b.empty())
-              {
-                // initialize b-block frame mod vector here to minimize startup latency
-                init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
-              }
-          }
+        // initialize A-block frame mod vector here to minimize startup latency
+        if (frame_mod_vec_a.empty())
+          init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
       }
     return wm_synth.run (fft_delta_spect);
   }
   int
   data_blocks() const
   {
-    return m_data_blocks;
+    // first block is padding - a partial B block
+    return max (m_data_blocks - 1, 0);
   }
 };
 
