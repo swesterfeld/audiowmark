@@ -414,9 +414,12 @@ public:
               }
           }
       }
-    std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.quality > nb2.quality; });
-    if (n_best.size() > 5)
-      n_best.resize (5);
+    if (block_length == BlockLength::LONG)
+      {
+        std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.quality > nb2.quality; });
+        if (n_best.size() > 5)
+          n_best.resize (5);
+      }
     for (auto n : n_best)
       {
         size_t i = n.i;
@@ -550,13 +553,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   int match_count = 0, total_count = 0, sync_match = 0;
 
   SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores; // = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
 
-  auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
+  enum PatternType { BLOCK, CLIP, ALL };
+  auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, PatternType pattern_type)
   {
-    if (sync_score.index)
+    if (pattern_type != PatternType::ALL)
       {
-        const char *block_str = nullptr;
+        string block_str;
 
         switch (sync_score.block_type)
           {
@@ -567,11 +571,13 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             case ConvBlockType::ab: block_str = "AB";
                                     break;
           }
+        if (pattern_type == PatternType::CLIP)
+          block_str = "CLIP-" + block_str;
         const int seconds = sync_score.index / wav_data.sample_rate();
         printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(),
-                sync_score.quality, decode_error, block_str);
+                sync_score.quality, decode_error, block_str.c_str());
       }
-    else /* this is the combined pattern "all" */
+    if (pattern_type == PatternType::ALL) /* this is the combined pattern "all" */
       {
         printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
       }
@@ -627,7 +633,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
           float decode_error = 0;
           vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
-          report_pattern (sync_score, bit_vec, decode_error);
+          report_pattern (sync_score, bit_vec, decode_error, PatternType::BLOCK);
 
           /* ---- update "all" pattern ---- */
           score_all.quality += sync_score.quality;
@@ -653,7 +659,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
               vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
               score_ab.index = sync_score.index;
               score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-              report_pattern (score_ab, bit_vec, decode_error);
+              report_pattern (score_ab, bit_vec, decode_error, PatternType::BLOCK);
             }
           last_block_type = sync_score.block_type;
         }
@@ -672,7 +678,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       float decode_error = 0;
       vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
-      report_pattern (score_all, bit_vec, decode_error);
+      report_pattern (score_all, bit_vec, decode_error, PatternType::ALL);
     }
   // L-blocks
   const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
@@ -701,16 +707,6 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
       for (auto sync_score : sync_scores_l)
         {
-          string block_str;
-          switch (sync_score.block_type)
-            {
-              case ConvBlockType::a:  block_str = "A";
-                                      break;
-              case ConvBlockType::b:  block_str = "B";
-                                      break;
-              case ConvBlockType::ab: block_str = "AB";
-                                      break;
-            }
           const size_t count = mark_sync_frame_count() + mark_data_frame_count();
           const size_t index = sync_score.index;
           auto fft_range_out1 = fft_analyzer.fft_range (l_wav_data.samples(), index, count);
@@ -738,8 +734,13 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
               float decode_error = 0;
               vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
-              printf ("LLL ");
-              report_pattern (sync_score, bit_vec, decode_error);
+
+              SyncFinder::Score sync_score_nopad = sync_score;
+              if (sync_score_nopad.index >= pad_frames_start * Params::frame_size)
+                sync_score_nopad.index -= pad_frames_start * Params::frame_size;
+              else
+                sync_score_nopad.index = 0;
+              report_pattern (sync_score_nopad, bit_vec, decode_error, PatternType::CLIP);
             }
         }
     }
