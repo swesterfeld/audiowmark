@@ -679,15 +679,20 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
   if (wav_frames < frames_per_block * 2.5) /* clip decoder is only used for small wavs */
     {
-      // clip decoder padding:
+      // clip decoder padding at start:
       //  - for longer clips:  at least one data block
       //  - for smaller clips: available frames + padding is the length of one L-block
       //  - 5 extra frames as safety
-      const int pad_frames = max (frames_per_block, frames_per_block * 2 - wav_frames) + 5;
+      const int pad_frames_start = max (frames_per_block, frames_per_block * 2 - wav_frames) + 5;
+
+      // clip decoder padding at end:
+      //  - one data block + 5 extra frames as safety
+      // for short clips, the sync pattern of the data block repeats after one block length
+      const int pad_frames_end = frames_per_block + 5;
 
       auto ext_samples = wav_data.samples();
-      ext_samples.insert (ext_samples.begin(), pad_frames * Params::frame_size * wav_data.n_channels(), 0);
-      ext_samples.insert (ext_samples.end(),   pad_frames * Params::frame_size * wav_data.n_channels(), 0);
+      ext_samples.insert (ext_samples.begin(), pad_frames_start * Params::frame_size * wav_data.n_channels(), 0);
+      ext_samples.insert (ext_samples.end(),   pad_frames_end   * Params::frame_size * wav_data.n_channels(), 0);
 
       WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
 
