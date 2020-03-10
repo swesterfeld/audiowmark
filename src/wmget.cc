@@ -219,17 +219,18 @@ private:
     const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
     const int block_count = block_length == BlockLength::LONG ? 2 : 1;
     size_t n_bands = Params::max_band - Params::min_band + 1;
-    for (int block = 0; block < block_count; block++)
-      {
-        UpDownGen up_down_gen (Random::Stream::sync_up_down);
-        for (int bit = 0; bit < Params::sync_bits; bit++)
-          {
-            vector<FrameBit> frame_bits;
-            for (int f = 0; f < Params::sync_frames_per_bit; f++)
-              {
-                UpDownArray frame_up, frame_down;
-                up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
+    UpDownGen up_down_gen (Random::Stream::sync_up_down);
+    for (int bit = 0; bit < Params::sync_bits; bit++)
+      {
+        vector<FrameBit> frame_bits;
+        for (int f = 0; f < Params::sync_frames_per_bit; f++)
+          {
+            UpDownArray frame_up, frame_down;
+            up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
+
+            for (int block = 0; block < block_count; block++)
+              {
                 FrameBit frame_bit;
                 frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
                 for (int ch = 0; ch < wav_data.n_channels(); ch++)
@@ -253,9 +254,9 @@ private:
                 std::sort (frame_bit.down.begin(), frame_bit.down.end());
                 frame_bits.push_back (frame_bit);
               }
-            std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
-            sync_bits.push_back (frame_bits);
           }
+        std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
+        sync_bits.push_back (frame_bits);
       }
   }
   double
