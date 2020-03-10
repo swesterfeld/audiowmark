@@ -400,7 +400,7 @@ public:
       }
     sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
 
-    vector<int> want_frames (total_frame_count);
+    vector<char> want_frames (total_frame_count);
     for (size_t f = 0; f < mark_sync_frame_count(); f++)
       {
         want_frames[sync_frame_pos (f)] = 1;
@@ -498,7 +498,7 @@ public:
   }
 private:
   void
-  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frame, const vector<int>& want_frames)
+  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frame, const vector<char>& want_frames)
   {
     fft_out_db.clear();
     have_frame.clear();
