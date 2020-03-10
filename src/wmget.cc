@@ -259,7 +259,10 @@ private:
       }
   }
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db, ConvBlockType *block_type)
+  sync_decode (const WavData& wav_data, const size_t start_frame,
+               const vector<float>& fft_out_db,
+               const vector<char>&  have_frame,
+               ConvBlockType *block_type)
   {
     double sync_quality = 0;
 
@@ -273,9 +276,9 @@ private:
         int frame_bit_count = 0;
         for (const auto& frame_bit : frame_bits)
           {
-            int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
-            if (fft_out_db[index] > -90)
+            if (have_frame[start_frame + frame_bit.frame])
               {
+                const int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
                 for (size_t i = 0; i < frame_bit.up.size(); i++)
                   {
                     umag += fft_out_db[index + frame_bit.up[i]];
@@ -319,6 +322,31 @@ private:
         return sync_quality;
       }
   }
+  void
+  scan_silence (const WavData& wav_data)
+  {
+    const vector<float>& samples = wav_data.samples();
+
+    if (samples.size())
+      {
+        // find first non-zero sample
+        wav_data_start = 0;
+        while (wav_data_start < samples.size() && samples[wav_data_start] == 0)
+          wav_data_start++;
+
+        // find last non-zero sample
+        wav_data_end = samples.size() - 1;
+        while (wav_data_end > wav_data_start && samples[wav_data_end] == 0)
+          wav_data_end--;
+      }
+    else
+      {
+        wav_data_start = wav_data_end = 0;
+      }
+  }
+
+  size_t wav_data_start = 0;
+  size_t wav_data_end = 0;
 public:
   struct Score {
     size_t        index;
@@ -344,8 +372,10 @@ public:
         return result_scores;
       }
     init_up_down (wav_data, block_length);
+    scan_silence (wav_data);
 
     vector<float> fft_db;
+    vector<char>  have_frame;
 
     // compute multiple time-shifted fft vectors
     size_t n_bands = Params::max_band - Params::min_band + 1;
@@ -355,14 +385,14 @@ public:
       total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
-        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, /* want all frames */ {});
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frame, /* want all frames */ {});
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
             if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
-                double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
+                double quality = sync_decode (wav_data, start_frame, fft_db, have_frame, &block_type);
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (Score { sync_index, quality, block_type });
               }
@@ -445,11 +475,11 @@ public:
                 int end   = sync_scores[i].index + Params::sync_search_step;
                 for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
                   {
-                    sync_fft (wav_data, fine_index, total_frame_count, fft_db, want_frames);
+                    sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
                     if (fft_db.size())
                       {
                         ConvBlockType block_type;
-                        double        q = sync_decode (wav_data, 0, fft_db, &block_type);
+                        double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
 
                         if (q > best_quality)
                           {
@@ -468,9 +498,10 @@ public:
   }
 private:
   void
-  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, const vector<int>& want_frames)
+  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frame, const vector<int>& want_frames)
   {
     fft_out_db.clear();
+    have_frame.clear();
 
     /* read past end? -> fail */
     if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
@@ -482,42 +513,31 @@ private:
     int out_pos = 0;
 
     fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
+    have_frame.resize (frame_count);
 
     for (size_t f = 0; f < frame_count; f++)
       {
-        const double min_db = -96;
-        if (want_frames.size() && !want_frames[f])
+        const size_t f_start = (index + f * Params::frame_size) * wav_data.n_channels();
+        const size_t f_end   = (index + (f + 1) * Params::frame_size) * wav_data.n_channels();
+
+        if ((want_frames.size() && !want_frames[f])   // frame not wanted?
+        ||  (f_end < wav_data_start)                  // frame in silence before input?
+        ||  (f_start > wav_data_end))                 // frame in silence after input?
           {
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
-              for (int i = Params::min_band; i <= Params::max_band; i++)
-                fft_out_db[out_pos++] = min_db;
+            out_pos += n_bands * wav_data.n_channels();
           }
         else
           {
-            bool zframe = true;
-            for (size_t i = 0; i < Params::frame_size * wav_data.n_channels(); i++)
-              {
-                if (samples[i + (index + f * Params::frame_size) * wav_data.n_channels()] != 0)
-                  {
-                    zframe = false;
-                    break;
-                  }
-              }
-            if (zframe)
-              {
-                for (int ch = 0; ch < wav_data.n_channels(); ch++)
-                  for (int i = Params::min_band; i <= Params::max_band; i++)
-                    fft_out_db[out_pos++] = min_db;
-              }
-            else
-              {
-                vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
+            constexpr double min_db = -96;
 
-                /* computing db-magnitude is expensive, so we better do it here */
-                for (int ch = 0; ch < wav_data.n_channels(); ch++)
-                  for (int i = Params::min_band; i <= Params::max_band; i++)
-                    fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
-              }
+            vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
+
+            /* computing db-magnitude is expensive, so we better do it here */
+            for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              for (int i = Params::min_band; i <= Params::max_band; i++)
+                fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
+
+            have_frame[f] = 1;
           }
       }
   }
