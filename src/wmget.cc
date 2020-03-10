@@ -259,7 +259,7 @@ private:
       }
   }
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db, ConvBlockType *block_type, int *len)
+  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db, ConvBlockType *block_type)
   {
     double sync_quality = 0;
 
@@ -308,7 +308,6 @@ private:
       sync_quality /= bit_count;
     sync_quality = normalize_sync_quality (sync_quality);
 
-    *len = bit_count;
     if (sync_quality < 0)
       {
         *block_type = ConvBlockType::b;
@@ -325,7 +324,6 @@ public:
     size_t        index;
     double        quality;
     ConvBlockType block_type;
-    int           len = 0;
   };
   vector<Score>
   search (const WavData& wav_data, BlockLength block_length)
@@ -364,10 +362,9 @@ public:
             if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
-                int len;
-                double quality = sync_decode (wav_data, start_frame, fft_db, &block_type, &len);
+                double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
                 // printf ("%zd %f\n", sync_index, quality);
-                sync_scores.emplace_back (Score { sync_index, quality, block_type, len });
+                sync_scores.emplace_back (Score { sync_index, quality, block_type });
               }
           }
       }
@@ -452,8 +449,7 @@ public:
                     if (fft_db.size())
                       {
                         ConvBlockType block_type;
-                        int           len;
-                        double        q = sync_decode (wav_data, 0, fft_db, &block_type, &len);
+                        double        q = sync_decode (wav_data, 0, fft_db, &block_type);
 
                         if (q > best_quality)
                           {
