@@ -652,16 +652,57 @@ public:
 
 class ClipDecoder
 {
+  void
+  run_padded (const WavData& l_wav_data, ResultSet& result_set, double time_offset_sec)
+  {
+    SyncFinder                sync_finder_l;
+    vector<SyncFinder::Score> sync_scores_l = sync_finder_l.search (l_wav_data, SyncFinder::BlockLength::LONG);
+    FFTAnalyzer               fft_analyzer (l_wav_data.n_channels());
+
+    for (auto sync_score : sync_scores_l)
+      {
+        const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+        const size_t index = sync_score.index;
+        auto fft_range_out1 = fft_analyzer.fft_range (l_wav_data.samples(), index, count);
+        auto fft_range_out2 = fft_analyzer.fft_range (l_wav_data.samples(), index + count * Params::frame_size, count);
+        if (fft_range_out1.size() && fft_range_out2.size())
+          {
+            // FIXME: doesn't do linear decode
+            const auto raw_bit_vec1 = randomize_bit_order (mix_decode (fft_range_out1, l_wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec2 = randomize_bit_order (mix_decode (fft_range_out2, l_wav_data.n_channels()), /* encode */ false);
+            const size_t bits_per_block = raw_bit_vec1.size();
+            vector<float> raw_bit_vec;
+            for (size_t i = 0; i < bits_per_block; i++)
+              {
+                if (sync_score.block_type == ConvBlockType::a)
+                  {
+                    raw_bit_vec.push_back (raw_bit_vec1[i]);
+                    raw_bit_vec.push_back (raw_bit_vec2[i]);
+                  }
+                else
+                  {
+                    raw_bit_vec.push_back (raw_bit_vec2[i]);
+                    raw_bit_vec.push_back (raw_bit_vec1[i]);
+                  }
+              }
+
+            float decode_error = 0;
+            vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+            SyncFinder::Score sync_score_nopad = sync_score;
+            sync_score_nopad.index = time_offset_sec * l_wav_data.sample_rate();
+            result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+          }
+      }
+  }
 public:
   void
   run (const WavData& wav_data, ResultSet& result_set)
   {
-    FFTAnalyzer           fft_analyzer (wav_data.n_channels());
-
     // L-blocks
     const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
     const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
-    if (wav_frames < frames_per_block * 2.5) /* clip decoder is only used for small wavs */
+    if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
       {
         // clip decoder padding at start:
         //  - for longer clips:  at least one data block
@@ -674,52 +715,35 @@ public:
         // for short clips, the sync pattern of the data block repeats after one block length
         const int pad_frames_end = frames_per_block + 5;
 
+        // truncate to one data block
+        const int max_frames = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
         auto ext_samples = wav_data.samples();
+        if (ext_samples.size() > max_frames)
+          ext_samples.resize (max_frames);
+
+        printf ("START: %f..%f\n", 0.0, double (ext_samples.size()) / wav_data.sample_rate() / wav_data.n_channels());
+
         ext_samples.insert (ext_samples.begin(), pad_frames_start * Params::frame_size * wav_data.n_channels(), 0);
         ext_samples.insert (ext_samples.end(),   pad_frames_end   * Params::frame_size * wav_data.n_channels(), 0);
 
         WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
 
-        SyncFinder                sync_finder_l;
-        vector<SyncFinder::Score> sync_scores_l = sync_finder_l.search (l_wav_data, SyncFinder::BlockLength::LONG);
+        run_padded (l_wav_data, result_set, 0);
 
-        for (auto sync_score : sync_scores_l)
+        if (wav_data.samples().size() > max_frames)
           {
-            const size_t count = mark_sync_frame_count() + mark_data_frame_count();
-            const size_t index = sync_score.index;
-            auto fft_range_out1 = fft_analyzer.fft_range (l_wav_data.samples(), index, count);
-            auto fft_range_out2 = fft_analyzer.fft_range (l_wav_data.samples(), index + count * Params::frame_size, count);
-            if (fft_range_out1.size() && fft_range_out2.size())
-              {
-                // FIXME: doesn't do linear decode
-                const auto raw_bit_vec1 = randomize_bit_order (mix_decode (fft_range_out1, l_wav_data.n_channels()), /* encode */ false);
-                const auto raw_bit_vec2 = randomize_bit_order (mix_decode (fft_range_out2, l_wav_data.n_channels()), /* encode */ false);
-                const size_t bits_per_block = raw_bit_vec1.size();
-                vector<float> raw_bit_vec;
-                for (size_t i = 0; i < bits_per_block; i++)
-                  {
-                    if (sync_score.block_type == ConvBlockType::a)
-                      {
-                        raw_bit_vec.push_back (raw_bit_vec1[i]);
-                        raw_bit_vec.push_back (raw_bit_vec2[i]);
-                      }
-                    else
-                      {
-                        raw_bit_vec.push_back (raw_bit_vec2[i]);
-                        raw_bit_vec.push_back (raw_bit_vec1[i]);
-                      }
-                  }
+            int pad_frames_start = frames_per_block + 5;
+            int pad_frames_end   = frames_per_block + 5;
+            size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
+            auto s = wav_data.samples();
+            ext_samples.assign (s.end() - n, s.end());
+            printf ("END: %f..%f\n", double (s.size() - n) / wav_data.sample_rate() / wav_data.n_channels(),
+                                     double (s.size()) / wav_data.sample_rate() / wav_data.n_channels());
+            ext_samples.insert (ext_samples.begin(), pad_frames_start * Params::frame_size * wav_data.n_channels(), 0);
+            ext_samples.insert (ext_samples.end(),   pad_frames_end   * Params::frame_size * wav_data.n_channels(), 0);
 
-                float decode_error = 0;
-                vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
-
-                SyncFinder::Score sync_score_nopad = sync_score;
-                if (sync_score_nopad.index >= pad_frames_start * Params::frame_size)
-                  sync_score_nopad.index -= pad_frames_start * Params::frame_size;
-                else
-                  sync_score_nopad.index = 0;
-                result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
-              }
+            WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
+            run_padded (l_wav_data, result_set, double (s.size() - n) / wav_data.sample_rate() / wav_data.n_channels());
           }
       }
   }
