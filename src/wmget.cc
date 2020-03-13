@@ -564,54 +564,100 @@ private:
   }
 };
 
-static int
-decode_and_report (const WavData& wav_data, const string& orig_pattern)
+class ResultSet
 {
-  int match_count = 0, total_count = 0, sync_match = 0;
-
-  SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
-
-  enum PatternType { BLOCK, CLIP, ALL };
-  auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, PatternType pattern_type)
+public:
+  enum class Type { BLOCK, CLIP, ALL };
+  struct Pattern
   {
-    if (pattern_type != PatternType::ALL)
-      {
-        string block_str;
+    vector<int>       bit_vec;
+    float             decode_error = 0;
+    SyncFinder::Score sync_score;
+    Type              type;
+  };
+private:
+  vector<Pattern> patterns;
 
-        switch (sync_score.block_type)
-          {
-            case ConvBlockType::a:  block_str = "A";
-                                    break;
-            case ConvBlockType::b:  block_str = "B";
-                                    break;
-            case ConvBlockType::ab: block_str = "AB";
-                                    break;
-          }
-        if (pattern_type == PatternType::CLIP)
-          block_str = "CLIP-" + block_str;
-        const int seconds = sync_score.index / wav_data.sample_rate();
-        printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(),
-                sync_score.quality, decode_error, block_str.c_str());
-      }
-    if (pattern_type == PatternType::ALL) /* this is the combined pattern "all" */
+public:
+  void
+  add_pattern (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
+  {
+    Pattern p;
+    p.sync_score = sync_score;
+    p.bit_vec = bit_vec;
+    p.decode_error = decode_error;
+    p.type = pattern_type;
+
+    patterns.push_back (p);
+  }
+  void
+  print()
+  {
+    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+      const int all1 = p1.type == Type::ALL;
+      const int all2 = p2.type == Type::ALL;
+      if (all1 != all2)
+        return all1 < all2;
+      else
+        return p1.sync_score.index < p2.sync_score.index;
+    });
+    for (const auto& pattern : patterns)
       {
-        printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
+        if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
+          {
+            printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (pattern.bit_vec).c_str(),
+                                                    pattern.sync_score.quality, pattern.decode_error);
+          }
+        else
+          {
+            string block_str;
+
+            switch (pattern.sync_score.block_type)
+              {
+                case ConvBlockType::a:  block_str = "A";
+                                        break;
+                case ConvBlockType::b:  block_str = "B";
+                                        break;
+                case ConvBlockType::ab: block_str = "AB";
+                                        break;
+              }
+            if (pattern.type == Type::CLIP)
+              block_str = "CLIP-" + block_str;
+
+            const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
+            printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (pattern.bit_vec).c_str(),
+                      pattern.sync_score.quality, pattern.decode_error, block_str.c_str());
+          }
       }
-    if (!orig_pattern.empty())
+  }
+  void
+  print_match_count (const string& orig_pattern)
+  {
+    int match_count = 0;
+
+    vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+    for (auto p : patterns)
       {
         bool        match = true;
-        vector<int> orig_vec = bit_str_to_vec (orig_pattern);
 
-        for (size_t i = 0; i < bit_vec.size(); i++)
-          match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+        for (size_t i = 0; i < p.bit_vec.size(); i++)
+          match = match && (p.bit_vec[i] == orig_vec[i % orig_vec.size()]);
 
         if (match)
           match_count++;
-
       }
-    total_count++;
-  };
+    printf ("match_count %d %zd\n", match_count, patterns.size());
+  }
+};
+
+static int
+decode_and_report (const WavData& wav_data, const string& orig_pattern)
+{
+  int total_count = 0;
+
+  SyncFinder                sync_finder;
+  ResultSet                 result_set;
+  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
 
   vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
   vector<int>   raw_bit_vec_norm (2);
@@ -650,7 +696,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
           float decode_error = 0;
           vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
-          report_pattern (sync_score, bit_vec, decode_error, PatternType::BLOCK);
+          result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+          total_count += 1;
 
           /* ---- update "all" pattern ---- */
           score_all.quality += sync_score.quality;
@@ -676,7 +723,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
               vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
               score_ab.index = sync_score.index;
               score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-              report_pattern (score_ab, bit_vec, decode_error, PatternType::BLOCK);
+              result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
             }
           last_block_type = sync_score.block_type;
         }
@@ -695,7 +742,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       float decode_error = 0;
       vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
-      report_pattern (score_all, bit_vec, decode_error, PatternType::ALL);
+      result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
     }
   // L-blocks
   const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
@@ -757,19 +804,22 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
                 sync_score_nopad.index -= pad_frames_start * Params::frame_size;
               else
                 sync_score_nopad.index = 0;
-              report_pattern (sync_score_nopad, bit_vec, decode_error, PatternType::CLIP);
+              result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
             }
         }
     }
+  result_set.print();
+
   if (!orig_pattern.empty())
     {
-      printf ("match_count %d %d\n", match_count, total_count);
+      result_set.print_match_count (orig_pattern);
 
       /* search sync markers at typical positions */
       const int expect0 = Params::frames_pad_start * Params::frame_size;
       const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
       const int expect_end = frame_count (wav_data) * Params::frame_size;
 
+      int sync_match = 0;
       for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
         {
           for (auto sync_score : sync_scores)
