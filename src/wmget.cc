@@ -701,27 +701,27 @@ class ClipDecoder
   void
   run_block (const WavData& wav_data, ResultSet& result_set, int pad_frames_start, int pad_frames_end, Pos pos)
   {
-    double time_offset;
-    vector<float> ext_samples;
     const size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
+    size_t first_sample;
+    size_t last_sample;
+
     if (pos == Pos::START)
       {
-        ext_samples = wav_data.samples();
-        if (ext_samples.size() > n)
-          ext_samples.resize (n);
-
-        time_offset = 0;
+        first_sample = 0;
+        last_sample  = min (n, wav_data.n_values());
       }
     else // (pos == Pos::END)
       {
-        auto s = wav_data.samples();
-        if (n > s.size())
+        if (wav_data.n_values() <= n)
           return;
-        ext_samples.assign (s.end() - n, s.end());
 
-        time_offset = double (s.size() - n) / wav_data.sample_rate() / wav_data.n_channels();
+        first_sample = wav_data.n_values() - n;
+        last_sample  = wav_data.n_values();
       }
+    const double time_offset = double (first_sample) / wav_data.sample_rate() / wav_data.n_channels();
     // printf ("%d: %f..%f\n", int (pos), time_offset, time_offset + double (ext_samples.size()) / wav_data.sample_rate() / wav_data.n_channels());
+
+    vector<float> ext_samples (wav_data.samples().begin() + first_sample, wav_data.samples().begin() + last_sample);
 
     ext_samples.insert (ext_samples.begin(), pad_frames_start * Params::frame_size * wav_data.n_channels(), 0);
     ext_samples.insert (ext_samples.end(),   pad_frames_end   * Params::frame_size * wav_data.n_channels(), 0);
