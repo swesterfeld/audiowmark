@@ -650,6 +650,131 @@ public:
   }
 };
 
+class BlockDecoder
+{
+  int debug_sync_frame_count = 0;
+  vector<SyncFinder::Score> sync_scores; // stored here for sync debugging
+public:
+  void
+  run (const WavData& wav_data, ResultSet& result_set)
+  {
+    int total_count = 0;
+
+    SyncFinder sync_finder;
+    sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
+
+    vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
+    vector<int>   raw_bit_vec_norm (2);
+
+    SyncFinder::Score score_all { 0, 0 };
+    SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
+
+    ConvBlockType last_block_type = ConvBlockType::b;
+    vector<vector<float>> ab_raw_bit_vec (2);
+    vector<float>         ab_quality (2);
+    FFTAnalyzer           fft_analyzer (wav_data.n_channels());
+    for (auto sync_score : sync_scores)
+      {
+        const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+        const size_t index = sync_score.index;
+        const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
+
+        auto fft_range_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
+        if (fft_range_out.size())
+          {
+            /* ---- retrieve bits from watermark ---- */
+            vector<float> raw_bit_vec;
+            if (Params::mix)
+              {
+                raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
+              }
+            else
+              {
+                raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
+              }
+            assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
+
+            raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
+
+            /* ---- deal with this pattern ---- */
+            float decode_error = 0;
+            vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+            result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+            total_count += 1;
+
+            /* ---- update "all" pattern ---- */
+            score_all.quality += sync_score.quality;
+
+            for (size_t i = 0; i < raw_bit_vec.size(); i++)
+              {
+                raw_bit_vec_all[i * 2 + ab] += raw_bit_vec[i];
+              }
+            raw_bit_vec_norm[ab]++;
+
+            /* ---- if last block was A & this block is B => deal with combined AB block */
+            ab_raw_bit_vec[ab] = raw_bit_vec;
+            ab_quality[ab]     = sync_score.quality;
+            if (last_block_type == ConvBlockType::a && sync_score.block_type == ConvBlockType::b)
+              {
+                /* join A and B block -> AB block */
+                vector<float> ab_bits (raw_bit_vec.size() * 2);
+                for (size_t i = 0; i <  raw_bit_vec.size(); i++)
+                  {
+                    ab_bits[i * 2] = ab_raw_bit_vec[0][i];
+                    ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
+                  }
+                vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
+                score_ab.index = sync_score.index;
+                score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
+                result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+              }
+            last_block_type = sync_score.block_type;
+          }
+      }
+    if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
+      {
+        for (size_t i = 0; i < raw_bit_vec_all.size(); i += 2)
+          {
+            raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
+            raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
+          }
+        score_all.quality /= raw_bit_vec_norm[0] + raw_bit_vec_norm[1];
+
+        vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
+
+        float decode_error = 0;
+        vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
+
+        result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+      }
+
+    debug_sync_frame_count = frame_count (wav_data);
+  }
+  void
+  print_debug_sync()
+  {
+      /* search sync markers at typical positions */
+      const int expect0 = Params::frames_pad_start * Params::frame_size;
+      const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+      const int expect_end = debug_sync_frame_count * Params::frame_size;
+
+      int sync_match = 0;
+      for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
+        {
+          for (auto sync_score : sync_scores)
+            {
+              if (abs (int (sync_score.index + Params::test_cut) - expect_index) < Params::frame_size / 2)
+                {
+                  sync_match++;
+                  break;
+                }
+            }
+        }
+      printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+  }
+};
+
 class ClipDecoder
 {
   const int frames_per_block = 0;
@@ -761,97 +886,10 @@ public:
 static int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
-  int total_count = 0;
+  ResultSet result_set;
 
-  SyncFinder                sync_finder;
-  ResultSet                 result_set;
-  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
-
-  vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
-  vector<int>   raw_bit_vec_norm (2);
-
-  SyncFinder::Score score_all { 0, 0 };
-  SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
-
-  ConvBlockType last_block_type = ConvBlockType::b;
-  vector<vector<float>> ab_raw_bit_vec (2);
-  vector<float>         ab_quality (2);
-  FFTAnalyzer           fft_analyzer (wav_data.n_channels());
-  for (auto sync_score : sync_scores)
-    {
-      const size_t count = mark_sync_frame_count() + mark_data_frame_count();
-      const size_t index = sync_score.index;
-      const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
-
-      auto fft_range_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
-      if (fft_range_out.size())
-        {
-          /* ---- retrieve bits from watermark ---- */
-          vector<float> raw_bit_vec;
-          if (Params::mix)
-            {
-              raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
-            }
-          else
-            {
-              raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
-            }
-          assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
-
-          raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
-
-          /* ---- deal with this pattern ---- */
-          float decode_error = 0;
-          vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
-
-          result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
-          total_count += 1;
-
-          /* ---- update "all" pattern ---- */
-          score_all.quality += sync_score.quality;
-
-          for (size_t i = 0; i < raw_bit_vec.size(); i++)
-            {
-              raw_bit_vec_all[i * 2 + ab] += raw_bit_vec[i];
-            }
-          raw_bit_vec_norm[ab]++;
-
-          /* ---- if last block was A & this block is B => deal with combined AB block */
-          ab_raw_bit_vec[ab] = raw_bit_vec;
-          ab_quality[ab]     = sync_score.quality;
-          if (last_block_type == ConvBlockType::a && sync_score.block_type == ConvBlockType::b)
-            {
-              /* join A and B block -> AB block */
-              vector<float> ab_bits (raw_bit_vec.size() * 2);
-              for (size_t i = 0; i <  raw_bit_vec.size(); i++)
-                {
-                  ab_bits[i * 2] = ab_raw_bit_vec[0][i];
-                  ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
-                }
-              vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
-              score_ab.index = sync_score.index;
-              score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-              result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
-            }
-          last_block_type = sync_score.block_type;
-        }
-    }
-  if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
-    {
-      for (size_t i = 0; i < raw_bit_vec_all.size(); i += 2)
-        {
-          raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
-          raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
-        }
-      score_all.quality /= raw_bit_vec_norm[0] + raw_bit_vec_norm[1];
-
-      vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
-
-      float decode_error = 0;
-      vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
-
-      result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
-    }
+  BlockDecoder block_decoder;
+  block_decoder.run (wav_data, result_set);
 
   ClipDecoder clip_decoder;
   clip_decoder.run (wav_data, result_set);
@@ -861,24 +899,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
     {
       result_set.print_match_count (orig_pattern);
 
-      /* search sync markers at typical positions */
-      const int expect0 = Params::frames_pad_start * Params::frame_size;
-      const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
-      const int expect_end = frame_count (wav_data) * Params::frame_size;
-
-      int sync_match = 0;
-      for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
-        {
-          for (auto sync_score : sync_scores)
-            {
-              if (abs (int (sync_score.index + Params::test_cut) - expect_index) < Params::frame_size / 2)
-                {
-                  sync_match++;
-                  break;
-                }
-            }
-        }
-      printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+      block_decoder.print_debug_sync();
     }
   return 0;
 }
