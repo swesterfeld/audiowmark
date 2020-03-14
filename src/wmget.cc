@@ -779,24 +779,31 @@ class ClipDecoder
 {
   const int frames_per_block = 0;
 
-  void
-  run_padded (const WavData& l_wav_data, ResultSet& result_set, double time_offset_sec)
+  vector<float>
+  mix_or_linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
   {
-    SyncFinder                sync_finder_l;
-    vector<SyncFinder::Score> sync_scores_l = sync_finder_l.search (l_wav_data, SyncFinder::BlockLength::LONG);
-    FFTAnalyzer               fft_analyzer (l_wav_data.n_channels());
+    if (Params::mix)
+      return mix_decode (fft_out, n_channels);
+    else
+      return linear_decode (fft_out, n_channels);
+  }
+  void
+  run_padded (const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
+  {
+    SyncFinder                sync_finder;
+    vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
+    FFTAnalyzer               fft_analyzer (wav_data.n_channels());
 
-    for (auto sync_score : sync_scores_l)
+    for (auto sync_score : sync_scores)
       {
         const size_t count = mark_sync_frame_count() + mark_data_frame_count();
         const size_t index = sync_score.index;
-        auto fft_range_out1 = fft_analyzer.fft_range (l_wav_data.samples(), index, count);
-        auto fft_range_out2 = fft_analyzer.fft_range (l_wav_data.samples(), index + count * Params::frame_size, count);
+        auto fft_range_out1 = fft_analyzer.fft_range (wav_data.samples(), index, count);
+        auto fft_range_out2 = fft_analyzer.fft_range (wav_data.samples(), index + count * Params::frame_size, count);
         if (fft_range_out1.size() && fft_range_out2.size())
           {
-            // FIXME: doesn't do linear decode
-            const auto raw_bit_vec1 = randomize_bit_order (mix_decode (fft_range_out1, l_wav_data.n_channels()), /* encode */ false);
-            const auto raw_bit_vec2 = randomize_bit_order (mix_decode (fft_range_out2, l_wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec1 = randomize_bit_order (mix_or_linear_decode (fft_range_out1, wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec2 = randomize_bit_order (mix_or_linear_decode (fft_range_out2, wav_data.n_channels()), /* encode */ false);
             const size_t bits_per_block = raw_bit_vec1.size();
             vector<float> raw_bit_vec;
             for (size_t i = 0; i < bits_per_block; i++)
@@ -817,7 +824,7 @@ class ClipDecoder
             vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
 
             SyncFinder::Score sync_score_nopad = sync_score;
-            sync_score_nopad.index = time_offset_sec * l_wav_data.sample_rate();
+            sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
             result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
           }
       }
