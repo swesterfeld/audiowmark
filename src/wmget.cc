@@ -699,16 +699,23 @@ class ClipDecoder
   }
   enum class Pos { START, END };
   void
-  run_block (const WavData& wav_data, ResultSet& result_set, int pad_frames_start, int pad_frames_end, Pos pos)
+  run_block (const WavData& wav_data, ResultSet& result_set, Pos pos)
   {
     const size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
     size_t first_sample;
     size_t last_sample;
+    size_t pad_samples_start = n;
+    size_t pad_samples_end   = n;
 
     if (pos == Pos::START)
       {
         first_sample = 0;
         last_sample  = min (n, wav_data.n_values());
+
+        // increase padding at start for small blocks
+        //   -> (available samples + padding) must always be one L-block
+        if (last_sample < n)
+          pad_samples_start += n - last_sample;
       }
     else // (pos == Pos::END)
       {
@@ -719,12 +726,17 @@ class ClipDecoder
         last_sample  = wav_data.n_values();
       }
     const double time_offset = double (first_sample) / wav_data.sample_rate() / wav_data.n_channels();
-    // printf ("%d: %f..%f\n", int (pos), time_offset, time_offset + double (ext_samples.size()) / wav_data.sample_rate() / wav_data.n_channels());
-
     vector<float> ext_samples (wav_data.samples().begin() + first_sample, wav_data.samples().begin() + last_sample);
 
-    ext_samples.insert (ext_samples.begin(), pad_frames_start * Params::frame_size * wav_data.n_channels(), 0);
-    ext_samples.insert (ext_samples.end(),   pad_frames_end   * Params::frame_size * wav_data.n_channels(), 0);
+    if (0)
+      {
+        printf ("%d: %f..%f\n", int (pos), time_offset, time_offset + double (ext_samples.size()) / wav_data.sample_rate() / wav_data.n_channels());
+        printf ("%f< >%f\n",
+          double (pad_samples_start) / wav_data.sample_rate() / wav_data.n_channels(),
+          double (pad_samples_end) / wav_data.sample_rate() / wav_data.n_channels());
+      }
+    ext_samples.insert (ext_samples.begin(), pad_samples_start, 0);
+    ext_samples.insert (ext_samples.end(),   pad_samples_end, 0);
 
     WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
     run_padded (l_wav_data, result_set, time_offset);
@@ -740,14 +752,8 @@ public:
     const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
     if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
       {
-        // clip decoder padding at start:
-        //  - for longer clips:  at least one data block
-        //  - for smaller clips: available frames + padding is the length of one L-block
-        //  - 5 extra frames as safety
-        const int pad_frames_start = max (frames_per_block, frames_per_block * 2 - wav_frames) + 5;
-
-        run_block (wav_data, result_set, pad_frames_start, frames_per_block + 5, Pos::START);
-        run_block (wav_data, result_set, frames_per_block + 5, frames_per_block + 5, Pos::END);
+        run_block (wav_data, result_set, Pos::START);
+        run_block (wav_data, result_set, Pos::END);
       }
   }
 };
