@@ -373,8 +373,22 @@ public:
         return result_scores;
       }
     init_up_down (wav_data, mode);
-    scan_silence (wav_data);
 
+    if (mode == Mode::CLIP)
+      {
+        /* in clip mode we optimize handling large areas of padding which is silent */
+        scan_silence (wav_data);
+      }
+    else
+      {
+        /* in block mode we don't do anything special for silence at beginning/end */
+        wav_data_start = 0;
+
+        if (samples.size())
+          wav_data_end = wav_data.samples().size() - 1;
+        else
+          wav_data_end = 0;
+      }
     vector<float> fft_db;
     vector<char>  have_frame;
 
