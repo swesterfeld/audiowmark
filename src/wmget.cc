@@ -198,7 +198,7 @@ normalize_sync_quality (double raw_quality)
 class SyncFinder
 {
 public:
-  enum class BlockLength { NORMAL, LONG };
+  enum class Mode { BLOCK, CLIP };
 
 private:
   struct FrameBit
@@ -210,14 +210,14 @@ private:
   vector<vector<FrameBit>> sync_bits;
 
   void
-  init_up_down (const WavData& wav_data, BlockLength block_length)
+  init_up_down (const WavData& wav_data, Mode mode)
   {
     sync_bits.clear();
 
     // "long" blocks consist of two "normal" blocks, which means
     //   the sync bits pattern is repeated after the end of the first block
     const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
-    const int block_count = block_length == BlockLength::LONG ? 2 : 1;
+    const int block_count = mode == Mode::CLIP ? 2 : 1;
     size_t n_bands = Params::max_band - Params::min_band + 1;
 
     UpDownGen up_down_gen (Random::Stream::sync_up_down);
@@ -355,7 +355,7 @@ public:
     ConvBlockType block_type;
   };
   vector<Score>
-  search (const WavData& wav_data, BlockLength block_length)
+  search (const WavData& wav_data, Mode mode)
   {
     vector<Score> result_scores;
     vector<Score> sync_scores;
@@ -372,7 +372,7 @@ public:
 
         return result_scores;
       }
-    init_up_down (wav_data, block_length);
+    init_up_down (wav_data, mode);
     scan_silence (wav_data);
 
     vector<float> fft_db;
@@ -382,7 +382,7 @@ public:
     size_t n_bands = Params::max_band - Params::min_band + 1;
     int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
     const int first_block_end = total_frame_count;
-    if (block_length == BlockLength::LONG)
+    if (mode == Mode::CLIP)
       total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
@@ -405,7 +405,7 @@ public:
     for (size_t f = 0; f < mark_sync_frame_count(); f++)
       {
         want_frames[sync_frame_pos (f)] = 1;
-        if (block_length == BlockLength::LONG)
+        if (mode == Mode::CLIP)
           want_frames[first_block_end + sync_frame_pos (f)] = 1;
       }
 
@@ -442,7 +442,7 @@ public:
               }
           }
       }
-    if (block_length == BlockLength::LONG)
+    if (mode == Mode::CLIP)
       {
         std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.quality > nb2.quality; });
         if (n_best.size() > 5)
@@ -661,7 +661,7 @@ public:
     int total_count = 0;
 
     SyncFinder sync_finder;
-    sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::NORMAL);
+    sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::BLOCK);
 
     vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
     vector<int>   raw_bit_vec_norm (2);
@@ -791,7 +791,7 @@ class ClipDecoder
   run_padded (const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
   {
     SyncFinder                sync_finder;
-    vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::BlockLength::LONG);
+    vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::CLIP);
     FFTAnalyzer               fft_analyzer (wav_data.n_channels());
 
     for (auto sync_score : sync_scores)
