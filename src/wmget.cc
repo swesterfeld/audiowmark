@@ -384,7 +384,7 @@ public:
         /* in block mode we don't do anything special for silence at beginning/end */
         wav_data_start = 0;
 
-        if (samples.size())
+        if (wav_data.samples().size())
           wav_data_end = wav_data.samples().size() - 1;
         else
           wav_data_end = 0;
