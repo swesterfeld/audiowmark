@@ -267,7 +267,7 @@ private:
   double
   sync_decode (const WavData& wav_data, const size_t start_frame,
                const vector<float>& fft_out_db,
-               const vector<char>&  have_frame,
+               const vector<char>&  have_frames,
                ConvBlockType *block_type)
   {
     double sync_quality = 0;
@@ -282,7 +282,7 @@ private:
         int frame_bit_count = 0;
         for (const auto& frame_bit : frame_bits)
           {
-            if (have_frame[start_frame + frame_bit.frame])
+            if (have_frames[start_frame + frame_bit.frame])
               {
                 const int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
                 for (size_t i = 0; i < frame_bit.up.size(); i++)
@@ -354,7 +354,7 @@ private:
   search_approx (const WavData& wav_data, Mode mode)
   {
     vector<float> fft_db;
-    vector<char>  have_frame;
+    vector<char>  have_frames;
     vector<Score> sync_scores;
 
     // compute multiple time-shifted fft vectors
@@ -364,14 +364,14 @@ private:
       total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
-        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frame, /* want all frames */ {});
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frames, /* want all frames */ {});
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
             if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
-                double quality = sync_decode (wav_data, start_frame, fft_db, have_frame, &block_type);
+                double quality = sync_decode (wav_data, start_frame, fft_db, have_frames, &block_type);
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (Score { sync_index, quality, block_type });
               }
@@ -425,7 +425,7 @@ private:
   search_refine (const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
   {
     vector<float> fft_db;
-    vector<char>  have_frame;
+    vector<char>  have_frames;
     vector<Score> result_scores;
 
     int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
@@ -454,11 +454,11 @@ private:
         int end   = score.index + Params::sync_search_step;
         for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
           {
-            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
+            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frames, want_frames);
             if (fft_db.size())
               {
                 ConvBlockType block_type;
-                double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
+                double        q = sync_decode (wav_data, 0, fft_db, have_frames, &block_type);
 
                 if (q > best_quality)
                   {
@@ -518,9 +518,7 @@ public:
         else
           wav_data_end = 0;
       }
-    vector<Score> sync_scores;
-
-    sync_scores = search_approx (wav_data, mode);
+    vector<Score> sync_scores = search_approx (wav_data, mode);
 
     sync_select_by_threshold (sync_scores);
     if (mode == Mode::CLIP)
@@ -532,10 +530,10 @@ public:
   }
 private:
   void
-  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frame, const vector<char>& want_frames)
+  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frames, const vector<char>& want_frames)
   {
     fft_out_db.clear();
-    have_frame.clear();
+    have_frames.clear();
 
     /* read past end? -> fail */
     if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
@@ -547,7 +545,7 @@ private:
     int out_pos = 0;
 
     fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
-    have_frame.resize (frame_count);
+    have_frames.resize (frame_count);
 
     for (size_t f = 0; f < frame_count; f++)
       {
@@ -571,7 +569,7 @@ private:
               for (int i = Params::min_band; i <= Params::max_band; i++)
                 fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
 
-            have_frame[f] = 1;
+            have_frames[f] = 1;
           }
       }
   }
