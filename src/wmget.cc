@@ -360,7 +360,6 @@ private:
     // compute multiple time-shifted fft vectors
     size_t n_bands = Params::max_band - Params::min_band + 1;
     int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
-    const int first_block_end = total_frame_count;
     if (mode == Mode::CLIP)
       total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
@@ -380,6 +379,40 @@ private:
       }
     sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
     return sync_scores;
+  }
+  void
+  sync_select_by_threshold (vector<Score>& sync_scores)
+  {
+    /* for strength 8 and above:
+     *   -> more false positive candidates are rejected, so we can use a lower threshold
+     *
+     * for strength 7 and below:
+     *   -> we need a higher threshold, because otherwise watermark detection takes too long
+     */
+    const double strength = Params::water_delta * 1000;
+    const double sync_threshold1 = strength > 7.5 ? 0.4 : 0.5;
+
+    vector<Score> selected_scores;
+
+    for (size_t i = 0; i < sync_scores.size(); i++)
+      {
+        if (sync_scores[i].quality > sync_threshold1)
+          {
+            double q_last = -1;
+            double q_next = -1;
+            if (i > 0)
+              q_last = sync_scores[i - 1].quality;
+
+            if (i + 1 < sync_scores.size())
+              q_next = sync_scores[i + 1].quality;
+
+            if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+              {
+                selected_scores.emplace_back (sync_scores[i]);
+              }
+          }
+      }
+    sync_scores = selected_scores;
   }
 
   size_t wav_data_start = 0;
@@ -420,33 +453,8 @@ public:
           wav_data_end = 0;
       }
     vector<Score> sync_scores = search_approx (wav_data, mode);
-#if 0
-    vector<float> fft_db;
-    vector<char>  have_frame;
 
-    // compute multiple time-shifted fft vectors
-    size_t n_bands = Params::max_band - Params::min_band + 1;
-    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
-    const int first_block_end = total_frame_count;
-    if (mode == Mode::CLIP)
-      total_frame_count *= 2;
-    for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
-      {
-        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frame, /* want all frames */ {});
-        for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
-          {
-            const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
-              {
-                ConvBlockType block_type;
-                double quality = sync_decode (wav_data, start_frame, fft_db, have_frame, &block_type);
-                // printf ("%zd %f\n", sync_index, quality);
-                sync_scores.emplace_back (Score { sync_index, quality, block_type });
-              }
-          }
-      }
-    sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
-#endif
+    sync_select_by_threshold (sync_scores);
 
     int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
     const int first_block_end = total_frame_count;
@@ -460,93 +468,45 @@ public:
           want_frames[first_block_end + sync_frame_pos (f)] = 1;
       }
 
-    /* for strength 8 and above:
-     *   -> more false positive candidates are rejected, so we can use a lower threshold
-     *
-     * for strength 7 and below:
-     *   -> we need a higher threshold, because otherwise watermark detection takes too long
-     */
-    const double strength = Params::water_delta * 1000;
-    const double sync_threshold1 = strength > 7.5 ? 0.4 : 0.5;
-
     /* n-best-search */
-    struct NBest {
-      size_t i;
-      double quality;
-    };
-    vector<NBest> n_best;
-    for (size_t i = 0; i < sync_scores.size(); i++)
-      {
-        if (sync_scores[i].quality > sync_threshold1)
-          {
-            double q_last = -1;
-            double q_next = -1;
-            if (i > 0)
-              q_last = sync_scores[i - 1].quality;
-
-            if (i + 1 < sync_scores.size())
-              q_next = sync_scores[i + 1].quality;
-
-            if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
-              {
-                n_best.push_back ({ i, sync_scores[i].quality });
-              }
-          }
-      }
+    vector<Score> n_best = sync_scores;
     if (mode == Mode::CLIP)
       {
-        std::sort (n_best.begin(), n_best.end(), [](NBest& nb1, NBest& nb2) { return nb1.quality > nb2.quality; });
+        std::sort (n_best.begin(), n_best.end(), [](Score& nb1, Score& nb2) { return nb1.quality > nb2.quality; });
         if (n_best.size() > 5)
           n_best.resize (5);
       }
     vector<float> fft_db;
     vector<char>  have_frame;
-    for (auto n : n_best)
+    for (const auto& score : n_best)
       {
-        size_t i = n.i;
-        //printf ("%d %zd %f %d\n", int (block_length), sync_scores[i].index, sync_scores[i].quality, sync_scores[i].len);
-        if (sync_scores[i].quality > sync_threshold1)
+        //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+
+        // refine match
+        double best_quality       = score.quality;
+        size_t best_index         = score.index;
+        ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
+
+        int start = std::max (int (score.index) - Params::sync_search_step, 0);
+        int end   = score.index + Params::sync_search_step;
+        for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
           {
-            double q_last = -1;
-            double q_next = -1;
-
-            if (i > 0)
-              q_last = sync_scores[i - 1].quality;
-
-            if (i + 1 < sync_scores.size())
-              q_next = sync_scores[i + 1].quality;
-
-            if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
+            if (fft_db.size())
               {
-                //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+                ConvBlockType block_type;
+                double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
 
-                // refine match
-                double best_quality       = sync_scores[i].quality;
-                size_t best_index         = sync_scores[i].index;
-                ConvBlockType best_block_type = sync_scores[i].block_type; /* doesn't really change during refinement */
-
-                int start = std::max (int (sync_scores[i].index) - Params::sync_search_step, 0);
-                int end   = sync_scores[i].index + Params::sync_search_step;
-                for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+                if (q > best_quality)
                   {
-                    sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
-                    if (fft_db.size())
-                      {
-                        ConvBlockType block_type;
-                        double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
-
-                        if (q > best_quality)
-                          {
-                            best_quality = q;
-                            best_index   = fine_index;
-                          }
-                      }
+                    best_quality = q;
+                    best_index   = fine_index;
                   }
-                //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
-                if (best_quality > Params::sync_threshold2)
-                  result_scores.push_back (Score { best_index, best_quality, best_block_type });
               }
           }
+        //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
+        if (best_quality > Params::sync_threshold2)
+          result_scores.push_back (Score { best_index, best_quality, best_block_type });
       }
     return result_scores;
   }
