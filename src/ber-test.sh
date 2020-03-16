@@ -16,6 +16,9 @@ fi
 if [ "x$AWM_FILE" == "x" ]; then
   AWM_FILE=t
 fi
+if [ "x$AWM_MULTI_CLIP" == "x" ]; then
+  AWM_MULTI_CLIP=1
+fi
 
 {
   if [ "x$AWM_SET" == "xsmall" ]; then
@@ -90,13 +93,16 @@ do
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
-    if [ "x${AWM_CLIP}" != "x" ]; then
-      audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
-      rm $OUT_FILE
-      OUT_FILE=${OUT_FILE}.clip.wav
-    fi
     echo
-    if [ "x$AWM_REPORT" == "xtruncv" ]; then
+    if [ "x${AWM_CLIP}" != "x" ]; then
+      for CLIP in $(seq $AWM_MULTI_CLIP)
+      do
+        audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
+        audiowmark cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+        rm ${OUT_FILE}.clip.wav
+        echo
+      done
+    elif [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
       do
         audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
