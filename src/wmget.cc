@@ -466,6 +466,24 @@ private:
       }
     sync_scores = result_scores;
   }
+  vector<Score>
+  fake_sync (const WavData& wav_data, Mode mode)
+  {
+    vector<Score> result_scores;
+
+    if (mode == Mode::BLOCK)
+      {
+        const size_t expect0 = Params::frames_pad_start * Params::frame_size;
+        const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+        const size_t expect_end = frame_count (wav_data) * Params::frame_size;
+
+        int ab = 0;
+        for (size_t expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
+          result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
+      }
+
+    return result_scores;
+  }
 
   size_t wav_data_start = 0;
   size_t wav_data_end = 0;
@@ -474,19 +492,8 @@ public:
   search (const WavData& wav_data, Mode mode)
   {
     if (Params::test_no_sync)
-      {
-        vector<Score> result_scores;
+      return fake_sync (wav_data, mode);
 
-        const size_t expect0 = Params::frames_pad_start * Params::frame_size;
-        const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
-        const size_t expect_end = frame_count (wav_data) * Params::frame_size;
-
-        int ab = 0;
-        for (size_t expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
-          result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
-
-        return result_scores;
-      }
     init_up_down (wav_data, mode);
 
     if (mode == Mode::CLIP)
@@ -504,8 +511,9 @@ public:
         else
           wav_data_end = 0;
       }
-    vector<Score> sync_scores = search_approx (wav_data, mode);
+    vector<Score> sync_scores;
 
+    sync_scores = search_approx (wav_data, mode);
     sync_select_by_threshold (sync_scores);
 
     if (mode == Mode::CLIP)
