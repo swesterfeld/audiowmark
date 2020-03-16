@@ -182,19 +182,6 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
   return raw_bit_vec;
 }
 
-static double
-normalize_sync_quality (double raw_quality)
-{
-  /* the quality for a good sync block depends on watermark strength
-   *
-   * this is just an approximation, but it should be good enough to be able to
-   * use one single threshold on the normalized value check if we have a sync
-   * block or not - typical output is 1.0 or more for sync blocks and close
-   * to 0.0 for non-sync blocks
-   */
-  return raw_quality / min (Params::water_delta, 0.080) / 2.9;
-}
-
 class SyncFinder
 {
 public:
@@ -264,6 +251,20 @@ private:
         sync_bits.push_back (frame_bits);
       }
   }
+
+  double
+  normalize_sync_quality (double raw_quality)
+  {
+    /* the quality for a good sync block depends on watermark strength
+     *
+     * this is just an approximation, but it should be good enough to be able to
+     * use one single threshold on the normalized value check if we have a sync
+     * block or not - typical output is 1.0 or more for sync blocks and close
+     * to 0.0 for non-sync blocks
+     */
+    return raw_quality / min (Params::water_delta, 0.080) / 2.9;
+  }
+
   double
   sync_decode (const WavData& wav_data, const size_t start_frame,
                const vector<float>& fft_out_db,
