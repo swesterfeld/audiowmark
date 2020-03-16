@@ -414,6 +414,58 @@ private:
       }
     sync_scores = selected_scores;
   }
+  void
+  search_refine (const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
+  {
+    vector<float> fft_db;
+    vector<char>  have_frame;
+    vector<Score> result_scores;
+
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    const int first_block_end = total_frame_count;
+    if (mode == Mode::CLIP)
+      total_frame_count *= 2;
+
+    vector<char> want_frames (total_frame_count);
+    for (size_t f = 0; f < mark_sync_frame_count(); f++)
+      {
+        want_frames[sync_frame_pos (f)] = 1;
+        if (mode == Mode::CLIP)
+          want_frames[first_block_end + sync_frame_pos (f)] = 1;
+      }
+
+    for (const auto& score : sync_scores)
+      {
+        //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+
+        // refine match
+        double best_quality       = score.quality;
+        size_t best_index         = score.index;
+        ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
+
+        int start = std::max (int (score.index) - Params::sync_search_step, 0);
+        int end   = score.index + Params::sync_search_step;
+        for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+          {
+            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
+            if (fft_db.size())
+              {
+                ConvBlockType block_type;
+                double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
+
+                if (q > best_quality)
+                  {
+                    best_quality = q;
+                    best_index   = fine_index;
+                  }
+              }
+          }
+        //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
+        if (best_quality > Params::sync_threshold2)
+          result_scores.push_back (Score { best_index, best_quality, best_block_type });
+      }
+    sync_scores = result_scores;
+  }
 
   size_t wav_data_start = 0;
   size_t wav_data_end = 0;
@@ -421,10 +473,10 @@ public:
   vector<Score>
   search (const WavData& wav_data, Mode mode)
   {
-    vector<Score> result_scores;
-
     if (Params::test_no_sync)
       {
+        vector<Score> result_scores;
+
         const size_t expect0 = Params::frames_pad_start * Params::frame_size;
         const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
         const size_t expect_end = frame_count (wav_data) * Params::frame_size;
@@ -456,59 +508,17 @@ public:
 
     sync_select_by_threshold (sync_scores);
 
-    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
-    const int first_block_end = total_frame_count;
-    if (mode == Mode::CLIP)
-      total_frame_count *= 2;
-    vector<char> want_frames (total_frame_count);
-    for (size_t f = 0; f < mark_sync_frame_count(); f++)
-      {
-        want_frames[sync_frame_pos (f)] = 1;
-        if (mode == Mode::CLIP)
-          want_frames[first_block_end + sync_frame_pos (f)] = 1;
-      }
-
-    /* n-best-search */
-    vector<Score> n_best = sync_scores;
     if (mode == Mode::CLIP)
       {
-        std::sort (n_best.begin(), n_best.end(), [](Score& nb1, Score& nb2) { return nb1.quality > nb2.quality; });
-        if (n_best.size() > 5)
-          n_best.resize (5);
+        /* n-best-search */
+        std::sort (sync_scores.begin(), sync_scores.end(), [](Score& s1, Score& s2) { return s1.quality > s2.quality; });
+        if (sync_scores.size() > 5)
+          sync_scores.resize (5);
       }
-    vector<float> fft_db;
-    vector<char>  have_frame;
-    for (const auto& score : n_best)
-      {
-        //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
 
-        // refine match
-        double best_quality       = score.quality;
-        size_t best_index         = score.index;
-        ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
+    search_refine (wav_data, mode, sync_scores);
 
-        int start = std::max (int (score.index) - Params::sync_search_step, 0);
-        int end   = score.index + Params::sync_search_step;
-        for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
-          {
-            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frame, want_frames);
-            if (fft_db.size())
-              {
-                ConvBlockType block_type;
-                double        q = sync_decode (wav_data, 0, fft_db, have_frame, &block_type);
-
-                if (q > best_quality)
-                  {
-                    best_quality = q;
-                    best_index   = fine_index;
-                  }
-              }
-          }
-        //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
-        if (best_quality > Params::sync_threshold2)
-          result_scores.push_back (Score { best_index, best_quality, best_block_type });
-      }
-    return result_scores;
+    return sync_scores;
   }
 private:
   void
