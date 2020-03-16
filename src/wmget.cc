@@ -200,6 +200,11 @@ class SyncFinder
 public:
   enum class Mode { BLOCK, CLIP };
 
+  struct Score {
+    size_t        index;
+    double        quality;
+    ConvBlockType block_type;
+  };
 private:
   struct FrameBit
   {
@@ -345,20 +350,45 @@ private:
         wav_data_start = wav_data_end = 0;
       }
   }
+  vector<Score>
+  search_approx (const WavData& wav_data, Mode mode)
+  {
+    vector<float> fft_db;
+    vector<char>  have_frame;
+    vector<Score> sync_scores;
+
+    // compute multiple time-shifted fft vectors
+    size_t n_bands = Params::max_band - Params::min_band + 1;
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    const int first_block_end = total_frame_count;
+    if (mode == Mode::CLIP)
+      total_frame_count *= 2;
+    for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
+      {
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frame, /* want all frames */ {});
+        for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+          {
+            const size_t sync_index = start_frame * Params::frame_size + sync_shift;
+            if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+              {
+                ConvBlockType block_type;
+                double quality = sync_decode (wav_data, start_frame, fft_db, have_frame, &block_type);
+                // printf ("%zd %f\n", sync_index, quality);
+                sync_scores.emplace_back (Score { sync_index, quality, block_type });
+              }
+          }
+      }
+    sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
+    return sync_scores;
+  }
 
   size_t wav_data_start = 0;
   size_t wav_data_end = 0;
 public:
-  struct Score {
-    size_t        index;
-    double        quality;
-    ConvBlockType block_type;
-  };
   vector<Score>
   search (const WavData& wav_data, Mode mode)
   {
     vector<Score> result_scores;
-    vector<Score> sync_scores;
 
     if (Params::test_no_sync)
       {
@@ -389,6 +419,8 @@ public:
         else
           wav_data_end = 0;
       }
+    vector<Score> sync_scores = search_approx (wav_data, mode);
+#if 0
     vector<float> fft_db;
     vector<char>  have_frame;
 
@@ -414,7 +446,12 @@ public:
           }
       }
     sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
+#endif
 
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    const int first_block_end = total_frame_count;
+    if (mode == Mode::CLIP)
+      total_frame_count *= 2;
     vector<char> want_frames (total_frame_count);
     for (size_t f = 0; f < mark_sync_frame_count(); f++)
       {
@@ -462,6 +499,8 @@ public:
         if (n_best.size() > 5)
           n_best.resize (5);
       }
+    vector<float> fft_db;
+    vector<char>  have_frame;
     for (auto n : n_best)
       {
         size_t i = n.i;
