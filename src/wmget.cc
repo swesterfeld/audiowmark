@@ -334,22 +334,15 @@ private:
   {
     const vector<float>& samples = wav_data.samples();
 
-    if (samples.size())
-      {
-        // find first non-zero sample
-        wav_data_start = 0;
-        while (wav_data_start < samples.size() && samples[wav_data_start] == 0)
-          wav_data_start++;
+    // find first non-zero sample
+    wav_data_first = 0;
+    while (wav_data_first < samples.size() && samples[wav_data_first] == 0)
+      wav_data_first++;
 
-        // find last non-zero sample
-        wav_data_end = samples.size() - 1;
-        while (wav_data_end > wav_data_start && samples[wav_data_end] == 0)
-          wav_data_end--;
-      }
-    else
-      {
-        wav_data_start = wav_data_end = 0;
-      }
+    // search wav_data_last to get [wav_data_first, wav_data_last) range
+    wav_data_last = samples.size();
+    while (wav_data_last > wav_data_first && samples[wav_data_last - 1] == 0)
+      wav_data_last--;
   }
   vector<Score>
   search_approx (const WavData& wav_data, Mode mode)
@@ -493,8 +486,9 @@ private:
     return result_scores;
   }
 
-  size_t wav_data_start = 0;
-  size_t wav_data_end = 0;
+  // non-zero sample range: [wav_data_first, wav_data_last)
+  size_t wav_data_first = 0;
+  size_t wav_data_last = 0;
 public:
   vector<Score>
   search (const WavData& wav_data, Mode mode)
@@ -512,12 +506,8 @@ public:
     else
       {
         /* in block mode we don't do anything special for silence at beginning/end */
-        wav_data_start = 0;
-
-        if (wav_data.samples().size())
-          wav_data_end = wav_data.samples().size() - 1;
-        else
-          wav_data_end = 0;
+        wav_data_first = 0;
+        wav_data_last  = wav_data.samples().size();
       }
     vector<Score> sync_scores = search_approx (wav_data, mode);
 
@@ -550,12 +540,12 @@ private:
 
     for (size_t f = 0; f < frame_count; f++)
       {
-        const size_t f_start = (index + f * Params::frame_size) * wav_data.n_channels();
-        const size_t f_end   = (index + (f + 1) * Params::frame_size) * wav_data.n_channels();
+        const size_t f_first = (index + f * Params::frame_size) * wav_data.n_channels();
+        const size_t f_last  = (index + (f + 1) * Params::frame_size) * wav_data.n_channels();
 
         if ((want_frames.size() && !want_frames[f])   // frame not wanted?
-        ||  (f_end < wav_data_start)                  // frame in silence before input?
-        ||  (f_start > wav_data_end))                 // frame in silence after input?
+        ||  (f_last < wav_data_first)                 // frame in silence before input?
+        ||  (f_first > wav_data_last))                // frame in silence after input?
           {
             out_pos += n_bands * wav_data.n_channels();
           }
@@ -866,6 +856,8 @@ class ClipDecoder
   run_block (const WavData& wav_data, ResultSet& result_set, Pos pos)
   {
     const size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
+
+    // range of samples used by clip: [first_sample, last_sample)
     size_t first_sample;
     size_t last_sample;
     size_t pad_samples_start = n;
