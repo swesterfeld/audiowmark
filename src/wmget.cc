@@ -415,6 +415,13 @@ private:
     sync_scores = selected_scores;
   }
   void
+  sync_select_n_best (vector<Score>& sync_scores, size_t n)
+  {
+    std::sort (sync_scores.begin(), sync_scores.end(), [](Score& s1, Score& s2) { return s1.quality > s2.quality; });
+    if (sync_scores.size() > n)
+      sync_scores.resize (n);
+  }
+  void
   search_refine (const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
   {
     vector<float> fft_db;
@@ -514,15 +521,10 @@ public:
     vector<Score> sync_scores;
 
     sync_scores = search_approx (wav_data, mode);
-    sync_select_by_threshold (sync_scores);
 
+    sync_select_by_threshold (sync_scores);
     if (mode == Mode::CLIP)
-      {
-        /* n-best-search */
-        std::sort (sync_scores.begin(), sync_scores.end(), [](Score& s1, Score& s2) { return s1.quality > s2.quality; });
-        if (sync_scores.size() > 5)
-          sync_scores.resize (5);
-      }
+      sync_select_n_best (sync_scores, 5);
 
     search_refine (wav_data, mode, sync_scores);
 
