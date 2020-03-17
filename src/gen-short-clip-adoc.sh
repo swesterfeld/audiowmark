@@ -8,16 +8,18 @@ echo ".sync-codec-resistence$TRUNC"
 echo '[frame="topbot",options="header",cols="<2,6*>1"]'
 echo '|=========================='
 echo -n "| "
-for STRENGTH in $STRENGTHS
-do
-  echo -n "| $STRENGTH"
-done
-echo
 for CLIP in $STR_CLIPS
 do
-  for STRENGTH in $STR_CLIPS
+  echo -n "| $CLIP"
+done
+echo
+
+for STRENGTH in $STRENGTHS
+do
+  echo -n "| $STRENGTH "
+  for CLIP in $STR_CLIPS
   do
-    cat str-$STRENGTH-mp3-*-$CLIP | awk '{bad += $2; n += $3} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
+    cat str-$STRENGTH-mp3-*-$CLIP | awk '{bad += $1; n += $2} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
   done
   echo
 done
