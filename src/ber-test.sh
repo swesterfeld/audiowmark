@@ -50,8 +50,8 @@ do
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
     fi
     echo in_pattern $PATTERN
-    echo in_flags $AWM_PARAMS --test-key $SEED
-    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED --quiet
+    echo in_flags $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED
+    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet
     if [ "x$AWM_RAND_CUT" != x ]; then
       CUT=$RANDOM
       audiowmark cut-start "${AWM_FILE}.wav" "${AWM_FILE}.wav" $CUT
