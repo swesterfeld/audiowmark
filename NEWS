@@ -1,5 +1,6 @@
 Overview of Changes in audiowmark-0.3.0:
 
+* replace padding at start with a partial B block
 * add algorithm for decoding the watermark from short clips
 
 Overview of Changes in audiowmark-0.2.1:
