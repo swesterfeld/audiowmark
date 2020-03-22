@@ -182,6 +182,46 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
   return raw_bit_vec;
 }
 
+/*
+ * The SyncFinder class searches for sync bits in an input WavData. It is used
+ * by both, the BlockDecoder and ClipDecoder to find a time index where
+ * decoding should start.
+ *
+ * The first step for finding sync bits is search_approx, which generates a
+ * list of approximate locations where sync bits match, using a stepping of
+ * sync_search_step=256 (for a frame size of 1024). The approximate candidate
+ * locations are later refined with search_refine using sync_search_fine=8 as
+ * stepping.
+ *
+ * BlockDecoder and ClipDecoder have similar but not identical needs, so
+ * both use this class, using either Mode::BLOCK or Mode::CLIP.
+ *
+ * BlockDecoder (Mode::BLOCK)
+ *  - search for full A or full B blocks
+ *  - select candidates by threshold(s) only
+ *  - zero samples are not treated any special
+ *
+ * ClipDecoder (Mode::CLIP)
+ *  - search for AB block (one A block followed by one B block) or BA block
+ *  - select candidates by threshold, but only keep at most the 5 best matches
+ *  - zero samples at beginning/end don't affect the score returned by sync_decode
+ *  - zero samples at beginning/end don't cost much cpu time (no fft performed)
+ *
+ * The ClipDecoder will always use a big amount of zero padding at the beginning
+ * and end to be able to find "partial" AB blocks, where most of the data is
+ * matched with zeros.
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:                   |A|BB|
+ * ZEROPAD:           00000|A|BB|00000
+ * MATCH                AAAAA|BBBBB
+ *
+ * In this example a clip (CLIP) is generated from an original file (ORIG).  By
+ * zero padding we get a file that contains the clip (ZEROPAD). Finally we are
+ * able to match an AB block to the zeropadded file (MATCH). This gives us an
+ * index in the zeropadded file that can be used for decoding the
+ * available.data.
+ */
 class SyncFinder
 {
 public:
@@ -672,6 +712,22 @@ public:
   }
 };
 
+/*
+ * The block decoder is responsible for finding whole data blocks inside the
+ * input file and decoding them. This only works for files that are large
+ * enough to contain one data block. Incomplete blocks are ignored.
+ *
+ * INPUT:   AA|BBBBB|AAAAA|BBB
+ * MATCH       BBBBB
+ * MATCH             AAAAA
+ *
+ * The basic algorithm is this:
+ *
+ *  - use sync finder to find start index for the blocks
+ *  - decode the blocks
+ *  - try to combine A + B blocks for better error correction (AB)
+ *  - try to combine all available blocks for better error correction (all pattern)
+ */
 class BlockDecoder
 {
   int debug_sync_frame_count = 0;
@@ -797,6 +853,33 @@ public:
   }
 };
 
+/*
+ * The clip decoder is responsible for decoding short clips. It is designed to
+ * handle input sizes that are smaller than one data block. One case is that
+ * the clip contains a partial A block (so the data could start after the start
+ * of the A block and end before the end of the A block).
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:    |AAA|
+ *
+ * A clip could also contain the end of one block and the start of the next block,
+ * like this:
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:                   |A|BB|
+ *
+ * The basic algorithm is this:
+ *
+ *  - zeropad   |AAA|  => 00000|AAA|00000
+ *  - use sync finder to find start index of one long block in the zeropadded data
+ *  - decode the bits
+ *
+ * For files larger than one data block, we decode twice, at the beginning and end
+ *
+ * INPUT   AAA|BBBBB|A
+ * CLIP #1 AAA|BB
+ * CLIP #2      BBBB|A
+ */
 class ClipDecoder
 {
   const int frames_per_block = 0;
