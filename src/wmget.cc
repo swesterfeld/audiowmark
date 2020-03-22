@@ -182,75 +182,165 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
   return raw_bit_vec;
 }
 
-static double
-normalize_sync_quality (double raw_quality)
-{
-  /* the quality for a good sync block depends on watermark strength
-   *
-   * this is just an approximation, but it should be good enough to be able to
-   * use one single threshold on the normalized value check if we have a sync
-   * block or not - typical output is 1.0 or more for sync blocks and close
-   * to 0.0 for non-sync blocks
-   */
-  return raw_quality / min (Params::water_delta, 0.080) / 2.9;
-}
-
+/*
+ * The SyncFinder class searches for sync bits in an input WavData. It is used
+ * by both, the BlockDecoder and ClipDecoder to find a time index where
+ * decoding should start.
+ *
+ * The first step for finding sync bits is search_approx, which generates a
+ * list of approximate locations where sync bits match, using a stepping of
+ * sync_search_step=256 (for a frame size of 1024). The approximate candidate
+ * locations are later refined with search_refine using sync_search_fine=8 as
+ * stepping.
+ *
+ * BlockDecoder and ClipDecoder have similar but not identical needs, so
+ * both use this class, using either Mode::BLOCK or Mode::CLIP.
+ *
+ * BlockDecoder (Mode::BLOCK)
+ *  - search for full A or full B blocks
+ *  - select candidates by threshold(s) only
+ *  - zero samples are not treated any special
+ *
+ * ClipDecoder (Mode::CLIP)
+ *  - search for AB block (one A block followed by one B block) or BA block
+ *  - select candidates by threshold, but only keep at most the 5 best matches
+ *  - zero samples at beginning/end don't affect the score returned by sync_decode
+ *  - zero samples at beginning/end don't cost much cpu time (no fft performed)
+ *
+ * The ClipDecoder will always use a big amount of zero padding at the beginning
+ * and end to be able to find "partial" AB blocks, where most of the data is
+ * matched with zeros.
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:                   |A|BB|
+ * ZEROPAD:           00000|A|BB|00000
+ * MATCH                AAAAA|BBBBB
+ *
+ * In this example a clip (CLIP) is generated from an original file (ORIG).  By
+ * zero padding we get a file that contains the clip (ZEROPAD). Finally we are
+ * able to match an AB block to the zeropadded file (MATCH). This gives us an
+ * index in the zeropadded file that can be used for decoding the available
+ * data.
+ */
 class SyncFinder
 {
-  vector<vector<int>> up;
-  vector<vector<int>> down;
+public:
+  enum class Mode { BLOCK, CLIP };
+
+  struct Score {
+    size_t        index;
+    double        quality;
+    ConvBlockType block_type;
+  };
+private:
+  struct FrameBit
+  {
+    int frame;
+    vector<int> up;
+    vector<int> down;
+  };
+  vector<vector<FrameBit>> sync_bits;
 
   void
-  init_up_down (const WavData& wav_data)
+  init_up_down (const WavData& wav_data, Mode mode)
   {
-    up.clear();
-    down.clear();
+    sync_bits.clear();
 
-    up.resize (Params::sync_bits);
-    down.resize (Params::sync_bits);
+    // "long" blocks consist of two "normal" blocks, which means
+    //   the sync bits pattern is repeated after the end of the first block
+    const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
+    const int block_count = mode == Mode::CLIP ? 2 : 1;
+    size_t n_bands = Params::max_band - Params::min_band + 1;
 
     UpDownGen up_down_gen (Random::Stream::sync_up_down);
-    size_t n_bands = Params::max_band - Params::min_band + 1;
     for (int bit = 0; bit < Params::sync_bits; bit++)
       {
+        vector<FrameBit> frame_bits;
         for (int f = 0; f < Params::sync_frames_per_bit; f++)
           {
             UpDownArray frame_up, frame_down;
             up_down_gen.get (f + bit * Params::sync_frames_per_bit, frame_up, frame_down);
 
-            for (auto u : frame_up)
-              up[bit].push_back (u - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
-
-            for (auto d : frame_down)
-              down[bit].push_back (d - Params::min_band + sync_frame_pos (f + bit * Params::sync_frames_per_bit) * n_bands * wav_data.n_channels());
+            for (int block = 0; block < block_count; block++)
+              {
+                FrameBit frame_bit;
+                frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
+                for (int ch = 0; ch < wav_data.n_channels(); ch++)
+                  {
+                    if (block == 0)
+                      {
+                        for (auto u : frame_up)
+                          frame_bit.up.push_back (u - Params::min_band + n_bands * ch);
+                        for (auto d : frame_down)
+                          frame_bit.down.push_back (d - Params::min_band + n_bands * ch);
+                      }
+                    else
+                      {
+                        for (auto u : frame_up)
+                          frame_bit.down.push_back (u - Params::min_band + n_bands * ch);
+                        for (auto d : frame_down)
+                          frame_bit.up.push_back (d - Params::min_band + n_bands * ch);
+                      }
+                  }
+                std::sort (frame_bit.up.begin(), frame_bit.up.end());
+                std::sort (frame_bit.down.begin(), frame_bit.down.end());
+                frame_bits.push_back (frame_bit);
+              }
           }
-        sort (up[bit].begin(), up[bit].end());
-        sort (down[bit].begin(), down[bit].end());
+        std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
+        sync_bits.push_back (frame_bits);
       }
   }
+
   double
-  sync_decode (const WavData& wav_data, const size_t start_frame, const vector<float>& fft_out_db, ConvBlockType *block_type)
+  normalize_sync_quality (double raw_quality)
+  {
+    /* the quality for a good sync block depends on watermark strength
+     *
+     * this is just an approximation, but it should be good enough to be able to
+     * use one single threshold on the normalized value check if we have a sync
+     * block or not - typical output is 1.0 or more for sync blocks and close
+     * to 0.0 for non-sync blocks
+     */
+    return raw_quality / min (Params::water_delta, 0.080) / 2.9;
+  }
+
+  double
+  sync_decode (const WavData& wav_data, const size_t start_frame,
+               const vector<float>& fft_out_db,
+               const vector<char>&  have_frames,
+               ConvBlockType *block_type)
   {
     double sync_quality = 0;
 
     size_t n_bands = Params::max_band - Params::min_band + 1;
-    for (int bit = 0; bit < Params::sync_bits; bit++)
+    int bit_count = 0;
+    for (size_t bit = 0; bit < sync_bits.size(); bit++)
       {
+        const vector<FrameBit>& frame_bits = sync_bits[bit];
         float umag = 0, dmag = 0;
 
-        for (int ch = 0; ch < wav_data.n_channels(); ch++)
+        int frame_bit_count = 0;
+        for (const auto& frame_bit : frame_bits)
           {
-            const int index = (start_frame * wav_data.n_channels() + ch) * n_bands;
-
-            for (size_t i = 0; i < up[bit].size(); i++)
+            if (have_frames[start_frame + frame_bit.frame])
               {
-                umag += fft_out_db[index + up[bit][i]];
-                dmag += fft_out_db[index + down[bit][i]];
+                const int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
+                for (size_t i = 0; i < frame_bit.up.size(); i++)
+                  {
+                    umag += fft_out_db[index + frame_bit.up[i]];
+                    dmag += fft_out_db[index + frame_bit.down[i]];
+                  }
+                frame_bit_count++;
               }
           }
         /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
         double raw_bit;
-        if (umag < dmag)
+        if (umag == 0 || dmag == 0)
+          {
+            raw_bit = 0;
+          }
+        else if (umag < dmag)
           {
             raw_bit = 1 - umag / dmag;
           }
@@ -261,9 +351,11 @@ class SyncFinder
 
         const int expect_data_bit = bit & 1; /* expect 010101 */
         const double q = expect_data_bit ? raw_bit : -raw_bit;
-        sync_quality += q;
+        sync_quality += q * frame_bit_count;
+        bit_count += frame_bit_count;
       }
-    sync_quality /= Params::sync_bits;
+    if (bit_count)
+      sync_quality /= bit_count;
     sync_quality = normalize_sync_quality (sync_quality);
 
     if (sync_quality < 0)
@@ -277,57 +369,54 @@ class SyncFinder
         return sync_quality;
       }
   }
-public:
-  struct Score {
-    size_t        index;
-    double        quality;
-    ConvBlockType block_type;
-  };
-  vector<Score>
-  search (const WavData& wav_data)
+  void
+  scan_silence (const WavData& wav_data)
   {
-    vector<Score> result_scores;
-    vector<Score> sync_scores;
+    const vector<float>& samples = wav_data.samples();
 
-    if (Params::test_no_sync)
-      {
-        const size_t expect0 = Params::frames_pad_start * Params::frame_size;
-        const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
-        const size_t expect_end = frame_count (wav_data) * Params::frame_size;
+    // find first non-zero sample
+    wav_data_first = 0;
+    while (wav_data_first < samples.size() && samples[wav_data_first] == 0)
+      wav_data_first++;
 
-        int ab = 0;
-        for (size_t expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
-          result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
-
-        return result_scores;
-      }
-    init_up_down (wav_data);
-
+    // search wav_data_last to get [wav_data_first, wav_data_last) range
+    wav_data_last = samples.size();
+    while (wav_data_last > wav_data_first && samples[wav_data_last - 1] == 0)
+      wav_data_last--;
+  }
+  vector<Score>
+  search_approx (const WavData& wav_data, Mode mode)
+  {
     vector<float> fft_db;
+    vector<char>  have_frames;
+    vector<Score> sync_scores;
 
     // compute multiple time-shifted fft vectors
     size_t n_bands = Params::max_band - Params::min_band + 1;
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    if (mode == Mode::CLIP)
+      total_frame_count *= 2;
     for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
       {
-        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, /* want all frames */ {});
+        sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frames, /* want all frames */ {});
         for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
           {
             const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-            if ((start_frame + mark_sync_frame_count() + mark_data_frame_count()) * wav_data.n_channels() * n_bands < fft_db.size())
+            if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
               {
                 ConvBlockType block_type;
-                double quality = sync_decode (wav_data, start_frame, fft_db, &block_type);
+                double quality = sync_decode (wav_data, start_frame, fft_db, have_frames, &block_type);
                 // printf ("%zd %f\n", sync_index, quality);
                 sync_scores.emplace_back (Score { sync_index, quality, block_type });
               }
           }
       }
     sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
-
-    vector<int> want_frames (mark_sync_frame_count() + mark_data_frame_count());
-    for (size_t f = 0; f < mark_sync_frame_count(); f++)
-      want_frames[sync_frame_pos (f)] = 1;
-
+    return sync_scores;
+  }
+  void
+  sync_select_by_threshold (vector<Score>& sync_scores)
+  {
     /* for strength 8 and above:
      *   -> more false positive candidates are rejected, so we can use a lower threshold
      *
@@ -337,14 +426,14 @@ public:
     const double strength = Params::water_delta * 1000;
     const double sync_threshold1 = strength > 7.5 ? 0.4 : 0.5;
 
+    vector<Score> selected_scores;
+
     for (size_t i = 0; i < sync_scores.size(); i++)
       {
-        // printf ("%zd %f\n", sync_scores[i].index, sync_scores[i].quality);
         if (sync_scores[i].quality > sync_threshold1)
           {
             double q_last = -1;
             double q_next = -1;
-
             if (i > 0)
               q_last = sync_scores[i - 1].quality;
 
@@ -353,43 +442,129 @@ public:
 
             if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
               {
-                //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
-
-                // refine match
-                double best_quality       = sync_scores[i].quality;
-                size_t best_index         = sync_scores[i].index;
-                ConvBlockType best_block_type = sync_scores[i].block_type; /* doesn't really change during refinement */
-
-                int start = std::max (int (sync_scores[i].index) - Params::sync_search_step, 0);
-                int end   = sync_scores[i].index + Params::sync_search_step;
-                for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
-                  {
-                    sync_fft (wav_data, fine_index, mark_sync_frame_count() + mark_data_frame_count(), fft_db, want_frames);
-                    if (fft_db.size())
-                      {
-                        ConvBlockType block_type;
-                        double        q = sync_decode (wav_data, 0, fft_db, &block_type);
-
-                        if (q > best_quality)
-                          {
-                            best_quality = q;
-                            best_index   = fine_index;
-                          }
-                      }
-                  }
-                //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
-                if (best_quality > Params::sync_threshold2)
-                  result_scores.push_back (Score { best_index, best_quality, best_block_type });
+                selected_scores.emplace_back (sync_scores[i]);
               }
           }
       }
+    sync_scores = selected_scores;
+  }
+  void
+  sync_select_n_best (vector<Score>& sync_scores, size_t n)
+  {
+    std::sort (sync_scores.begin(), sync_scores.end(), [](Score& s1, Score& s2) { return s1.quality > s2.quality; });
+    if (sync_scores.size() > n)
+      sync_scores.resize (n);
+  }
+  void
+  search_refine (const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
+  {
+    vector<float> fft_db;
+    vector<char>  have_frames;
+    vector<Score> result_scores;
+
+    int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
+    const int first_block_end = total_frame_count;
+    if (mode == Mode::CLIP)
+      total_frame_count *= 2;
+
+    vector<char> want_frames (total_frame_count);
+    for (size_t f = 0; f < mark_sync_frame_count(); f++)
+      {
+        want_frames[sync_frame_pos (f)] = 1;
+        if (mode == Mode::CLIP)
+          want_frames[first_block_end + sync_frame_pos (f)] = 1;
+      }
+
+    for (const auto& score : sync_scores)
+      {
+        //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+
+        // refine match
+        double best_quality       = score.quality;
+        size_t best_index         = score.index;
+        ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
+
+        int start = std::max (int (score.index) - Params::sync_search_step, 0);
+        int end   = score.index + Params::sync_search_step;
+        for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+          {
+            sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frames, want_frames);
+            if (fft_db.size())
+              {
+                ConvBlockType block_type;
+                double        q = sync_decode (wav_data, 0, fft_db, have_frames, &block_type);
+
+                if (q > best_quality)
+                  {
+                    best_quality = q;
+                    best_index   = fine_index;
+                  }
+              }
+          }
+        //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index), best_quality);
+        if (best_quality > Params::sync_threshold2)
+          result_scores.push_back (Score { best_index, best_quality, best_block_type });
+      }
+    sync_scores = result_scores;
+  }
+  vector<Score>
+  fake_sync (const WavData& wav_data, Mode mode)
+  {
+    vector<Score> result_scores;
+
+    if (mode == Mode::BLOCK)
+      {
+        const size_t expect0 = Params::frames_pad_start * Params::frame_size;
+        const size_t expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
+        const size_t expect_end = frame_count (wav_data) * Params::frame_size;
+
+        int ab = 0;
+        for (size_t expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
+          result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
+      }
+
     return result_scores;
+  }
+
+  // non-zero sample range: [wav_data_first, wav_data_last)
+  size_t wav_data_first = 0;
+  size_t wav_data_last = 0;
+public:
+  vector<Score>
+  search (const WavData& wav_data, Mode mode)
+  {
+    if (Params::test_no_sync)
+      return fake_sync (wav_data, mode);
+
+    init_up_down (wav_data, mode);
+
+    if (mode == Mode::CLIP)
+      {
+        /* in clip mode we optimize handling large areas of padding which is silent */
+        scan_silence (wav_data);
+      }
+    else
+      {
+        /* in block mode we don't do anything special for silence at beginning/end */
+        wav_data_first = 0;
+        wav_data_last  = wav_data.samples().size();
+      }
+    vector<Score> sync_scores = search_approx (wav_data, mode);
+
+    sync_select_by_threshold (sync_scores);
+    if (mode == Mode::CLIP)
+      sync_select_n_best (sync_scores, 5);
+
+    search_refine (wav_data, mode, sync_scores);
+
+    return sync_scores;
   }
 private:
   void
-  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, const vector<int>& want_frames)
+  sync_fft (const WavData& wav_data, size_t index, size_t frame_count, vector<float>& fft_out_db, vector<char>& have_frames, const vector<char>& want_frames)
   {
     fft_out_db.clear();
+    have_frames.clear();
 
     /* read past end? -> fail */
     if (wav_data.n_values() < (index + frame_count * Params::frame_size) * wav_data.n_channels())
@@ -401,24 +576,31 @@ private:
     int out_pos = 0;
 
     fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
+    have_frames.resize (frame_count);
 
     for (size_t f = 0; f < frame_count; f++)
       {
-        const double min_db = -96;
-        if (want_frames.size() && !want_frames[f])
+        const size_t f_first = (index + f * Params::frame_size) * wav_data.n_channels();
+        const size_t f_last  = (index + (f + 1) * Params::frame_size) * wav_data.n_channels();
+
+        if ((want_frames.size() && !want_frames[f])   // frame not wanted?
+        ||  (f_last < wav_data_first)                 // frame in silence before input?
+        ||  (f_first > wav_data_last))                // frame in silence after input?
           {
-            for (int ch = 0; ch < wav_data.n_channels(); ch++)
-              for (int i = Params::min_band; i <= Params::max_band; i++)
-                fft_out_db[out_pos++] = min_db;
+            out_pos += n_bands * wav_data.n_channels();
           }
         else
           {
+            constexpr double min_db = -96;
+
             vector<vector<complex<float>>> frame_result = fft_analyzer.run_fft (samples, index + f * Params::frame_size);
 
             /* computing db-magnitude is expensive, so we better do it here */
             for (int ch = 0; ch < wav_data.n_channels(); ch++)
               for (int i = Params::min_band; i <= Params::max_band; i++)
                 fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
+
+            have_frames[f] = 1;
           }
       }
   }
@@ -444,146 +626,218 @@ private:
   }
 };
 
-static int
-decode_and_report (const WavData& wav_data, const string& orig_pattern)
+class ResultSet
 {
-  int match_count = 0, total_count = 0, sync_match = 0;
-
-  SyncFinder                sync_finder;
-  vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data);
-
-  auto report_pattern = [&] (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error)
+public:
+  enum class Type { BLOCK, CLIP, ALL };
+  struct Pattern
   {
-    if (sync_score.index)
-      {
-        const char *block_str = nullptr;
+    vector<int>       bit_vec;
+    float             decode_error = 0;
+    SyncFinder::Score sync_score;
+    Type              type;
+  };
+private:
+  vector<Pattern> patterns;
 
-        switch (sync_score.block_type)
-          {
-            case ConvBlockType::a:  block_str = "A";
-                                    break;
-            case ConvBlockType::b:  block_str = "B";
-                                    break;
-            case ConvBlockType::ab: block_str = "AB";
-                                    break;
-          }
-        const int seconds = sync_score.index / wav_data.sample_rate();
-        printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (bit_vec).c_str(),
-                sync_score.quality, decode_error, block_str);
-      }
-    else /* this is the combined pattern "all" */
+public:
+  void
+  add_pattern (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
+  {
+    Pattern p;
+    p.sync_score = sync_score;
+    p.bit_vec = bit_vec;
+    p.decode_error = decode_error;
+    p.type = pattern_type;
+
+    patterns.push_back (p);
+  }
+  void
+  print()
+  {
+    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+      const int all1 = p1.type == Type::ALL;
+      const int all2 = p2.type == Type::ALL;
+      if (all1 != all2)
+        return all1 < all2;
+      else
+        return p1.sync_score.index < p2.sync_score.index;
+    });
+    for (const auto& pattern : patterns)
       {
-        printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (bit_vec).c_str(), sync_score.quality, decode_error);
+        if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
+          {
+            printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (pattern.bit_vec).c_str(),
+                                                    pattern.sync_score.quality, pattern.decode_error);
+          }
+        else
+          {
+            string block_str;
+
+            switch (pattern.sync_score.block_type)
+              {
+                case ConvBlockType::a:  block_str = "A";
+                                        break;
+                case ConvBlockType::b:  block_str = "B";
+                                        break;
+                case ConvBlockType::ab: block_str = "AB";
+                                        break;
+              }
+            if (pattern.type == Type::CLIP)
+              block_str = "CLIP-" + block_str;
+
+            const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
+            printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (pattern.bit_vec).c_str(),
+                      pattern.sync_score.quality, pattern.decode_error, block_str.c_str());
+          }
       }
-    if (!orig_pattern.empty())
+  }
+  void
+  print_match_count (const string& orig_pattern)
+  {
+    int match_count = 0;
+
+    vector<int> orig_vec = bit_str_to_vec (orig_pattern);
+    for (auto p : patterns)
       {
         bool        match = true;
-        vector<int> orig_vec = bit_str_to_vec (orig_pattern);
 
-        for (size_t i = 0; i < bit_vec.size(); i++)
-          match = match && (bit_vec[i] == orig_vec[i % orig_vec.size()]);
+        for (size_t i = 0; i < p.bit_vec.size(); i++)
+          match = match && (p.bit_vec[i] == orig_vec[i % orig_vec.size()]);
 
         if (match)
           match_count++;
-
       }
-    total_count++;
-  };
+    printf ("match_count %d %zd\n", match_count, patterns.size());
+  }
+};
 
-  vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
-  vector<int>   raw_bit_vec_norm (2);
+/*
+ * The block decoder is responsible for finding whole data blocks inside the
+ * input file and decoding them. This only works for files that are large
+ * enough to contain one data block. Incomplete blocks are ignored.
+ *
+ * INPUT:   AA|BBBBB|AAAAA|BBB
+ * MATCH       BBBBB
+ * MATCH             AAAAA
+ *
+ * The basic algorithm is this:
+ *
+ *  - use sync finder to find start index for the blocks
+ *  - decode the blocks
+ *  - try to combine A + B blocks for better error correction (AB)
+ *  - try to combine all available blocks for better error correction (all pattern)
+ */
+class BlockDecoder
+{
+  int debug_sync_frame_count = 0;
+  vector<SyncFinder::Score> sync_scores; // stored here for sync debugging
+public:
+  void
+  run (const WavData& wav_data, ResultSet& result_set)
+  {
+    int total_count = 0;
 
-  SyncFinder::Score score_all { 0, 0 };
-  SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
+    SyncFinder sync_finder;
+    sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::BLOCK);
 
-  ConvBlockType last_block_type = ConvBlockType::b;
-  vector<vector<float>> ab_raw_bit_vec (2);
-  vector<float>         ab_quality (2);
-  FFTAnalyzer           fft_analyzer (wav_data.n_channels());
-  for (auto sync_score : sync_scores)
-    {
-      const size_t count = mark_sync_frame_count() + mark_data_frame_count();
-      const size_t index = sync_score.index;
-      const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
+    vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
+    vector<int>   raw_bit_vec_norm (2);
 
-      auto fft_range_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
-      if (fft_range_out.size())
-        {
-          /* ---- retrieve bits from watermark ---- */
-          vector<float> raw_bit_vec;
-          if (Params::mix)
-            {
-              raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
-            }
-          else
-            {
-              raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
-            }
-          assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
+    SyncFinder::Score score_all { 0, 0 };
+    SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
 
-          raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
+    ConvBlockType last_block_type = ConvBlockType::b;
+    vector<vector<float>> ab_raw_bit_vec (2);
+    vector<float>         ab_quality (2);
+    FFTAnalyzer           fft_analyzer (wav_data.n_channels());
+    for (auto sync_score : sync_scores)
+      {
+        const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+        const size_t index = sync_score.index;
+        const int    ab = (sync_score.block_type == ConvBlockType::b); /* A -> 0, B -> 1 */
 
-          /* ---- deal with this pattern ---- */
-          float decode_error = 0;
-          vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
+        auto fft_range_out = fft_analyzer.fft_range (wav_data.samples(), index, count);
+        if (fft_range_out.size())
+          {
+            /* ---- retrieve bits from watermark ---- */
+            vector<float> raw_bit_vec;
+            if (Params::mix)
+              {
+                raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
+              }
+            else
+              {
+                raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
+              }
+            assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
 
-          report_pattern (sync_score, bit_vec, decode_error);
+            raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
 
-          /* ---- update "all" pattern ---- */
-          score_all.quality += sync_score.quality;
+            /* ---- deal with this pattern ---- */
+            float decode_error = 0;
+            vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
-          for (size_t i = 0; i < raw_bit_vec.size(); i++)
-            {
-              raw_bit_vec_all[i * 2 + ab] += raw_bit_vec[i];
-            }
-          raw_bit_vec_norm[ab]++;
+            result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+            total_count += 1;
 
-          /* ---- if last block was A & this block is B => deal with combined AB block */
-          ab_raw_bit_vec[ab] = raw_bit_vec;
-          ab_quality[ab]     = sync_score.quality;
-          if (last_block_type == ConvBlockType::a && sync_score.block_type == ConvBlockType::b)
-            {
-              /* join A and B block -> AB block */
-              vector<float> ab_bits (raw_bit_vec.size() * 2);
-              for (size_t i = 0; i <  raw_bit_vec.size(); i++)
-                {
-                  ab_bits[i * 2] = ab_raw_bit_vec[0][i];
-                  ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
-                }
-              vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
-              score_ab.index = sync_score.index;
-              score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-              report_pattern (score_ab, bit_vec, decode_error);
-            }
-          last_block_type = sync_score.block_type;
-        }
-    }
-  if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
-    {
-      for (size_t i = 0; i < raw_bit_vec_all.size(); i += 2)
-        {
-          raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
-          raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
-        }
-      score_all.quality /= raw_bit_vec_norm[0] + raw_bit_vec_norm[1];
+            /* ---- update "all" pattern ---- */
+            score_all.quality += sync_score.quality;
 
-      vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
+            for (size_t i = 0; i < raw_bit_vec.size(); i++)
+              {
+                raw_bit_vec_all[i * 2 + ab] += raw_bit_vec[i];
+              }
+            raw_bit_vec_norm[ab]++;
 
-      float decode_error = 0;
-      vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
+            /* ---- if last block was A & this block is B => deal with combined AB block */
+            ab_raw_bit_vec[ab] = raw_bit_vec;
+            ab_quality[ab]     = sync_score.quality;
+            if (last_block_type == ConvBlockType::a && sync_score.block_type == ConvBlockType::b)
+              {
+                /* join A and B block -> AB block */
+                vector<float> ab_bits (raw_bit_vec.size() * 2);
+                for (size_t i = 0; i <  raw_bit_vec.size(); i++)
+                  {
+                    ab_bits[i * 2] = ab_raw_bit_vec[0][i];
+                    ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
+                  }
+                vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
+                score_ab.index = sync_score.index;
+                score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
+                result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+              }
+            last_block_type = sync_score.block_type;
+          }
+      }
+    if (total_count > 1) /* all pattern: average soft bits of all watermarks and decode */
+      {
+        for (size_t i = 0; i < raw_bit_vec_all.size(); i += 2)
+          {
+            raw_bit_vec_all[i]     /= max (raw_bit_vec_norm[0], 1); /* normalize A soft bits with number of A blocks */
+            raw_bit_vec_all[i + 1] /= max (raw_bit_vec_norm[1], 1); /* normalize B soft bits with number of B blocks */
+          }
+        score_all.quality /= raw_bit_vec_norm[0] + raw_bit_vec_norm[1];
 
-      report_pattern (score_all, bit_vec, decode_error);
-    }
+        vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
-  if (!orig_pattern.empty())
-    {
-      printf ("match_count %d %d\n", match_count, total_count);
+        float decode_error = 0;
+        vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
+        result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+      }
+
+    debug_sync_frame_count = frame_count (wav_data);
+  }
+  void
+  print_debug_sync()
+  {
       /* search sync markers at typical positions */
       const int expect0 = Params::frames_pad_start * Params::frame_size;
       const int expect_step = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size;
-      const int expect_end = frame_count (wav_data) * Params::frame_size;
+      const int expect_end = debug_sync_frame_count * Params::frame_size;
 
+      int sync_match = 0;
       for (int expect_index = expect0; expect_index + expect_step < expect_end; expect_index += expect_step)
         {
           for (auto sync_score : sync_scores)
@@ -596,6 +850,170 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
             }
         }
       printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+  }
+};
+
+/*
+ * The clip decoder is responsible for decoding short clips. It is designed to
+ * handle input sizes that are smaller than one data block. One case is that
+ * the clip contains a partial A block (so the data could start after the start
+ * of the A block and end before the end of the A block).
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:    |AAA|
+ *
+ * A clip could also contain the end of one block and the start of the next block,
+ * like this:
+ *
+ * ORIG:   |AAAAA|BBBBB|AAAAA|BBBBB|
+ * CLIP:                   |A|BB|
+ *
+ * The basic algorithm is this:
+ *
+ *  - zeropad   |AAA|  => 00000|AAA|00000
+ *  - use sync finder to find start index of one long block in the zeropadded data
+ *  - decode the bits
+ *
+ * For files larger than one data block, we decode twice, at the beginning and end
+ *
+ * INPUT   AAA|BBBBB|A
+ * CLIP #1 AAA|BB
+ * CLIP #2      BBBB|A
+ */
+class ClipDecoder
+{
+  const int frames_per_block = 0;
+
+  vector<float>
+  mix_or_linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
+  {
+    if (Params::mix)
+      return mix_decode (fft_out, n_channels);
+    else
+      return linear_decode (fft_out, n_channels);
+  }
+  void
+  run_padded (const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
+  {
+    SyncFinder                sync_finder;
+    vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::CLIP);
+    FFTAnalyzer               fft_analyzer (wav_data.n_channels());
+
+    for (auto sync_score : sync_scores)
+      {
+        const size_t count = mark_sync_frame_count() + mark_data_frame_count();
+        const size_t index = sync_score.index;
+        auto fft_range_out1 = fft_analyzer.fft_range (wav_data.samples(), index, count);
+        auto fft_range_out2 = fft_analyzer.fft_range (wav_data.samples(), index + count * Params::frame_size, count);
+        if (fft_range_out1.size() && fft_range_out2.size())
+          {
+            const auto raw_bit_vec1 = randomize_bit_order (mix_or_linear_decode (fft_range_out1, wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec2 = randomize_bit_order (mix_or_linear_decode (fft_range_out2, wav_data.n_channels()), /* encode */ false);
+            const size_t bits_per_block = raw_bit_vec1.size();
+            vector<float> raw_bit_vec;
+            for (size_t i = 0; i < bits_per_block; i++)
+              {
+                if (sync_score.block_type == ConvBlockType::a)
+                  {
+                    raw_bit_vec.push_back (raw_bit_vec1[i]);
+                    raw_bit_vec.push_back (raw_bit_vec2[i]);
+                  }
+                else
+                  {
+                    raw_bit_vec.push_back (raw_bit_vec2[i]);
+                    raw_bit_vec.push_back (raw_bit_vec1[i]);
+                  }
+              }
+
+            float decode_error = 0;
+            vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+            SyncFinder::Score sync_score_nopad = sync_score;
+            sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
+            result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+          }
+      }
+  }
+  enum class Pos { START, END };
+  void
+  run_block (const WavData& wav_data, ResultSet& result_set, Pos pos)
+  {
+    const size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
+
+    // range of samples used by clip: [first_sample, last_sample)
+    size_t first_sample;
+    size_t last_sample;
+    size_t pad_samples_start = n;
+    size_t pad_samples_end   = n;
+
+    if (pos == Pos::START)
+      {
+        first_sample = 0;
+        last_sample  = min (n, wav_data.n_values());
+
+        // increase padding at start for small blocks
+        //   -> (available samples + padding) must always be one L-block
+        if (last_sample < n)
+          pad_samples_start += n - last_sample;
+      }
+    else // (pos == Pos::END)
+      {
+        if (wav_data.n_values() <= n)
+          return;
+
+        first_sample = wav_data.n_values() - n;
+        last_sample  = wav_data.n_values();
+      }
+    const double time_offset = double (first_sample) / wav_data.sample_rate() / wav_data.n_channels();
+    vector<float> ext_samples (wav_data.samples().begin() + first_sample, wav_data.samples().begin() + last_sample);
+
+    if (0)
+      {
+        printf ("%d: %f..%f\n", int (pos), time_offset, time_offset + double (ext_samples.size()) / wav_data.sample_rate() / wav_data.n_channels());
+        printf ("%f< >%f\n",
+          double (pad_samples_start) / wav_data.sample_rate() / wav_data.n_channels(),
+          double (pad_samples_end) / wav_data.sample_rate() / wav_data.n_channels());
+      }
+    ext_samples.insert (ext_samples.begin(), pad_samples_start, 0);
+    ext_samples.insert (ext_samples.end(),   pad_samples_end, 0);
+
+    WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
+    run_padded (l_wav_data, result_set, time_offset);
+   }
+public:
+  ClipDecoder() :
+    frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
+  {
+  }
+  void
+  run (const WavData& wav_data, ResultSet& result_set)
+  {
+    const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
+    if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
+      {
+        run_block (wav_data, result_set, Pos::START);
+        run_block (wav_data, result_set, Pos::END);
+      }
+  }
+};
+
+static int
+decode_and_report (const WavData& wav_data, const string& orig_pattern)
+{
+  ResultSet result_set;
+
+  BlockDecoder block_decoder;
+  block_decoder.run (wav_data, result_set);
+
+  ClipDecoder clip_decoder;
+  clip_decoder.run (wav_data, result_set);
+  result_set.print();
+
+  if (!orig_pattern.empty())
+    {
+      result_set.print_match_count (orig_pattern);
+
+      block_decoder.print_debug_sync();
     }
   return 0;
 }

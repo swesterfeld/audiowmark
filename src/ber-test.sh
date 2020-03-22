@@ -16,6 +16,9 @@ fi
 if [ "x$AWM_FILE" == "x" ]; then
   AWM_FILE=t
 fi
+if [ "x$AWM_MULTI_CLIP" == "x" ]; then
+  AWM_MULTI_CLIP=1
+fi
 
 {
   if [ "x$AWM_SET" == "xsmall" ]; then
@@ -47,8 +50,8 @@ do
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
     fi
     echo in_pattern $PATTERN
-    echo in_flags $AWM_PARAMS --test-key $SEED
-    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS --test-key $SEED >/dev/null
+    echo in_flags $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED
+    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet
     if [ "x$AWM_RAND_CUT" != x ]; then
       CUT=$RANDOM
       audiowmark cut-start "${AWM_FILE}.wav" "${AWM_FILE}.wav" $CUT
@@ -91,7 +94,15 @@ do
       exit 1
     fi
     echo
-    if [ "x$AWM_REPORT" == "xtruncv" ]; then
+    if [ "x${AWM_CLIP}" != "x" ]; then
+      for CLIP in $(seq $AWM_MULTI_CLIP)
+      do
+        audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
+        audiowmark cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+        rm ${OUT_FILE}.clip.wav
+        echo
+      done
+    elif [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
       do
         audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"

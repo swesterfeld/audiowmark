@@ -13,7 +13,7 @@ public:
   enum class Stream {
     data_up_down = 1,
     sync_up_down = 2,
-    pad_up_down = 3,
+    pad_up_down = 3,   /* unused */
     mix = 4,
     bit_order = 5,
     frame_position = 6
