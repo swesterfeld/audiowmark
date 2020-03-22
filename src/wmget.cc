@@ -219,8 +219,8 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
  * In this example a clip (CLIP) is generated from an original file (ORIG).  By
  * zero padding we get a file that contains the clip (ZEROPAD). Finally we are
  * able to match an AB block to the zeropadded file (MATCH). This gives us an
- * index in the zeropadded file that can be used for decoding the
- * available.data.
+ * index in the zeropadded file that can be used for decoding the available
+ * data.
  */
 class SyncFinder
 {
