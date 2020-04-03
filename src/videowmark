@@ -1,5 +1,7 @@
 #!/bin/bash
 
+FFMPEG_VERBOSE="-v warning"
+
 # auto detect codec and bitrate from input stream, generate ffmpeg options for audio encoder
 function audio_encode_options
 {
@@ -43,18 +45,18 @@ if [ "$1" == "add" ]; then
   wm_wav=/dev/fd/4
 
   # get audio as wav
-  ffmpeg -y -i "$2" -f wav "$orig_wav"
+  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav"
   # watermark
   audiowmark add "$orig_wav" "$wm_wav" "$4"
   # rejoin
-  ffmpeg -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3"
+  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3"
 elif [ "$1" == "get" ]; then
   # create tmpfiles
   create_temp_files 3
   wav=/dev/fd/3
 
   # get audio as wav
-  ffmpeg -y -i "$2" -f wav "$wav"
+  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$wav"
   # get watermark
   audiowmark get "$wav"
 elif [ "$1" == "probe" ]; then

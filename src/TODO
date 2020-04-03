@@ -4,7 +4,7 @@ possible improvements:
 videowmark:
 --key
 --help
+--verbose
 stream issue
 where?
-quiet mode
 opus length ffprobe -show_format phil.mkv
