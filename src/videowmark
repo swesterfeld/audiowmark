@@ -1,6 +1,5 @@
 #!/bin/bash
 
-FFMPEG_VERBOSE="-v warning"
 
 # auto detect codec and bitrate from input stream, generate ffmpeg options for audio encoder
 function audio_encode_options
@@ -38,6 +37,23 @@ function create_temp_files
   done
 }
 
+GETOPT_TEMP=`getopt -o v --long verbose,key:, -n 'videowmark' -- "$@"`
+
+[ $? != 0 ] && exit 1 # exit on option parser errors
+
+eval set -- "$GETOPT_TEMP"
+
+AUDIOWMARK_KEY=()
+FFMPEG_VERBOSE="-v error"
+while true; do
+  case "$1" in
+    -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
+    --key ) AUDIOWMARK_KEY=("--key" "$2"); shift 2 ;;
+    -- ) shift; break ;;
+    * ) break ;;
+  esac
+done
+
 if [ "$1" == "add" ]; then
   # create tmpfiles
   create_temp_files 3 4
@@ -47,7 +63,7 @@ if [ "$1" == "add" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav"
   # watermark
-  audiowmark add "$orig_wav" "$wm_wav" "$4"
+  audiowmark "${AUDIOWMARK_KEY[@]}" add "$orig_wav" "$wm_wav" "$4"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3"
 elif [ "$1" == "get" ]; then
@@ -58,7 +74,7 @@ elif [ "$1" == "get" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$wav"
   # get watermark
-  audiowmark get "$wav"
+  audiowmark "${AUDIOWMARK_KEY[@]}" get "$wav"
 elif [ "$1" == "probe" ]; then
   echo $2 $(audio_encode_options "$2")
 else
