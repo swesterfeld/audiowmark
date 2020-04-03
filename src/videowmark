@@ -94,6 +94,7 @@ if [ "$1" == "add" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
   # watermark
+  echo >&2 "Audio Codec: $(audio_encode_options "$2")"
   audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$4" || die "watermark generation failed (audiowmark)"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3" || \
