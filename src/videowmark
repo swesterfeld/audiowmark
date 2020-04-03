@@ -72,6 +72,7 @@ eval set -- "$GETOPT_TEMP"
 
 AUDIOWMARK_ARGS=()
 FFMPEG_VERBOSE="-v error"
+export AV_LOG_FORCE_NOCOLOR=1 # disable colored messages from ffmpeg
 while true; do
   case "$1" in
     -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
