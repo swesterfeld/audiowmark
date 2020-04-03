@@ -2,6 +2,5 @@ possible improvements:
 - dynamic bit strength
 
 plausibility checks
-die on errors
 stream issue
 opus length ffprobe -show_format phil.mkv
