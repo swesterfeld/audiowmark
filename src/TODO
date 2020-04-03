@@ -1,2 +1,11 @@
 possible improvements:
 - dynamic bit strength
+
+videowmark:
+temp files
+--key
+--help
+stream issue
+where?
+quiet mode
+opus length ffprobe -show_format phil.mkv

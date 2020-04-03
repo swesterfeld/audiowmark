@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# auto detect codec and bitrate from input stream, generate ffmpeg options for audio encoder
+function audio_encode_options
+{
+  ffprobe -v quiet -print_format compact -show_streams "$1" | grep codec_type=audio | awk -F'|' '$1 == "stream" {
+    for (i = 0; i < NF; i++)
+      print $i
+  }' | awk -F= '
+    $1 == "codec_name" {
+      codec = $2;
+
+      # opus encoder is experimental, ffmpeg recommends libopus for encoding
+      if (codec == "opus")
+        codec = "libopus";
+
+      printf (" -c:a %s", codec);
+    }
+    $1 == "bit_rate" {
+      bit_rate = $2;
+
+      if (bit_rate != "N/A")
+        printf (" -ab %s", bit_rate);
+    }'
+}
+
+if [ "$1" == "add" ]; then
+  # get audio as wav
+  ffmpeg -y -i "$2" tmp.wav
+  # watermark
+  audiowmark add tmp.wav tmp1.wav "$4"
+  # rejoin
+  ffmpeg -y -i "$2" -i tmp1.wav -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3"
+elif [ "$1" == "get" ]; then
+  # get audio as wav
+  ffmpeg -y -i "$2" tmp.wav
+  # get watermark
+  audiowmark get tmp.wav
+elif [ "$1" == "probe" ]; then
+  echo $2 $(audio_encode_options "$2")
+else
+  echo "videowmark: error parsing command line arguments"
+fi
+rm -f tmp*

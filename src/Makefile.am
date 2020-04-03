@@ -1,4 +1,5 @@
 bin_PROGRAMS = audiowmark
+bin_SCRIPTS  = videowmark
 
 COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc wavdata.cc wavdata.hh \
 	     audiostream.cc audiostream.hh sfinputstream.cc sfinputstream.hh stdoutwavoutputstream.cc stdoutwavoutputstream.hh \
