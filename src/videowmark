@@ -37,18 +37,42 @@ function create_temp_files
   done
 }
 
-GETOPT_TEMP=`getopt -o v --long verbose,key:, -n 'videowmark' -- "$@"`
+function show_help_and_exit
+{
+cat << EOH
+usage: videowmark <command> [ <args>... ]
+
+Commands:
+  * create a watermarked video file with a message
+    videowmark add <input_video> <watermarked_video> <message_hex>
+
+  * retrieve message
+    videowmark get <watermarked_video>
+
+Global options:
+  --strength <s>        set watermark strength
+  --key <file>          load watermarking key from file
+  -q, --quiet           disable information messages
+  -v, --verbose         enable ffmpeg verbose output
+EOH
+exit 0
+}
+
+GETOPT_TEMP=`getopt -o vhq --long verbose,quiet,help,key:,strength: -n 'videowmark' -- "$@"`
 
 [ $? != 0 ] && exit 1 # exit on option parser errors
 
 eval set -- "$GETOPT_TEMP"
 
-AUDIOWMARK_KEY=()
+AUDIOWMARK_ARGS=()
 FFMPEG_VERBOSE="-v error"
 while true; do
   case "$1" in
     -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
-    --key ) AUDIOWMARK_KEY=("--key" "$2"); shift 2 ;;
+    -q | --quiet ) AUDIOWMARK_ARGS+=("-q"); shift ;;
+    --key ) AUDIOWMARK_ARGS+=("--key" "$2"); shift 2 ;;
+    --strength ) AUDIOWMARK_ARGS+=("--strength" "$2"); shift 2 ;;
+    --help ) show_help_and_exit ;;
     -- ) shift; break ;;
     * ) break ;;
   esac
@@ -63,7 +87,7 @@ if [ "$1" == "add" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav"
   # watermark
-  audiowmark "${AUDIOWMARK_KEY[@]}" add "$orig_wav" "$wm_wav" "$4"
+  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$4"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3"
 elif [ "$1" == "get" ]; then
@@ -74,7 +98,7 @@ elif [ "$1" == "get" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$wav"
   # get watermark
-  audiowmark "${AUDIOWMARK_KEY[@]}" get "$wav"
+  audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav"
 elif [ "$1" == "probe" ]; then
   echo $2 $(audio_encode_options "$2")
 else

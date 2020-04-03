@@ -1,8 +1,7 @@
 possible improvements:
 - dynamic bit strength
 
-videowmark:
---help
+plausibility checks
+die on errors
 stream issue
-where?
 opus length ffprobe -show_format phil.mkv
