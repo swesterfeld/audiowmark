@@ -43,6 +43,11 @@ function create_temp_files
   done
 }
 
+function extension
+{
+  echo $1 | awk -F. '{ if (NF > 1) print $NF; }'
+}
+
 function show_help_and_exit
 {
 cat << EOH
@@ -87,6 +92,11 @@ while true; do
 done
 
 if [ "$1" == "add" ] && [ "$#" == 4 ]; then
+  # check file extensions
+  ext_in=$(extension "$2")
+  ext_out=$(extension "$3")
+  [ "$ext_in" == "$ext_out" ] || die "input/output extension must match ('$ext_in' vs. '$ext_out')"
+
   # create tmpfiles
   create_temp_files 3 4
   orig_wav=/dev/fd/3
