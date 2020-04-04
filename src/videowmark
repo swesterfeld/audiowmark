@@ -78,9 +78,9 @@ while true; do
   case "$1" in
     -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
     -q | --quiet ) AUDIOWMARK_ARGS+=("-q"); QUIET=1; shift ;;
+    -h | --help ) show_help_and_exit ;;
     --key ) AUDIOWMARK_ARGS+=("--key" "$2"); shift 2 ;;
     --strength ) AUDIOWMARK_ARGS+=("--strength" "$2"); shift 2 ;;
-    --help ) show_help_and_exit ;;
     -- ) shift; break ;;
     * ) break ;;
   esac
@@ -112,5 +112,5 @@ elif [ "$1" == "get" ]; then
 elif [ "$1" == "probe" ]; then
   echo $2 $(audio_encode_options "$2")
 else
-  echo "videowmark: error parsing command line arguments"
+  echo "videowmark: error parsing command line arguments (use videowmark -h)"
 fi
