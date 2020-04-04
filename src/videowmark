@@ -72,11 +72,12 @@ eval set -- "$GETOPT_TEMP"
 
 AUDIOWMARK_ARGS=()
 FFMPEG_VERBOSE="-v error"
+QUIET=""
 export AV_LOG_FORCE_NOCOLOR=1 # disable colored messages from ffmpeg
 while true; do
   case "$1" in
     -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
-    -q | --quiet ) AUDIOWMARK_ARGS+=("-q"); shift ;;
+    -q | --quiet ) AUDIOWMARK_ARGS+=("-q"); QUIET=1; shift ;;
     --key ) AUDIOWMARK_ARGS+=("--key" "$2"); shift 2 ;;
     --strength ) AUDIOWMARK_ARGS+=("--strength" "$2"); shift 2 ;;
     --help ) show_help_and_exit ;;
@@ -94,7 +95,7 @@ if [ "$1" == "add" ]; then
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
   # watermark
-  echo >&2 "Audio Codec: $(audio_encode_options "$2")"
+  [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$2")"
   audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$4" || die "watermark generation failed (audiowmark)"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3" || \
