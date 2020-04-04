@@ -31,6 +31,19 @@ function audio_encode_options
     }'
 }
 
+# count number of audio and video streams, typical output: "audio=1:video=1"
+function audio_video_stream_count
+{
+  ffprobe -v error -print_format compact -show_streams "$1" | awk -F'|' '
+      {
+        for (i = 1; i < NF; i++)
+          x[$i]++;
+      }
+    END {
+        printf "audio=%d:video=%d\n",x["codec_type=audio"],x["codec_type=video"]
+      }'
+}
+
 function create_temp_files
 {
   local fd
@@ -97,6 +110,13 @@ if [ "$1" == "add" ] && [ "$#" == 4 ]; then
   ext_out=$(extension "$3")
   [ "$ext_in" == "$ext_out" ] || die "input/output extension must match ('$ext_in' vs. '$ext_out')"
 
+  # check audio/video stream count
+  stream_count=$(audio_video_stream_count "$2")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
   # create tmpfiles
   create_temp_files 3 4
   orig_wav=/dev/fd/3
@@ -111,6 +131,13 @@ if [ "$1" == "add" ] && [ "$#" == 4 ]; then
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3" || \
     die "merging video and watermarked audio failed (ffmpeg)"
 elif [ "$1" == "get" ] && [ "$#" == 2 ]; then
+  # check audio/video stream count
+  stream_count=$(audio_video_stream_count "$2")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
   # create tmpfiles
   create_temp_files 3
   wav=/dev/fd/3
