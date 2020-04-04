@@ -61,6 +61,60 @@ function extension
   echo $1 | awk -F. '{ if (NF > 1) print $NF; }'
 }
 
+function add_watermark
+{
+  local in_file="$1"
+  local out_file="$2"
+  local bits="$3"
+
+  # check file extensions
+  local ext_in=$(extension "$in_file")
+  local ext_out=$(extension "$out_file")
+  [ "$ext_in" == "$ext_out" ] || die "input/output extension must match ('$ext_in' vs. '$ext_out')"
+
+  # check audio/video stream count
+  local stream_count=$(audio_video_stream_count "$in_file")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
+  # create tmpfiles
+  create_temp_files 3 4
+  local orig_wav=/dev/fd/3
+  local wm_wav=/dev/fd/4
+
+  # get audio as wav
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
+  # watermark
+  [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$in_file")"
+  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$bits" || die "watermark generation failed (audiowmark)"
+  # rejoin
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -i "$wm_wav" -c:v copy $(audio_encode_options "$in_file") -map 0:v:0 -map 1:a:0 "$out_file" || \
+    die "merging video and watermarked audio failed (ffmpeg)"
+}
+
+function get_watermark
+{
+  local in_file="$1"
+
+  # check audio/video stream count
+  local stream_count=$(audio_video_stream_count "$in_file")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
+  # create tmpfiles
+  create_temp_files 3
+  local wav=/dev/fd/3
+
+  # get audio as wav
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$wav" || die "extracting audio from video failed (ffmpeg)"
+  # get watermark
+  audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav" || die "retrieving watermark from audio failed (audiowmark)"
+}
+
 function show_help_and_exit
 {
 cat << EOH
@@ -105,47 +159,9 @@ while true; do
 done
 
 if [ "$1" == "add" ] && [ "$#" == 4 ]; then
-  # check file extensions
-  ext_in=$(extension "$2")
-  ext_out=$(extension "$3")
-  [ "$ext_in" == "$ext_out" ] || die "input/output extension must match ('$ext_in' vs. '$ext_out')"
-
-  # check audio/video stream count
-  stream_count=$(audio_video_stream_count "$2")
-  [ "$stream_count" == "audio=1:video=1" ] || { \
-    echo >&2 "videowmark: detected input file stream count: $stream_count"
-    die "input file must have one audio stream and one video stream"
-  }
-
-  # create tmpfiles
-  create_temp_files 3 4
-  orig_wav=/dev/fd/3
-  wm_wav=/dev/fd/4
-
-  # get audio as wav
-  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
-  # watermark
-  [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$2")"
-  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$4" || die "watermark generation failed (audiowmark)"
-  # rejoin
-  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3" || \
-    die "merging video and watermarked audio failed (ffmpeg)"
+  add_watermark "$2" "$3" "$4"
 elif [ "$1" == "get" ] && [ "$#" == 2 ]; then
-  # check audio/video stream count
-  stream_count=$(audio_video_stream_count "$2")
-  [ "$stream_count" == "audio=1:video=1" ] || { \
-    echo >&2 "videowmark: detected input file stream count: $stream_count"
-    die "input file must have one audio stream and one video stream"
-  }
-
-  # create tmpfiles
-  create_temp_files 3
-  wav=/dev/fd/3
-
-  # get audio as wav
-  ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$wav" || die "extracting audio from video failed (ffmpeg)"
-  # get watermark
-  audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav" || die "retrieving watermark from audio failed (audiowmark)"
+  get_watermark "$2"
 elif [ "$1" == "probe" ] && [ "$#" == 2 ]; then
   echo $2 $(audio_encode_options "$2")
 else
