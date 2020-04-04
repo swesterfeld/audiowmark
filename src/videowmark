@@ -10,7 +10,7 @@ function die
 # auto detect codec and bitrate from input stream, generate ffmpeg options for audio encoder
 function audio_encode_options
 {
-  ffprobe -v quiet -print_format compact -show_streams "$1" | grep codec_type=audio | awk -F'|' '$1 == "stream" {
+  ffprobe -v error -print_format compact -show_streams "$1" | grep codec_type=audio | awk -F'|' '$1 == "stream" {
     for (i = 0; i < NF; i++)
       print $i
   }' | awk -F= '
