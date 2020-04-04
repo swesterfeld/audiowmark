@@ -86,7 +86,7 @@ while true; do
   esac
 done
 
-if [ "$1" == "add" ]; then
+if [ "$1" == "add" ] && [ "$#" == 4 ]; then
   # create tmpfiles
   create_temp_files 3 4
   orig_wav=/dev/fd/3
@@ -100,7 +100,7 @@ if [ "$1" == "add" ]; then
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -i "$wm_wav" -c:v copy $(audio_encode_options "$2") -map 0:v:0 -map 1:a:0 "$3" || \
     die "merging video and watermarked audio failed (ffmpeg)"
-elif [ "$1" == "get" ]; then
+elif [ "$1" == "get" ] && [ "$#" == 2 ]; then
   # create tmpfiles
   create_temp_files 3
   wav=/dev/fd/3
@@ -109,7 +109,7 @@ elif [ "$1" == "get" ]; then
   ffmpeg $FFMPEG_VERBOSE -y -i "$2" -f wav "$wav" || die "extracting audio from video failed (ffmpeg)"
   # get watermark
   audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav" || die "retrieving watermark from audio failed (audiowmark)"
-elif [ "$1" == "probe" ]; then
+elif [ "$1" == "probe" ] && [ "$#" == 2 ]; then
   echo $2 $(audio_encode_options "$2")
 else
   echo "videowmark: error parsing command line arguments (use videowmark -h)"
