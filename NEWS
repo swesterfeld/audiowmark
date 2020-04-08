@@ -1,3 +1,7 @@
+Overview of Changes in audiowmark-0.4.0:
+
+* add initial video watermarking support (videowmark)
+
 Overview of Changes in audiowmark-0.3.0:
 
 * replace padding at start with a partial B block
