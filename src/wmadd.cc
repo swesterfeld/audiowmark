@@ -582,10 +582,10 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
 
   /* write some informational messages */
-  info ("Input:        %s\n", infile.c_str());
+  info ("Input:        %s\n", Params::input_label.size() ? Params::input_label.c_str() : infile.c_str());
   if (Params::input_format == Format::RAW)
     info_format ("Raw Input", Params::raw_input_format);
-  info ("Output:       %s\n", outfile.c_str());
+  info ("Output:       %s\n", Params::output_label.size() ? Params::output_label.c_str() : outfile.c_str());
   if (Params::output_format == Format::RAW)
     info_format ("Raw Output", Params::raw_output_format);
   info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());

@@ -88,7 +88,8 @@ function add_watermark
   ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
   # watermark
   [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$in_file")"
-  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$bits" || die "watermark generation failed (audiowmark)"
+  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$bits" \
+             --set-input-label "$in_file" --set-output-label "$out_file" || die "watermark generation failed (audiowmark)"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -i "$wm_wav" -c:v copy $(audio_encode_options "$in_file") -map 0:v:0 -map 1:a:0 "$out_file" || \
     die "merging video and watermarked audio failed (ffmpeg)"

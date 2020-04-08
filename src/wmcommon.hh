@@ -50,6 +50,10 @@ public:
 
   static           RawFormat raw_input_format;
   static           RawFormat raw_output_format;
+
+  // input/output labels can be set for pretty output for videowmark add
+  static           std::string input_label;
+  static           std::string output_label;
 };
 
 typedef std::array<int, 30> UpDownArray;
