@@ -39,7 +39,6 @@ specified as hex-string):
   Sample Rate:  48000
   Channels:     2
   Data Blocks:  4
-  Volume Norm:  0.987 (-0.12 dB)
 ....
 
 The most important options for adding a watermark are:
@@ -149,6 +148,48 @@ watermark. Fractional strengths (like 7.5) are possible.
 
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
+
+== Video Files
+
+For video files, `videowmark` can be used to add a watermark to the audio track
+of video files. To add a watermark, use
+
+[subs=+quotes]
+....
+  *$ videowmark add in.avi out.avi 0123456789abcdef0011223344556677*
+  Audio Codec:  -c:a mp3 -ab 128000
+  Input:        in.avi
+  Output:       out.avi
+  Message:      0123456789abcdef0011223344556677
+  Strength:     10
+
+  Time:         3:53
+  Sample Rate:  44100
+  Channels:     2
+  Data Blocks:  4
+....
+
+To detect a watermark, use
+
+[subs=+quotes]
+....
+  *$ videowmark get out.avi*
+  pattern  0:05 0123456789abcdef0011223344556677 1.294 0.142 A
+  pattern  0:57 0123456789abcdef0011223344556677 1.191 0.144 B
+  pattern  0:57 0123456789abcdef0011223344556677 1.242 0.145 AB
+  pattern  1:49 0123456789abcdef0011223344556677 1.215 0.120 A
+  pattern  2:40 0123456789abcdef0011223344556677 1.079 0.128 B
+  pattern  2:40 0123456789abcdef0011223344556677 1.147 0.126 AB
+  pattern   all 0123456789abcdef0011223344556677 1.195 0.104
+....
+
+The key and strength can be set using the command line options
+
+--key <filename>::
+Use watermarking key from file <filename> (see <<key>>).
+
+--strength <s>::
+Set the watermarking strength (see <<strength>>).
 
 == Output as Stream
 
