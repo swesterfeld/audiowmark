@@ -1,0 +1,170 @@
+#!/bin/bash
+
+
+function die
+{
+  echo >&2 "videowmark: error: $@"
+  exit 1
+}
+
+# auto detect codec and bitrate from input stream, generate ffmpeg options for audio encoder
+function audio_encode_options
+{
+  ffprobe -v error -print_format compact -show_streams "$1" | grep codec_type=audio | awk -F'|' '$1 == "stream" {
+    for (i = 0; i < NF; i++)
+      print $i
+  }' | awk -F= '
+    $1 == "codec_name" {
+      codec = $2;
+
+      # opus encoder is experimental, ffmpeg recommends libopus for encoding
+      if (codec == "opus")
+        codec = "libopus";
+
+      printf (" -c:a %s", codec);
+    }
+    $1 == "bit_rate" {
+      bit_rate = $2;
+
+      if (bit_rate != "N/A")
+        printf (" -ab %s", bit_rate);
+    }'
+}
+
+# count number of audio and video streams, typical output: "audio=1:video=1"
+function audio_video_stream_count
+{
+  ffprobe -v error -print_format compact -show_streams "$1" | awk -F'|' '
+      {
+        for (i = 1; i < NF; i++)
+          x[$i]++;
+      }
+    END {
+        printf "audio=%d:video=%d\n",x["codec_type=audio"],x["codec_type=video"]
+      }'
+}
+
+function create_temp_files
+{
+  local fd
+
+  for fd in "$@"
+  do
+    local tmpfile=$(mktemp /tmp/videowmark.XXXXXX)
+    eval "exec $fd>$tmpfile"
+    rm "$tmpfile"
+  done
+}
+
+function extension
+{
+  echo $1 | awk -F. '{ if (NF > 1) print $NF; }'
+}
+
+function add_watermark
+{
+  local in_file="$1"
+  local out_file="$2"
+  local bits="$3"
+
+  # check file extensions
+  local ext_in=$(extension "$in_file")
+  local ext_out=$(extension "$out_file")
+  [ "$ext_in" == "$ext_out" ] || die "input/output extension must match ('$ext_in' vs. '$ext_out')"
+
+  # check audio/video stream count
+  local stream_count=$(audio_video_stream_count "$in_file")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
+  # create tmpfiles
+  create_temp_files 3 4
+  local orig_wav=/dev/fd/3
+  local wm_wav=/dev/fd/4
+
+  # get audio as wav
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
+  # watermark
+  [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$in_file")"
+  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$bits" \
+             --set-input-label "$in_file" --set-output-label "$out_file" || die "watermark generation failed (audiowmark)"
+  # rejoin
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -i "$wm_wav" -c:v copy $(audio_encode_options "$in_file") -map 0:v:0 -map 1:a:0 "$out_file" || \
+    die "merging video and watermarked audio failed (ffmpeg)"
+}
+
+function get_watermark
+{
+  local in_file="$1"
+
+  # check audio/video stream count
+  local stream_count=$(audio_video_stream_count "$in_file")
+  [ "$stream_count" == "audio=1:video=1" ] || { \
+    echo >&2 "videowmark: detected input file stream count: $stream_count"
+    die "input file must have one audio stream and one video stream"
+  }
+
+  # create tmpfiles
+  create_temp_files 3
+  local wav=/dev/fd/3
+
+  # get audio as wav
+  ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$wav" || die "extracting audio from video failed (ffmpeg)"
+  # get watermark
+  audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav" || die "retrieving watermark from audio failed (audiowmark)"
+}
+
+function show_help_and_exit
+{
+cat << EOH
+usage: videowmark <command> [ <args>... ]
+
+Commands:
+  * create a watermarked video file with a message
+    videowmark add <input_video> <watermarked_video> <message_hex>
+
+  * retrieve message
+    videowmark get <watermarked_video>
+
+Global options:
+  --strength <s>        set watermark strength
+  --key <file>          load watermarking key from file
+  -q, --quiet           disable information messages
+  -v, --verbose         enable ffmpeg verbose output
+EOH
+exit 0
+}
+
+GETOPT_TEMP=`getopt -o vhq --long verbose,quiet,help,key:,strength: -n 'videowmark' -- "$@"`
+
+[ $? != 0 ] && exit 1 # exit on option parser errors
+
+eval set -- "$GETOPT_TEMP"
+
+AUDIOWMARK_ARGS=()
+FFMPEG_VERBOSE="-v error"
+QUIET=""
+export AV_LOG_FORCE_NOCOLOR=1 # disable colored messages from ffmpeg
+while true; do
+  case "$1" in
+    -v | --verbose ) FFMPEG_VERBOSE="-v info"; shift ;;
+    -q | --quiet ) AUDIOWMARK_ARGS+=("-q"); QUIET=1; shift ;;
+    -h | --help ) show_help_and_exit ;;
+    --key ) AUDIOWMARK_ARGS+=("--key" "$2"); shift 2 ;;
+    --strength ) AUDIOWMARK_ARGS+=("--strength" "$2"); shift 2 ;;
+    -- ) shift; break ;;
+    * ) break ;;
+  esac
+done
+
+if [ "$1" == "add" ] && [ "$#" == 4 ]; then
+  add_watermark "$2" "$3" "$4"
+elif [ "$1" == "get" ] && [ "$#" == 2 ]; then
+  get_watermark "$2"
+elif [ "$1" == "probe" ] && [ "$#" == 2 ]; then
+  echo $2 $(audio_encode_options "$2")
+else
+  echo "videowmark: error parsing command line arguments (use videowmark -h)"
+fi

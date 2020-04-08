@@ -19,6 +19,9 @@ Format Params::output_format    = Format::AUTO;
 RawFormat Params::raw_input_format;
 RawFormat Params::raw_output_format;
 
+std::string Params::input_label;
+std::string Params::output_label;
+
 using std::vector;
 using std::complex;
 

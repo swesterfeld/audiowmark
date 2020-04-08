@@ -272,6 +272,14 @@ parse_options (int   *argc_p,
           Params::raw_input_format.set_sample_rate (r);
           Params::raw_output_format.set_sample_rate (r);
         }
+      else if (check_arg (argc, argv, &i, "--set-input-label", &opt_arg))
+        {
+          Params::input_label = opt_arg;
+        }
+      else if (check_arg (argc, argv, &i, "--set-output-label", &opt_arg))
+        {
+          Params::output_label = opt_arg;
+        }
       else if (check_arg (argc, argv, &i, "--quiet")
             || check_arg (argc, argv, &i, "-q"))
         {
