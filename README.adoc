@@ -3,9 +3,10 @@
 == Description
 
 `audiowmark` is an Open Source solution for audio watermarking. It is
-distributed under the terms of the GNU General Public License. A sound file is
-read by the software, and a 128-bit message is stored in a watermark in the
-output sound file. For human listeners, the files typically sound the same.
+distributed under the terms of the GNU General Public License v3 or later.
+A sound file is read by the software, and a 128-bit message is stored in a
+watermark in the output sound file. For human listeners, the files typically
+sound the same.
 
 However, the 128-bit message can be retrieved from the output sound file. Our
 tests show, that even if the file is converted to mp3 or ogg (with bitrate 128
