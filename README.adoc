@@ -2,8 +2,8 @@
 
 == Description
 
-`audiowmark` is an Open Source solution for audio watermarking. It is
-distributed under the terms of the GNU General Public License v3 or later.
+`audiowmark` is an Open Source (GPL) solution for audio watermarking.
+
 A sound file is read by the software, and a 128-bit message is stored in a
 watermark in the output sound file. For human listeners, the files typically
 sound the same.
@@ -22,6 +22,26 @@ later. The algorithm used here is inspired by
 
   Martin Steinebach: Digitale Wasserzeichen für Audiodaten.
   Darmstadt University of Technology 2004, ISBN 3-8322-2507-2
+
+== Open Source License
+
+`audiowmark` is *open source* software available under the *GPLv3
+or later* license.
+
+Copyright (C) 2018-2020 Stefan Westerfeld
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 == Adding a Watermark
 
