@@ -31,6 +31,7 @@ class SFInputStream : public AudioInputStream
   int         m_n_values = 0;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
+  bool        m_read_float_data = false;
 
   enum class State {
     NEW,

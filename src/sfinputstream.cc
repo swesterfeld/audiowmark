@@ -67,13 +67,18 @@ SFInputStream::open (const string& filename)
           m_bit_depth = 24;
           break;
 
-      case SF_FORMAT_FLOAT:
       case SF_FORMAT_PCM_32:
           m_bit_depth = 32;
           break;
 
+      case SF_FORMAT_FLOAT:
+          m_bit_depth = 32;
+          m_read_float_data = true;
+          break;
+
       case SF_FORMAT_DOUBLE:
           m_bit_depth = 64;
+          m_read_float_data = true;
           break;
 
       default:
@@ -101,24 +106,39 @@ SFInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
-  vector<int> isamples (count * m_n_channels);
-  sf_count_t r_count = sf_readf_int (m_sndfile, &isamples[0], count);
+  if (m_read_float_data) /* float or double input */
+    {
+      samples.resize (count * m_n_channels);
 
-  if (sf_error (m_sndfile))
-    return Error (sf_strerror (m_sndfile));
+      sf_count_t r_count = sf_readf_float (m_sndfile, &samples[0], count);
 
-  /* reading a wav file and saving it again with the libsndfile float API will
-   * change some values due to normalization issues:
-   *   http://www.mega-nerd.com/libsndfile/FAQ.html#Q010
-   *
-   * to avoid the problem, we use the int API and do the conversion beween int
-   * and float manually - the important part is that the normalization factors
-   * used during read and write are identical
-   */
-  samples.resize (r_count * m_n_channels);
-  const double norm = 1.0 / 0x80000000LL;
-  for (size_t i = 0; i < samples.size(); i++)
-    samples[i] = isamples[i] * norm;
+      if (sf_error (m_sndfile))
+        return Error (sf_strerror (m_sndfile));
+
+      samples.resize (r_count * m_n_channels);
+    }
+  else /* integer input */
+    {
+      vector<int> isamples (count * m_n_channels);
+
+      sf_count_t r_count = sf_readf_int (m_sndfile, &isamples[0], count);
+
+      if (sf_error (m_sndfile))
+        return Error (sf_strerror (m_sndfile));
+
+      /* reading a wav file and saving it again with the libsndfile float API will
+       * change some values due to normalization issues:
+       *   http://www.mega-nerd.com/libsndfile/FAQ.html#Q010
+       *
+       * to avoid the problem, we use the int API and do the conversion beween int
+       * and float manually - the important part is that the normalization factors
+       * used during read and write are identical
+       */
+      samples.resize (r_count * m_n_channels);
+      const double norm = 1.0 / 0x80000000LL;
+      for (size_t i = 0; i < samples.size(); i++)
+        samples[i] = isamples[i] * norm;
+    }
 
   return Error::Code::NONE;
 }
