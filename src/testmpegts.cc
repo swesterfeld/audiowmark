@@ -34,7 +34,10 @@ main (int argc, char **argv)
   if (argc == 5 && strcmp (argv[1], "append") == 0)
     {
       printf ("append: in=%s out=%s fn=%s\n", argv[2], argv[3], argv[4]);
-      Error err = ts_append (argv[2], argv[3], argv[4]);
+      TSWriter writer;
+
+      writer.append_file (argv[4], argv[4]);
+      Error err = writer.process (argv[2], argv[3]);
       if (err)
         {
           error ("ts_append: %s\n", err.message());

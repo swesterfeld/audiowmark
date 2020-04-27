@@ -21,17 +21,11 @@
 #include <regex>
 
 #include "utils.hh"
+#include "mpegts.hh"
 
 using std::string;
 using std::regex;
 using std::vector;
-
-class TSWriter
-{
-public:
-  void append_file (const string& name, const string& filename) {}
-  void process (const string& in_name, const string& out_name) {}
-};
 
 int
 hls_embed_context (const string& in_dir, const string& out_dir, const string& filename)
@@ -87,9 +81,9 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       TSWriter writer;
 
       if (i > 0)
-        writer.append_file ("prev.ts", out_dir + "/" + segments[i - 1]);
+        writer.append_file ("prev.ts", in_dir + "/" + segments[i - 1]);
       if (i + 1 < segments.size())
-        writer.append_file ("next.ts", out_dir + "/" + segments[i + 1]);
+        writer.append_file ("next.ts", in_dir + "/" + segments[i + 1]);
       writer.process (in_dir + "/" + segments[i], out_dir + "/" + segments[i]);
     }
   return 0;

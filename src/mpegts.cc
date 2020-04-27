@@ -113,7 +113,23 @@ public:
 };
 
 Error
-ts_append (const string& inname, const string& outname, const string& dataname)
+TSWriter::append_file (const string& name, const string& filename)
+{
+  vector<unsigned char> data;
+  FILE *datafile = fopen (filename.c_str(), "r");
+  ScopedFile datafile_s (datafile);
+  if (!datafile)
+    return Error ("unable to open data file");
+  int c;
+  while ((c = fgetc (datafile)) >= 0)
+    data.push_back (c);
+
+  entries.push_back ({name, data});
+  return Error::Code::NONE;
+}
+
+Error
+TSWriter::process (const string& inname, const string& outname)
 {
   FILE *infile = fopen (inname.c_str(), "r");
   FILE *outfile = fopen (outname.c_str(), "w");
@@ -135,40 +151,38 @@ ts_append (const string& inname, const string& outname, const string& dataname)
           err = p.write (outfile);
         }
     }
-  vector<unsigned char> data;
-  FILE *datafile = fopen (dataname.c_str(), "r");
-  ScopedFile datafile_s (datafile);
-  int c;
-  while ((c = fgetc (datafile)) >= 0)
-    data.push_back (c);
 
-  char buf[1024];
-  sprintf (buf, "%zd", data.size());
-  string header = buf;
-  header += ":" + dataname;
-  header += '\0';
-  for (size_t i = 0; i < header.size(); i++)
-    data.insert (data.begin() + i, header[i]);
-
-  TSPacket p_file;
-  p_file.clear (TSPacket::ID::awmk_file);
-  size_t data_pos = 0;
-  int pos = 12;
-  while (data_pos < data.size())
+  for (auto entry : entries)
     {
-      p_file[pos++] = data[data_pos];
-      if (pos == 188)
+      char buf[1024];
+      sprintf (buf, "%zd", entry.data.size());
+      string header = buf;
+      header += ":" + entry.name;
+      header += '\0';
+      vector<unsigned char> data = entry.data;
+      for (size_t i = 0; i < header.size(); i++)
+        data.insert (data.begin() + i, header[i]);
+
+      TSPacket p_file;
+      p_file.clear (TSPacket::ID::awmk_file);
+      size_t data_pos = 0;
+      int pos = 12;
+      while (data_pos < data.size())
         {
-          p_file.write (outfile);
-          p_file.clear (TSPacket::ID::awmk_data);
-          pos = 12;
+          p_file[pos++] = data[data_pos];
+          if (pos == 188)
+            {
+              p_file.write (outfile);
+              p_file.clear (TSPacket::ID::awmk_data);
+              pos = 12;
+            }
+          data_pos++;
         }
-      data_pos++;
-    }
 
-  if (pos != 12)
-    {
-      Error err = p_file.write (outfile);
+      if (pos != 12)
+        {
+          Error err = p_file.write (outfile);
+        }
     }
 
   return Error::Code::NONE;

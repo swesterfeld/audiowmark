@@ -39,6 +39,17 @@ public:
   const std::vector<Entry>& entries();
 };
 
-Error ts_append (const std::string& inname, const std::string& outname, const std::string& dataname);
+class TSWriter
+{
+  struct Entry
+  {
+    std::string                name;
+    std::vector<unsigned char> data;
+  };
+  std::vector<Entry> entries;
+public:
+  Error append_file (const std::string& name, const std::string& filename);
+  Error process (const std::string& in_name, const std::string& out_name);
+};
 
 #endif /* AUDIOWMARK_MPEGTS_HH */
