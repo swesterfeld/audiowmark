@@ -186,17 +186,16 @@ private:
   {
     string filename;
     size_t data_size    = 0;
-    size_t header_size  = 0;
   };
   vector<Entry> m_entries;
-  bool parse_header (Header& header, const vector<unsigned char>& data);
+  bool parse_header (Header& header, vector<unsigned char>& data);
 public:
   Error load (const string& inname);
   const vector<Entry>& entries();
 };
 
 bool
-TSReader::parse_header (Header& header, const vector<unsigned char>& data)
+TSReader::parse_header (Header& header, vector<unsigned char>& data)
 {
   for (size_t i = 0; i < data.size(); i++)
     {
@@ -208,9 +207,11 @@ TSReader::parse_header (Header& header, const vector<unsigned char>& data)
           std::smatch sm;
           if (regex_match (s, sm, header_re))
             {
-              header.header_size = i + 1; // number of header bytes including 0 termination
               header.data_size = atoi (sm[1].str().c_str());
               header.filename = sm[2];
+
+              // erase header including null termination
+              data.erase (data.begin(), data.begin() + i + 1);
               return true;
             }
         }
@@ -247,14 +248,13 @@ TSReader::load (const string& inname)
                 {
                   if (parse_header (header, awmk_stream))
                     {
-                      awmk_stream.reserve (header.header_size + header.data_size + p.size());
+                      awmk_stream.reserve (header.data_size + p.size());
                       header_valid = true;
                     }
                 }
               // done? do we have enough bytes for the complete entry?
-              if (header_valid && awmk_stream.size() >= (header.header_size + header.data_size))
+              if (header_valid && awmk_stream.size() >= header.data_size)
                 {
-                  awmk_stream.erase (awmk_stream.begin(), awmk_stream.begin() + header.header_size);
                   awmk_stream.resize (header.data_size);
 
                   m_entries.push_back ({ header.filename, std::move (awmk_stream)});
