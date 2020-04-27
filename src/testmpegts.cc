@@ -124,7 +124,7 @@ ts_append (const string& inname, const string& outname, const string& dataname)
   vector<unsigned char> data;
   FILE *datafile = fopen (dataname.c_str(), "r");
   int c;
-  while ((c = fgetc (datafile)) > 0)
+  while ((c = fgetc (datafile)) >= 0)
     data.push_back (c);
 
   char buf[1024];
@@ -215,8 +215,12 @@ main (int argc, char **argv)
           return 1;
         }
     }
-  if (argc == 3 && strcmp (argv[1], "list") == 0)
+  else if (argc == 3 && strcmp (argv[1], "list") == 0)
     {
       Error err = ts_list (argv[2]);
+    }
+  else
+    {
+      error ("testmpegts: error parsing command line arguments\n");
     }
 }
