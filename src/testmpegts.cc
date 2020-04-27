@@ -19,11 +19,13 @@
 #include <stdio.h>
 
 #include <array>
+#include <regex>
 
 #include "utils.hh"
 
 using std::string;
 using std::vector;
+using std::regex;
 
 class TSPacket
 {
@@ -168,11 +170,41 @@ public:
     vector<unsigned char> data;
   };
 private:
+  struct Header
+  {
+    string filename;
+    size_t data_size    = 0;
+    size_t header_size  = 0;
+  };
   vector<Entry> m_entries;
+  bool parse_header (Header& header, const vector<unsigned char>& data);
 public:
   Error load (const string& inname);
   const vector<Entry>& entries();
 };
+
+bool
+TSReader::parse_header (Header& header, const vector<unsigned char>& data)
+{
+  for (size_t i = 0; i < data.size(); i++)
+    {
+      if (data[i] == 0) // header is terminated with one single 0 byte
+        {
+          string s = (const char *) (&data[0]);
+
+          static const regex header_re ("([0-9]*):(.*)");
+          std::smatch sm;
+          if (regex_match (s, sm, header_re))
+            {
+              header.header_size = i + 1; // number of header bytes including 0 termination
+              header.data_size = atoi (sm[1].str().c_str());
+              header.filename = sm[2];
+              return true;
+            }
+        }
+    }
+  return false;
+}
 
 Error
 TSReader::load (const string& inname)
@@ -180,6 +212,8 @@ TSReader::load (const string& inname)
   FILE *infile = fopen (inname.c_str(), "r");
 
   vector<unsigned char> awmk_stream;
+  Header header;
+  bool header_valid = false;
   while (!feof (infile))
     {
       TSPacket p;
@@ -192,29 +226,29 @@ TSReader::load (const string& inname)
         }
       else
         {
-
           if (p.has_id (TSPacket::awmk_file) || p.has_id (TSPacket::awmk_data))
             {
               for (size_t i = 12; i < p.size(); i++)
                 awmk_stream.push_back (p[i]);
+
+              if (!header_valid)
+                {
+                  if (parse_header (header, awmk_stream))
+                    header_valid = true;
+                }
+              // done? do we have enough bytes for the complete entry?
+              if (header_valid && awmk_stream.size() >= (header.header_size + header.data_size))
+                {
+                  awmk_stream.erase (awmk_stream.begin(), awmk_stream.begin() + header.header_size);
+                  awmk_stream.resize (header.data_size);
+
+                  m_entries.push_back ({ header.filename, awmk_stream });
+
+                  header_valid = false;
+                  awmk_stream.clear();
+                }
             }
         }
-    }
-  int end = -1;
-  for (size_t i = 0; i < awmk_stream.size(); i++)
-    if (awmk_stream[i] == 0)
-      {
-        end = i + 1;
-        break;
-      }
-
-  if (end > 0)
-    {
-      int data_len = atoi ((char *) awmk_stream.data());
-      awmk_stream.erase (awmk_stream.begin(), awmk_stream.begin() + end);
-      awmk_stream.resize (data_len);
-
-      m_entries.push_back ({ "foo", awmk_stream });
     }
   return Error::Code::NONE;
 }
