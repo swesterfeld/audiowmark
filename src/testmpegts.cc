@@ -35,8 +35,6 @@ public:
   bool
   read (FILE *file, Error& err)
   {
-    err = Error::Code::NONE;
-
     size_t bytes_read = fread (m_data.data(), 1, m_data.size(), file);
     if (bytes_read == 0) /* probably eof */
       return false;
@@ -219,10 +217,10 @@ TSReader::load (const string& inname)
   vector<unsigned char> awmk_stream;
   Header header;
   bool header_valid = false;
+  Error err;
   while (!feof (infile))
     {
       TSPacket p;
-      Error err;
       bool read_ok = p.read (infile, err);
       if (!read_ok)
         {
