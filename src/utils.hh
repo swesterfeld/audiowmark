@@ -103,4 +103,19 @@ private:
   std::string m_message;
 };
 
+class ScopedFile
+{
+  FILE *m_file;
+public:
+  ScopedFile (FILE *f) :
+    m_file (f)
+  {
+  }
+  ~ScopedFile()
+  {
+    if (m_file)
+      fclose (m_file);
+  }
+};
+
 #endif /* AUDIOWMARK_UTILS_HH */

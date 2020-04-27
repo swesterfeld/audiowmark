@@ -27,21 +27,6 @@ using std::string;
 using std::vector;
 using std::regex;
 
-class ScopedFile
-{
-  FILE *m_file;
-public:
-  ScopedFile (FILE *f) :
-    m_file (f)
-  {
-  }
-  ~ScopedFile()
-  {
-    if (m_file)
-      fclose (m_file);
-  }
-};
-
 class TSPacket
 {
 public:
