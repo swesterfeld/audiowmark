@@ -159,8 +159,23 @@ ts_append (const string& inname, const string& outname, const string& dataname)
   return Error::Code::NONE;
 }
 
+class TSReader
+{
+public:
+  struct Entry
+  {
+    string                filename;
+    vector<unsigned char> data;
+  };
+private:
+  vector<Entry> m_entries;
+public:
+  Error load (const string& inname);
+  const vector<Entry>& entries();
+};
+
 Error
-ts_list (const string& inname)
+TSReader::load (const string& inname)
 {
   FILE *infile = fopen (inname.c_str(), "r");
 
@@ -196,10 +211,18 @@ ts_list (const string& inname)
   if (end > 0)
     {
       int data_len = atoi ((char *) awmk_stream.data());
-      for (int i = end; i < end + data_len; i++)
-        printf ("%c", awmk_stream[i]);
+      awmk_stream.erase (awmk_stream.begin(), awmk_stream.begin() + end);
+      awmk_stream.resize (data_len);
+
+      m_entries.push_back ({ "foo", awmk_stream });
     }
   return Error::Code::NONE;
+}
+
+const vector<TSReader::Entry>&
+TSReader::entries()
+{
+  return m_entries;
 }
 
 int
@@ -217,7 +240,20 @@ main (int argc, char **argv)
     }
   else if (argc == 3 && strcmp (argv[1], "list") == 0)
     {
-      Error err = ts_list (argv[2]);
+      TSReader reader;
+
+      Error err = reader.load (argv[2]);
+      for (auto entry : reader.entries())
+        printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
+    }
+  else if (argc == 4 && strcmp (argv[1], "get") == 0)
+    {
+      TSReader reader;
+
+      Error err = reader.load (argv[2]);
+      for (auto entry : reader.entries())
+        if (entry.filename == argv[3])
+          fwrite (&entry.data[0], 1, entry.data.size(), stdout);
     }
   else
     {
