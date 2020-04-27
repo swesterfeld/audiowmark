@@ -27,6 +27,21 @@ using std::string;
 using std::vector;
 using std::regex;
 
+class ScopedFile
+{
+  FILE *m_file;
+public:
+  ScopedFile (FILE *f) :
+    m_file (f)
+  {
+  }
+  ~ScopedFile()
+  {
+    if (m_file)
+      fclose (m_file);
+  }
+};
+
 class TSPacket
 {
 public:
@@ -119,6 +134,8 @@ ts_append (const string& inname, const string& outname, const string& dataname)
 {
   FILE *infile = fopen (inname.c_str(), "r");
   FILE *outfile = fopen (outname.c_str(), "w");
+  ScopedFile infile_s (infile);
+  ScopedFile outfile_s (outfile);
 
   while (!feof (infile))
     {
@@ -137,6 +154,7 @@ ts_append (const string& inname, const string& outname, const string& dataname)
     }
   vector<unsigned char> data;
   FILE *datafile = fopen (dataname.c_str(), "r");
+  ScopedFile datafile_s (datafile);
   int c;
   while ((c = fgetc (datafile)) >= 0)
     data.push_back (c);
@@ -223,6 +241,7 @@ Error
 TSReader::load (const string& inname)
 {
   FILE *infile = fopen (inname.c_str(), "r");
+  ScopedFile infile_s (infile);
 
   vector<unsigned char> awmk_stream;
   Header header;
