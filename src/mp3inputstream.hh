@@ -56,4 +56,3 @@ public:
 };
 
 #endif /* AUDIOWMARK_MP3_INPUT_STREAM_HH */
-
