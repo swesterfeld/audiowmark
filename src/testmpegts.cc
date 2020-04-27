@@ -29,7 +29,7 @@ using std::regex;
 
 class TSPacket
 {
-  std::array<unsigned char, 188> data;
+  std::array<unsigned char, 188> m_data;
 
 public:
   bool
@@ -37,13 +37,13 @@ public:
   {
     err = Error::Code::NONE;
 
-    size_t bytes_read = fread (data.data(), 1, data.size(), file);
+    size_t bytes_read = fread (m_data.data(), 1, m_data.size(), file);
     if (bytes_read == 0) /* probably eof */
       return false;
 
-    if (bytes_read == data.size()) /* successful read */
+    if (bytes_read == m_data.size()) /* successful read */
       {
-        if (data[0] == 'G')
+        if (m_data[0] == 'G')
           return true;
 
         err = Error ("bad packet sync while reading transport (.ts) packet");
@@ -56,8 +56,8 @@ public:
   Error
   write (FILE *file)
   {
-    size_t bytes_written = fwrite (data.data(), 1, data.size(), file);
-    if (bytes_written != data.size())
+    size_t bytes_written = fwrite (m_data.data(), 1, m_data.size(), file);
+    if (bytes_written != m_data.size())
       return Error ("short write while writing transport stream (.ts) packet");
 
     return Error::Code::NONE;
@@ -66,14 +66,14 @@ public:
   void
   clear (Type type)
   {
-    std::fill (data.begin(), data.end(), 0);
+    std::fill (m_data.begin(), m_data.end(), 0);
     auto id = get_id_bytes (type);
-    std::copy (id.begin(), id.end(), data.begin());
+    std::copy (id.begin(), id.end(), m_data.begin());
   }
   unsigned char&
   operator[] (size_t n)
   {
-    return data[n];
+    return m_data[n];
   }
   bool
   has_id (Type type)
@@ -81,7 +81,7 @@ public:
     const auto idb = get_id_bytes (type);
     for (size_t i = 0; i < idb.size(); i++)
       {
-        if (idb[i] != data[i])
+        if (idb[i] != m_data[i])
           return false;
       }
     return true;
@@ -98,7 +98,12 @@ public:
   constexpr size_t
   size()
   {
-    return data.size(); // is constant
+    return m_data.size(); // is constant
+  }
+  const std::array<unsigned char, 188>&
+  data()
+  {
+    return m_data;
   }
 };
 
@@ -228,13 +233,15 @@ TSReader::load (const string& inname)
         {
           if (p.has_id (TSPacket::awmk_file) || p.has_id (TSPacket::awmk_data))
             {
-              for (size_t i = 12; i < p.size(); i++)
-                awmk_stream.push_back (p[i]);
+              awmk_stream.insert (awmk_stream.end(), p.data().begin() + 12, p.data().end());
 
               if (!header_valid)
                 {
                   if (parse_header (header, awmk_stream))
-                    header_valid = true;
+                    {
+                      awmk_stream.reserve (header.header_size + header.data_size + p.size());
+                      header_valid = true;
+                    }
                 }
               // done? do we have enough bytes for the complete entry?
               if (header_valid && awmk_stream.size() >= (header.header_size + header.data_size))
