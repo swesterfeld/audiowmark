@@ -29,8 +29,21 @@ using std::regex;
 
 class TSPacket
 {
+public:
+  enum class ID { awmk_file, awmk_data, unknown };
+
+private:
   std::array<unsigned char, 188> m_data;
 
+  std::array<unsigned char, 12>
+  get_id_bytes (ID type)
+  {
+    if (type == ID::awmk_file)
+     return { 'G', 0x1F, 0xFF, 0x10, 'A', 'W', 'M', 'K', 'f', 'i', 'l', 'e' };
+    if (type == ID::awmk_data)
+      return { 'G', 0x1F, 0xFF, 0x10, 'A', 'W', 'M', 'K', 'd', 'a', 't', 'a' };
+    return {0,};
+  }
 public:
   bool
   read (FILE *file, Error& err)
@@ -60,9 +73,8 @@ public:
 
     return Error::Code::NONE;
   }
-  enum Type { awmk_file, awmk_data };
   void
-  clear (Type type)
+  clear (ID type)
   {
     std::fill (m_data.begin(), m_data.end(), 0);
     auto id = get_id_bytes (type);
@@ -74,24 +86,21 @@ public:
     return m_data[n];
   }
   bool
-  has_id (Type type)
+  id_eq (size_t offset, unsigned char a, unsigned char b, unsigned char c, unsigned char d)
   {
-    const auto idb = get_id_bytes (type);
-    for (size_t i = 0; i < idb.size(); i++)
-      {
-        if (idb[i] != m_data[i])
-          return false;
-      }
-    return true;
+    return m_data[offset] == a && m_data[offset + 1] == b && m_data[offset + 2] == c && m_data[offset + 3] == d;
   }
-  std::array<unsigned char, 12>
-  get_id_bytes (Type type)
+  ID
+  get_id()
   {
-    if (type == awmk_file)
-     return { 'G', 0x1F, 0xFF, 0x10, 'A', 'W', 'M', 'K', 'f', 'i', 'l', 'e' };
-    if (type == awmk_data)
-      return { 'G', 0x1F, 0xFF, 0x10, 'A', 'W', 'M', 'K', 'd', 'a', 't', 'a' };
-    return {0,};
+    if (id_eq (0, 'G', 0x1F, 0xFF, 0x10) && id_eq (4, 'A', 'W', 'M', 'K'))
+      {
+        if (id_eq (8, 'f', 'i', 'l', 'e'))
+          return ID::awmk_file;
+        if (id_eq (8, 'd', 'a', 't', 'a'))
+          return ID::awmk_data;
+      }
+    return ID::unknown;
   }
   constexpr size_t
   size()
@@ -141,7 +150,7 @@ ts_append (const string& inname, const string& outname, const string& dataname)
     data.insert (data.begin() + i, header[i]);
 
   TSPacket p_file;
-  p_file.clear (TSPacket::awmk_file);
+  p_file.clear (TSPacket::ID::awmk_file);
   size_t data_pos = 0;
   int pos = 12;
   while (data_pos < data.size())
@@ -150,7 +159,7 @@ ts_append (const string& inname, const string& outname, const string& dataname)
       if (pos == 188)
         {
           p_file.write (outfile);
-          p_file.clear (TSPacket::awmk_data);
+          p_file.clear (TSPacket::ID::awmk_data);
           pos = 12;
         }
       data_pos++;
@@ -229,7 +238,8 @@ TSReader::load (const string& inname)
         }
       else
         {
-          if (p.has_id (TSPacket::awmk_file) || p.has_id (TSPacket::awmk_data))
+          TSPacket::ID id = p.get_id();
+          if (id == TSPacket::ID::awmk_file || id == TSPacket::ID::awmk_data)
             {
               awmk_stream.insert (awmk_stream.end(), p.data().begin() + 12, p.data().end());
 
@@ -293,6 +303,18 @@ main (int argc, char **argv)
       for (auto entry : reader.entries())
         if (entry.filename == argv[3])
           fwrite (&entry.data[0], 1, entry.data.size(), stdout);
+    }
+  else if (argc == 3 && strcmp (argv[1], "perf") == 0)
+    {
+      for (int i = 0; i < 100; i++)
+        {
+          TSReader reader;
+
+          Error err = reader.load (argv[2]);
+          if (i == 42)
+            for (auto entry : reader.entries())
+              printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
+        }
     }
   else
     {
