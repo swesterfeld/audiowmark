@@ -240,6 +240,12 @@ TSReader::load (const string& inname)
       else
         {
           TSPacket::ID id = p.get_id();
+          if (id == TSPacket::ID::awmk_file)
+            {
+              /* new stream start, clear old contents */
+              header_valid = false;
+              awmk_stream.clear();
+            }
           if (id == TSPacket::ID::awmk_file || id == TSPacket::ID::awmk_data)
             {
               awmk_stream.insert (awmk_stream.end(), p.data().begin() + 12, p.data().end());
