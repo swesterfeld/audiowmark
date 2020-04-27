@@ -257,7 +257,7 @@ TSReader::load (const string& inname)
                   awmk_stream.erase (awmk_stream.begin(), awmk_stream.begin() + header.header_size);
                   awmk_stream.resize (header.data_size);
 
-                  m_entries.push_back ({ header.filename, awmk_stream });
+                  m_entries.push_back ({ header.filename, std::move (awmk_stream)});
 
                   header_valid = false;
                   awmk_stream.clear();
@@ -306,7 +306,7 @@ main (int argc, char **argv)
     }
   else if (argc == 3 && strcmp (argv[1], "perf") == 0)
     {
-      for (int i = 0; i < 100; i++)
+      for (int i = 0; i < 1000; i++)
         {
           TSReader reader;
 
