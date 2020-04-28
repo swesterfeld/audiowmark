@@ -35,11 +35,26 @@ ff_decode (const string& filename, WavData& out_wav_data)
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
 
-  string cmd = string_printf ("ffmpeg -v error -y -i '%s' -f wav /dev/fd/%d", filename.c_str(), fileno (tmp_file));
+  string cmd = string_printf ("ffmpeg -v error -y -i '%s' -f wav %s", filename.c_str(), tmp_file_name.c_str());
   system (cmd.c_str());
 
   Error err = out_wav_data.load (tmp_file_name);
   return err;
+}
+
+Error
+ff_encode (const WavData& wav_data, const string& filename)
+{
+  FILE *tmp_file = tmpfile();
+  ScopedFile tmp_file_s (tmp_file);
+  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  Error err = wav_data.save (tmp_file_name);
+
+  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -c:a aac '%s'", tmp_file_name.c_str(), filename.c_str());
+  system (cmd.c_str());
+
+  return Error::Code::NONE;
 }
 
 int
@@ -116,12 +131,49 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
 }
 
 int
+hls_mark (const string& infile, const string& outfile, const string& bits)
+{
+  TSReader reader;
+
+  Error err = reader.load (infile);
+  if (err)
+    {
+      error ("hls_mark: %s\n", err.message());
+      return 1;
+    }
+
+  WavData wav_data;
+  err = ff_decode (infile, wav_data);
+  if (err)
+    {
+      error ("hls_mark: %s\n", err.message());
+      return 1;
+    }
+
+  for (auto entry : reader.entries())
+    printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
+
+  err = ff_encode (wav_data, outfile);
+  if (err)
+    {
+      error ("hls_mark: %s\n", err.message());
+      return 1;
+    }
+
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   if (argc == 5 && strcmp (argv[1], "hls-embed-context") == 0)
     {
       printf ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s\n", argv[2], argv[3], argv[4]);
       return hls_embed_context (argv[2], argv[3], argv[4]);
+    }
+  else if (argc == 5 && strcmp (argv[1], "hls-mark") == 0)
+    {
+      return hls_mark (argv[2], argv[3], argv[4]);
     }
   else
     {

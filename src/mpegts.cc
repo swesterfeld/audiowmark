@@ -214,6 +214,8 @@ TSReader::load (const string& inname)
 {
   FILE *infile = fopen (inname.c_str(), "r");
   ScopedFile infile_s (infile);
+  if (!infile)
+    return Error (string_printf ("error opening input .ts '%s'", inname.c_str()));
 
   vector<unsigned char> awmk_stream;
   Header header;
