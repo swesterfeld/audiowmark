@@ -58,6 +58,8 @@ enum class Log { ERROR = 3, WARNING = 2, INFO = 1, DEBUG = 0 };
 
 void set_log_level (Log level);
 
+std::string string_printf (const char *fmt, ...) AUDIOWMARK_PRINTF (1, 2);
+
 class Error
 {
 public:
