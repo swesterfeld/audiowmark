@@ -154,11 +154,7 @@ TSWriter::process (const string& inname, const string& outname)
 
   for (auto entry : entries)
     {
-      char buf[1024];
-      sprintf (buf, "%zd", entry.data.size());
-      string header = buf;
-      header += ":" + entry.name;
-      header += '\0';
+      string header = string_printf ("%zd:%s", entry.data.size(), entry.name.c_str()) + '\0';
       vector<unsigned char> data = entry.data;
       for (size_t i = 0; i < header.size(); i++)
         data.insert (data.begin() + i, header[i]);
