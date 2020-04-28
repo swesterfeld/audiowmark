@@ -22,10 +22,25 @@
 
 #include "utils.hh"
 #include "mpegts.hh"
+#include "wavdata.hh"
 
 using std::string;
 using std::regex;
 using std::vector;
+
+Error
+ff_decode (const string& filename, WavData& out_wav_data)
+{
+  FILE *tmp_file = tmpfile();
+  ScopedFile tmp_file_s (tmp_file);
+  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  string cmd = string_printf ("ffmpeg -v error -y -i '%s' -f wav /dev/fd/%d", filename.c_str(), fileno (tmp_file));
+  system (cmd.c_str());
+
+  Error err = out_wav_data.load (tmp_file_name);
+  return err;
+}
 
 int
 hls_embed_context (const string& in_dir, const string& out_dir, const string& filename)
@@ -75,6 +90,17 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
           segments.push_back (s);
         }
       line++;
+    }
+  for (size_t i = 0; i < segments.size(); i++)
+    {
+      WavData out;
+      Error err = ff_decode (in_dir + "/" + segments[i], out);
+      if (err)
+        {
+          error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
+          return 1;
+        }
+      printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
     }
   for (size_t i = 0; i < segments.size(); i++)
     {
