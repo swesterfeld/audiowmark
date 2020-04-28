@@ -37,7 +37,7 @@ public:
 
   Error load (AudioInputStream *in_stream);
   Error load (const std::string& filename);
-  Error save (const std::string& filename);
+  Error save (const std::string& filename) const;
 
   int                         sample_rate() const;
   int                         bit_depth() const;
