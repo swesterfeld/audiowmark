@@ -37,6 +37,7 @@ private:
 public:
   Error load (const std::string& inname);
   const std::vector<Entry>& entries();
+  std::map<std::string, std::string> parse_vars (const std::string& name);
 };
 
 class TSWriter
@@ -49,6 +50,7 @@ class TSWriter
   std::vector<Entry> entries;
 public:
   Error append_file (const std::string& name, const std::string& filename);
+  void  append_vars (const std::string& name, const std::map<std::string, std::string>& vars);
   Error process (const std::string& in_name, const std::string& out_name);
 };
 

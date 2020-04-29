@@ -24,6 +24,7 @@
 
 using std::string;
 using std::vector;
+using std::map;
 using std::regex;
 
 class TSPacket
@@ -165,6 +166,23 @@ TSWriter::append_file (const string& name, const string& filename)
 
   entries.push_back ({name, data});
   return Error::Code::NONE;
+}
+
+void
+TSWriter::append_vars (const string& name, const map<string, string>& vars)
+{
+  vector<unsigned char> data;
+  for (auto kv : vars)
+    {
+      for (auto k : kv.first)
+        data.push_back (k);
+      data.push_back ('=');
+      for (auto v : kv.second)
+        data.push_back (v);
+      data.push_back (0);
+    }
+
+  entries.push_back ({name, data});
 }
 
 Error
@@ -312,6 +330,41 @@ TSReader::entries()
   return m_entries;
 }
 
+map<string, string>
+TSReader::parse_vars (const string& name)
+{
+  map<string, string> vars;
+
+  for (auto entry : m_entries)
+    {
+      if (entry.filename == name)
+        {
+          enum { KEY, VALUE } mode = KEY;
+          string s;
+          string key;
+          for (auto c : entry.data)
+            {
+              if (c == '=' && mode == KEY)
+                {
+                  key = s;
+                  s.clear();
+                  mode = VALUE;
+                }
+              else if (c == '\0' && mode == VALUE)
+                {
+                  vars[key] = s;
+                  s.clear();
+                  mode = KEY;
+                }
+              else
+                {
+                  s += c;
+                }
+            }
+        }
+    }
+  return vars;
+}
 
 int
 pcr (const string& filename, const string& outname, double d)
