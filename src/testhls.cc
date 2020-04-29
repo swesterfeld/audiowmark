@@ -27,6 +27,7 @@
 using std::string;
 using std::regex;
 using std::vector;
+using std::map;
 
 Error
 ff_decode (const string& filename, WavData& out_wav_data)
@@ -43,7 +44,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
 }
 
 Error
-ff_encode (const WavData& wav_data, const string& filename)
+ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
 {
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
@@ -51,7 +52,8 @@ ff_encode (const WavData& wav_data, const string& filename)
 
   Error err = wav_data.save (tmp_file_name);
 
-  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -c:a aac '%s'", tmp_file_name.c_str(), filename.c_str());
+  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -af asetpts='(%zd+N)/SR/TB' -c:a aac '%s'",
+                              tmp_file_name.c_str(), start_pos, filename.c_str());
   system (cmd.c_str());
 
   return Error::Code::NONE;
@@ -80,7 +82,12 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       return 1;
     }
 
-  vector<string> segments;
+  struct Segment
+  {
+    string              name;
+    map<string, string> vars;
+  };
+  vector<Segment> segments;
   char buffer[1024];
   int line = 1;
   const regex blank_re (R"(\s*(#.*)?)");
@@ -102,30 +109,36 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       else
         {
           fprintf (out_file, "%s\n", s.c_str());
-          segments.push_back (s);
+          Segment segment;
+          segment.name = s;
+          segments.push_back (segment);
         }
       line++;
     }
-  for (size_t i = 0; i < segments.size(); i++)
+  size_t start_pos = 0;
+  for (auto& segment : segments)
     {
       WavData out;
-      Error err = ff_decode (in_dir + "/" + segments[i], out);
+      Error err = ff_decode (in_dir + "/" + segment.name, out);
       if (err)
         {
           error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
           return 1;
         }
       printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
+      segment.vars["start_pos"] = string_printf ("%zd", start_pos);
+      start_pos += out.n_values() / out.n_channels();
     }
   for (size_t i = 0; i < segments.size(); i++)
     {
       TSWriter writer;
 
       if (i > 0)
-        writer.append_file ("prev.ts", in_dir + "/" + segments[i - 1]);
+        writer.append_file ("prev.ts", in_dir + "/" + segments[i - 1].name);
       if (i + 1 < segments.size())
-        writer.append_file ("next.ts", in_dir + "/" + segments[i + 1]);
-      writer.process (in_dir + "/" + segments[i], out_dir + "/" + segments[i]);
+        writer.append_file ("next.ts", in_dir + "/" + segments[i + 1].name);
+      writer.append_vars ("vars", segments[i].vars);
+      writer.process (in_dir + "/" + segments[i].name, out_dir + "/" + segments[i].name);
     }
   return 0;
 }
@@ -153,7 +166,12 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   for (auto entry : reader.entries())
     printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
 
-  err = ff_encode (wav_data, outfile);
+  map<string, string> vars = reader.parse_vars ("vars");
+  for (auto kv : vars)
+    printf ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
+
+  size_t start_pos = atoi (vars["start_pos"].c_str());
+  err = ff_encode (wav_data, outfile, start_pos);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
