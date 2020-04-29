@@ -52,6 +52,10 @@ main (int argc, char **argv)
       for (auto entry : reader.entries())
         printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
     }
+  else if (argc == 5 && strcmp (argv[1], "pcr") == 0)
+    {
+      return pcr (argv[2], argv[3], atof (argv[4]));
+    }
   else if (argc == 4 && strcmp (argv[1], "get") == 0)
     {
       TSReader reader;

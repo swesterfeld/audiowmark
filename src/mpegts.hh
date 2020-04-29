@@ -52,4 +52,6 @@ public:
   Error process (const std::string& in_name, const std::string& out_name);
 };
 
+int pcr (const std::string& filename, const std::string& outname, double time_offset_ms);
+
 #endif /* AUDIOWMARK_MPEGTS_HH */
