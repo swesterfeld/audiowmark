@@ -55,6 +55,11 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
   string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -af asetpts='(%zd+N)/SR/TB' -c:a aac '%s'",
                               tmp_file_name.c_str(), start_pos, filename.c_str());
   system (cmd.c_str());
+  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss 0.023 -f mpegts -c copy '%s-tcpy'", filename.c_str(), filename.c_str());
+  system (cmd.c_str());
+
+  cmd = string_printf ("mv '%s-tcpy' '%s'", filename.c_str(), filename.c_str());
+  system (cmd.c_str());
 
   return Error::Code::NONE;
 }
