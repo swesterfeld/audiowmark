@@ -29,15 +29,43 @@ using std::regex;
 using std::vector;
 using std::map;
 
+void
+xsystem (const string& cmd)
+{
+  info ("+++ %s\n", cmd.c_str());
+  system (cmd.c_str());
+}
+
 Error
-ff_decode (const string& filename, WavData& out_wav_data)
+ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data)
 {
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
 
-  string cmd = string_printf ("ffmpeg -v error -y -i '%s' -f wav %s", filename.c_str(), tmp_file_name.c_str());
-  system (cmd.c_str());
+  FILE *input_tmp_file = tmpfile();
+  ScopedFile input_tmp_file_s (input_tmp_file);
+  string input_tmp_file_name = string_printf ("/dev/fd/%d", fileno (input_tmp_file));
+
+  /* build input file by concatenating previous ts and current ts */
+  auto prev_ts = reader.find ("prev.ts");
+  if (prev_ts)
+    {
+      // write previous ts
+      size_t r = fwrite (prev_ts->data.data(), 1, prev_ts->data.size(), input_tmp_file);
+      if (r != prev_ts->data.size())
+        return Error (string_printf ("unable to write ff_decode:prev.ts to %s\n", input_tmp_file_name.c_str()));
+    }
+  // write current ts
+  FILE *main = fopen (filename.c_str(), "r");
+  ScopedFile main_s (main);
+  int c;
+  while ((c = fgetc (main)) >= 0)
+    fputc (c, input_tmp_file);
+  fflush (input_tmp_file);
+
+  string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
+  xsystem (cmd.c_str());
 
   Error err = out_wav_data.load (tmp_file_name);
   return err;
@@ -120,11 +148,12 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
         }
       line++;
     }
+  size_t prev_size = 0;
   size_t start_pos = 0;
   for (auto& segment : segments)
     {
       WavData out;
-      Error err = ff_decode (in_dir + "/" + segment.name, out);
+      Error err = ff_decode (in_dir + "/" + segment.name, /* FIXME: no context */ TSReader(), out);
       if (err)
         {
           error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
@@ -132,7 +161,9 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
         }
       printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
+      segment.vars["prev_size"] = string_printf ("%zd", prev_size);
       start_pos += out.n_values() / out.n_channels();
+      prev_size = out.n_values() / out.n_channels();
     }
   for (size_t i = 0; i < segments.size(); i++)
     {
@@ -161,7 +192,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
     }
 
   WavData wav_data;
-  err = ff_decode (infile, wav_data);
+  err = ff_decode (infile, reader, wav_data);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
@@ -176,6 +207,13 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
     printf ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
 
   size_t start_pos = atoi (vars["start_pos"].c_str());
+  size_t prev_size = atoi (vars["prev_size"].c_str());
+
+  /* erase extra samples caused by concatting with prev.ts */
+  auto samples = wav_data.samples();
+  samples.erase (samples.begin(), samples.begin() + prev_size * wav_data.n_channels());
+  wav_data.set_samples (samples);
+
   err = ff_encode (wav_data, outfile, start_pos);
   if (err)
     {
