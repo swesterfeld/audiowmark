@@ -330,37 +330,45 @@ TSReader::entries()
   return m_entries;
 }
 
+const TSReader::Entry *
+TSReader::find (const string& name) const
+{
+  for (const auto& entry : m_entries)
+    if (entry.filename == name)
+      return &entry;
+
+  return nullptr;
+}
+
 map<string, string>
 TSReader::parse_vars (const string& name)
 {
   map<string, string> vars;
 
-  for (auto entry : m_entries)
+  auto entry = find (name);
+  if (!entry)
+    return vars;
+
+  enum { KEY, VALUE } mode = KEY;
+  string s;
+  string key;
+  for (auto c : entry->data)
     {
-      if (entry.filename == name)
+      if (c == '=' && mode == KEY)
         {
-          enum { KEY, VALUE } mode = KEY;
-          string s;
-          string key;
-          for (auto c : entry.data)
-            {
-              if (c == '=' && mode == KEY)
-                {
-                  key = s;
-                  s.clear();
-                  mode = VALUE;
-                }
-              else if (c == '\0' && mode == VALUE)
-                {
-                  vars[key] = s;
-                  s.clear();
-                  mode = KEY;
-                }
-              else
-                {
-                  s += c;
-                }
-            }
+          key = s;
+          s.clear();
+          mode = VALUE;
+        }
+      else if (c == '\0' && mode == VALUE)
+        {
+          vars[key] = s;
+          s.clear();
+          mode = KEY;
+        }
+      else
+        {
+          s += c;
         }
     }
   return vars;

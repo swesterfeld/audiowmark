@@ -37,6 +37,7 @@ private:
 public:
   Error load (const std::string& inname);
   const std::vector<Entry>& entries();
+  const Entry *find (const std::string& filename) const;
   std::map<std::string, std::string> parse_vars (const std::string& name);
 };
 
