@@ -29,11 +29,18 @@ using std::regex;
 using std::vector;
 using std::map;
 
-void
+Error
 xsystem (const string& cmd)
 {
   info ("+++ %s\n", cmd.c_str());
-  system (cmd.c_str());
+  int rc = system (cmd.c_str());
+  int exit_status = WEXITSTATUS (rc);
+  if (exit_status != 0)
+    {
+      error ("audiowmark: failed to execute command:\n%s\n", cmd.c_str());
+      return Error (string_printf ("system failed / exit status %d", exit_status));
+    }
+  return Error::Code::NONE;
 }
 
 Error
@@ -65,9 +72,11 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
   fflush (input_tmp_file);
 
   string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
-  xsystem (cmd.c_str());
+  Error err = xsystem (cmd.c_str());
+  if (err)
+    return err;
 
-  Error err = out_wav_data.load (tmp_file_name);
+  err = out_wav_data.load (tmp_file_name);
   return err;
 }
 
@@ -82,12 +91,19 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
 
   string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -af asetpts='(%zd+N)/SR/TB' -c:a aac '%s'",
                               tmp_file_name.c_str(), start_pos, filename.c_str());
-  system (cmd.c_str());
+  err = xsystem (cmd);
+  if (err)
+    return err;
+
   cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss 0.023 -f mpegts -c copy '%s-tcpy'", filename.c_str(), filename.c_str());
-  system (cmd.c_str());
+  err = xsystem (cmd);
+  if (err)
+    return err;
 
   cmd = string_printf ("mv '%s-tcpy' '%s'", filename.c_str(), filename.c_str());
-  system (cmd.c_str());
+  xsystem (cmd);
+  if (err)
+    return err;
 
   return Error::Code::NONE;
 }
