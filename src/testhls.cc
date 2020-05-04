@@ -91,7 +91,7 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
 }
 
 Error
-ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
+ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end)
 {
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
@@ -105,8 +105,11 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
   if (err)
     return err;
 
-  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss 0.023 -t %.3f -f mpegts -c copy '%s-tcpy'", filename.c_str(),
-     ((double (wav_data.n_values()) / wav_data.n_channels() - 2048) / wav_data.sample_rate()), filename.c_str());
+  double length_s = double (wav_data.n_values()) / wav_data.n_channels() / wav_data.sample_rate();
+  double cut_start_s = cut_start / double (wav_data.sample_rate());
+  double cut_end_s = cut_end / double (wav_data.sample_rate());
+  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.3f -t %.3f -f mpegts -c copy '%s-tcpy'",
+                       filename.c_str(), cut_start_s, length_s - (cut_start_s + cut_end_s), filename.c_str());
   err = xsystem (cmd);
   if (err)
     return err;
@@ -260,7 +263,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
-  err = ff_encode (wav_data, outfile, start_pos);
+  err = ff_encode (wav_data, outfile, start_pos, 1024, 1024);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
