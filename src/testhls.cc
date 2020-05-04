@@ -28,6 +28,7 @@ using std::string;
 using std::regex;
 using std::vector;
 using std::map;
+using std::min;
 
 Error
 xsystem (const string& cmd)
@@ -104,7 +105,8 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos)
   if (err)
     return err;
 
-  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss 0.023 -f mpegts -c copy '%s-tcpy'", filename.c_str(), filename.c_str());
+  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss 0.023 -t %.3f -f mpegts -c copy '%s-tcpy'", filename.c_str(),
+     ((double (wav_data.n_values()) / wav_data.n_channels() - 2048) / wav_data.sample_rate()), filename.c_str());
   err = xsystem (cmd);
   if (err)
     return err;
@@ -249,11 +251,13 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
   size_t next_size = atoi (vars["next_size"].c_str());
+  size_t next_ctx = min<size_t> (1024, next_size);
+  size_t prev_ctx = min<size_t> (1024, prev_size);
 
   /* erase extra samples caused by concatting with prev.ts */
   auto samples = wav_data.samples();
-  samples.erase (samples.begin(), samples.begin() + prev_size * wav_data.n_channels());
-  samples.erase (samples.end() - next_size * wav_data.n_channels(), samples.end());
+  samples.erase (samples.begin(), samples.begin() + (prev_size - prev_ctx) * wav_data.n_channels());
+  samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
   err = ff_encode (wav_data, outfile, start_pos);
