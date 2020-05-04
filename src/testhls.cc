@@ -80,7 +80,6 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
         return Error (string_printf ("unable to write ff_decode:next.ts to %s\n", input_tmp_file_name.c_str()));
     }
   fflush (input_tmp_file);
-
   string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
   Error err = xsystem (cmd.c_str());
   if (err)
@@ -106,7 +105,11 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
     return err;
 
   double length_s = double (wav_data.n_values()) / wav_data.n_channels() / wav_data.sample_rate();
-  double cut_start_s = cut_start / double (wav_data.sample_rate());
+
+  /* subtracting 0.001 from cut_start_s ensures that rounding performed by printf()
+   * doesn't accidentally cut one frame more than necessary
+   */
+  double cut_start_s = cut_start / double (wav_data.sample_rate()) - 0.001;
   double cut_end_s = cut_end / double (wav_data.sample_rate());
   cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.3f -t %.3f -f mpegts -c copy '%s-tcpy'",
                        filename.c_str(), cut_start_s, length_s - (cut_start_s + cut_end_s), filename.c_str());
@@ -254,8 +257,8 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
   size_t next_size = atoi (vars["next_size"].c_str());
-  size_t next_ctx = min<size_t> (1024, next_size);
-  size_t prev_ctx = min<size_t> (1024, prev_size);
+  size_t next_ctx = min<size_t> (1024 * 3, next_size);
+  size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
   /* erase extra samples caused by concatting with prev.ts */
   auto samples = wav_data.samples();
@@ -263,7 +266,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
-  err = ff_encode (wav_data, outfile, start_pos, 1024, 1024);
+  err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
