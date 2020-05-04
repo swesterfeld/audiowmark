@@ -69,6 +69,15 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
   int c;
   while ((c = fgetc (main)) >= 0)
     fputc (c, input_tmp_file);
+
+  auto next_ts = reader.find ("next.ts");
+  if (next_ts)
+    {
+      // write next ts
+      size_t r = fwrite (next_ts->data.data(), 1, next_ts->data.size(), input_tmp_file);
+      if (r != next_ts->data.size())
+        return Error (string_printf ("unable to write ff_decode:next.ts to %s\n", input_tmp_file_name.c_str()));
+    }
   fflush (input_tmp_file);
 
   string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
@@ -134,6 +143,7 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
   struct Segment
   {
     string              name;
+    size_t              size;
     map<string, string> vars;
   };
   vector<Segment> segments;
@@ -164,7 +174,6 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
         }
       line++;
     }
-  size_t prev_size = 0;
   size_t start_pos = 0;
   for (auto& segment : segments)
     {
@@ -176,10 +185,25 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
           return 1;
         }
       printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
+      segment.size = out.n_values() / out.n_channels();
+
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
-      segment.vars["prev_size"] = string_printf ("%zd", prev_size);
-      start_pos += out.n_values() / out.n_channels();
-      prev_size = out.n_values() / out.n_channels();
+      segment.vars["size"] = string_printf ("%zd", segment.size);
+      start_pos += segment.size;
+    }
+
+  /* fill out next/prev size fields */
+  for (size_t i = 0; i < segments.size(); i++)
+    {
+      if (i > 0)
+        segments[i].vars["prev_size"] = string_printf ("%zd", segments[i - 1].size);
+      else
+        segments[i].vars["prev_size"] = "0";
+
+      if (i + 1 < segments.size())
+        segments[i].vars["next_size"] = string_printf ("%zd", segments[i + 1].size);
+      else
+        segments[i].vars["next_size"] = "0";
     }
   for (size_t i = 0; i < segments.size(); i++)
     {
@@ -224,10 +248,12 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
 
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
+  size_t next_size = atoi (vars["next_size"].c_str());
 
   /* erase extra samples caused by concatting with prev.ts */
   auto samples = wav_data.samples();
   samples.erase (samples.begin(), samples.begin() + prev_size * wav_data.n_channels());
+  samples.erase (samples.end() - next_size * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
   err = ff_encode (wav_data, outfile, start_pos);
