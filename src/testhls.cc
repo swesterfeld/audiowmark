@@ -90,7 +90,7 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
 }
 
 Error
-ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end)
+ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
 {
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
@@ -98,8 +98,7 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
 
   Error err = wav_data.save (tmp_file_name);
 
-  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -af asetpts='(%zd+N)/SR/TB' -c:a aac '%s'",
-                              tmp_file_name.c_str(), start_pos, filename.c_str());
+  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -c:a aac '%s'", tmp_file_name.c_str(), filename.c_str());
   err = xsystem (cmd);
   if (err)
     return err;
@@ -111,8 +110,8 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
    */
   double cut_start_s = cut_start / double (wav_data.sample_rate()) - 0.001;
   double cut_end_s = cut_end / double (wav_data.sample_rate());
-  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.3f -t %.3f -f mpegts -c copy '%s-tcpy'",
-                       filename.c_str(), cut_start_s, length_s - (cut_start_s + cut_end_s), filename.c_str());
+  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.3f -t %.3f -f mpegts -output_ts_offset %f -muxdelay 0 -muxpreload 0 -c copy '%s-tcpy'",
+                       filename.c_str(), cut_start_s, length_s - (cut_start_s + cut_end_s), pts_start, filename.c_str());
   err = xsystem (cmd);
   if (err)
     return err;
@@ -195,6 +194,18 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
       segment.size = out.n_values() / out.n_channels();
 
+      /* obtain pts for first frame */
+      string cmd = string_printf ("ffprobe -v 0 -show_entries packet=pts_time %s/%s -of compact=p=0:nk=1 | grep '^[0-9]'", in_dir.c_str(), segment.name.c_str());
+      FILE *pts = popen (cmd.c_str(), "r");
+      char buffer[1024];
+      if (fgets (buffer, 1024, pts))
+        {
+          if (strlen (buffer) && buffer[strlen (buffer) - 1] == '\n')
+            buffer[strlen (buffer) - 1] = 0;
+          segment.vars["pts_start"] = buffer;
+        }
+      fclose (pts);
+
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
       start_pos += segment.size;
@@ -257,6 +268,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
   size_t next_size = atoi (vars["next_size"].c_str());
+  double pts_start = atof (vars["pts_start"].c_str());
   size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
@@ -266,7 +278,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
-  err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx);
+  err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx, pts_start);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
