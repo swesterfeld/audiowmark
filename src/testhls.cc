@@ -23,6 +23,7 @@
 #include "utils.hh"
 #include "mpegts.hh"
 #include "wavdata.hh"
+#include "wmcommon.hh"
 
 using std::string;
 using std::regex;
@@ -239,6 +240,48 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
 }
 
 int
+mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
+{
+  vector<float> samples;
+
+  samples = wav_data.samples();
+  samples.insert (samples.begin(), zero_frames * wav_data.n_channels(), /* value */ 0);
+  wav_data.set_samples (samples);
+
+  FILE *tmp_in = tmpfile();
+  ScopedFile tmp_in_s (tmp_in);
+  string tmp_in_name = string_printf ("/dev/fd/%d", fileno (tmp_in));
+
+  FILE *tmp_out = tmpfile();
+  ScopedFile tmp_out_s (tmp_out);
+  string tmp_out_name = string_printf ("/dev/fd/%d", fileno (tmp_out));
+
+  Error err = wav_data.save (tmp_in_name);
+  if (err)
+    {
+      error ("mark zexpand save: %s", err.message());
+      return 1;
+    }
+
+  int rc = add_watermark (tmp_in_name, tmp_out_name, bits);
+  if (rc != 0)
+    return rc;
+
+  err = wav_data.load (tmp_out_name);
+  if (err)
+    {
+      error ("mark zexpand load: %s", err.message());
+      return 1;
+    }
+
+  samples = wav_data.samples();
+  samples.erase (samples.begin(), samples.begin() + zero_frames * wav_data.n_channels());
+  wav_data.set_samples (samples);
+
+  return 0;
+}
+
+int
 hls_mark (const string& infile, const string& outfile, const string& bits)
 {
   TSReader reader;
@@ -271,6 +314,10 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   double pts_start = atof (vars["pts_start"].c_str());
   size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
+
+  int zrc = mark_zexpand (wav_data, start_pos - prev_size, bits);
+  if (zrc != 0)
+    return zrc;
 
   /* erase extra samples caused by concatting with prev.ts */
   auto samples = wav_data.samples();

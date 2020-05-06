@@ -34,5 +34,5 @@ testshortcode_LDFLAGS = $(COMMON_LIBS)
 testmpegts_SOURCES = testmpegts.cc $(COMMON_SRC)
 testmpegts_LDFLAGS = $(COMMON_LIBS)
 
-testhls_SOURCES = testhls.cc $(COMMON_SRC)
+testhls_SOURCES = testhls.cc wmadd.cc $(COMMON_SRC)
 testhls_LDFLAGS = $(COMMON_LIBS)
