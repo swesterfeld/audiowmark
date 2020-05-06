@@ -284,6 +284,8 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 int
 hls_mark (const string& infile, const string& outfile, const string& bits)
 {
+  double start_time = get_time();
+
   TSReader reader;
 
   Error err = reader.load (infile);
@@ -331,6 +333,9 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
       error ("hls_mark: %s\n", err.message());
       return 1;
     }
+
+  double end_time = get_time();
+  printf ("hls_time %f %f\n", start_pos / double (wav_data.sample_rate()), (end_time - start_time) * 1000 /* ms */);
 
   return 0;
 }
