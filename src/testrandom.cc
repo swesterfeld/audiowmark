@@ -18,19 +18,8 @@
 #include "utils.hh"
 #include "random.hh"
 
-#include <sys/time.h>
-
 using std::vector;
 using std::string;
-
-static double
-gettime()
-{
-  timeval tv;
-  gettimeofday (&tv, 0);
-
-  return tv.tv_sec + tv.tv_usec / 1000000.0;
-}
 
 int
 main (int argc, char **argv)
@@ -43,13 +32,13 @@ main (int argc, char **argv)
     }
 
   uint64_t s = 0;
-  double t_start = gettime();
+  double t_start = get_time();
   size_t runs = 25000000;
   for (size_t i = 0; i < runs; i++)
     {
       s += rng();
     }
-  double t_end = gettime();
+  double t_end = get_time();
   printf ("s=%016lx\n\n", s);
 
   printf ("%f Mvalues/sec\n", runs / (t_end - t_start) / 1000000);

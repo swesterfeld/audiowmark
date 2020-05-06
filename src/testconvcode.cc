@@ -21,19 +21,9 @@
 #include <random>
 
 #include <assert.h>
-#include <sys/time.h>
 
 using std::vector;
 using std::string;
-
-static double
-gettime()
-{
-  timeval tv;
-  gettimeofday (&tv, 0);
-
-  return tv.tv_sec + tv.tv_usec / 1000000.0;
-}
 
 vector<int>
 generate_error_vector (size_t n, int errors)
@@ -210,14 +200,14 @@ main (int argc, char **argv)
       while (in_bits.size() != 128)
         in_bits.push_back (rand() & 1);
 
-      const double start_t = gettime();
+      const double start_t = get_time();
       const size_t runs = 20;
       for (size_t i = 0; i < runs; i++)
         {
           vector<int> out_bits = conv_decode_hard (block_type, conv_encode (block_type, in_bits));
           assert (out_bits == in_bits);
         }
-      printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);
+      printf ("%.1f ms/block\n", (get_time() - start_t) / runs * 1000.0);
     }
   if (argc == 3 && string (argv[2]) == "table")
     conv_print_table (block_type);

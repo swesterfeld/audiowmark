@@ -18,8 +18,20 @@
 #include "utils.hh"
 #include "stdarg.h"
 
+#include <sys/time.h>
+
 using std::vector;
 using std::string;
+
+double
+get_time()
+{
+  /* return timestamp in seconds as double */
+  timeval tv;
+  gettimeofday (&tv, 0);
+
+  return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
 
 static unsigned char
 from_hex_nibble (char c)
