@@ -55,6 +55,8 @@ WavData::load (const string& filename)
 Error
 WavData::load (AudioInputStream *in_stream)
 {
+  m_samples.clear(); // get rid of old contents
+
   vector<float> m_buffer;
   while (true)
     {
