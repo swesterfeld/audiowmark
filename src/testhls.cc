@@ -106,14 +106,11 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
 
   double length_s = double (wav_data.n_values()) / wav_data.n_channels() / wav_data.sample_rate();
 
-  /* subtracting/adding 0.000001 from/to cut_start_s ensures that rounding
-   * performed by printf() doesn't accidentally cut one frame more or less than
-   * intended
-   */
+  // cut_start_s is corrected down to avoid cutting one frame more or than intended
   double cut_start_s = cut_start / double (wav_data.sample_rate());
   double cut_end_s = cut_end / double (wav_data.sample_rate());
   cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.6f -t %.6f -f mpegts -output_ts_offset %f -muxdelay 0 -muxpreload 0 -c copy '%s-tcpy'",
-                       filename.c_str(), cut_start_s - 0.000001, length_s - (cut_start_s + cut_end_s) + 0.000001, pts_start, filename.c_str());
+                       filename.c_str(), cut_start_s - 1. / wav_data.sample_rate(), length_s - (cut_start_s + cut_end_s), pts_start, filename.c_str());
   err = xsystem (cmd);
   if (err)
     return err;
