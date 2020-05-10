@@ -546,7 +546,7 @@ info_format (const string& label, const RawFormat& format)
 }
 
 int
-add_watermark (const string& infile, const string& outfile, const string& bits)
+add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits)
 {
   auto bitvec = bit_str_to_vec (bits);
   if (bitvec.empty())
@@ -573,25 +573,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       bitvec = expanded_bitvec;
     }
 
-  /* open input stream */
-  Error err;
-  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
-  if (err)
-    {
-      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-      return 1;
-    }
-
-  /* open output stream */
-  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
-  std::unique_ptr<AudioOutputStream> out_stream;
-  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
-  if (err)
-    {
-      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
-      return 1;
-    }
-
   /* sanity checks */
   if (in_stream->sample_rate() != out_stream->sample_rate())
     {
@@ -605,12 +586,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
 
   /* write some informational messages */
-  info ("Input:        %s\n", Params::input_label.size() ? Params::input_label.c_str() : infile.c_str());
-  if (Params::input_format == Format::RAW)
-    info_format ("Raw Input", Params::raw_input_format);
-  info ("Output:       %s\n", Params::output_label.size() ? Params::output_label.c_str() : outfile.c_str());
-  if (Params::output_format == Format::RAW)
-    info_format ("Raw Output", Params::raw_output_format);
   info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
   info ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
@@ -644,6 +619,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
+  Error err;
   while (true)
     {
       err = in_stream->read_frames (samples, Params::frame_size);
@@ -715,6 +691,39 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
   return 0;
+}
+
+int
+add_watermark (const string& infile, const string& outfile, const string& bits)
+{
+  /* open input stream */
+  Error err;
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
+  if (err)
+    {
+      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+      return 1;
+    }
+
+  /* open output stream */
+  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
+  std::unique_ptr<AudioOutputStream> out_stream;
+  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
+  if (err)
+    {
+      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
+      return 1;
+    }
+
+  /* write input/output stream details */
+  info ("Input:        %s\n", Params::input_label.size() ? Params::input_label.c_str() : infile.c_str());
+  if (Params::input_format == Format::RAW)
+    info_format ("Raw Input", Params::raw_input_format);
+  info ("Output:       %s\n", Params::output_label.size() ? Params::output_label.c_str() : outfile.c_str());
+  if (Params::output_format == Format::RAW)
+    info_format ("Raw Output", Params::raw_output_format);
+
+  return add_stream_watermark (in_stream.get(), out_stream.get(), bits);
 }
 
 
