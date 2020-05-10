@@ -237,6 +237,49 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
   return 0;
 }
 
+class WDInputStream : public AudioInputStream
+{
+  WavData *wav_data;
+  size_t   read_pos = 0;
+public:
+  WDInputStream (WavData *wav_data) :
+    wav_data (wav_data)
+  {
+  }
+  int
+  bit_depth() const override
+  {
+    return wav_data->bit_depth();
+  }
+  int
+  sample_rate() const override
+  {
+    return wav_data->sample_rate();
+  }
+  int
+  n_channels() const override
+  {
+    return wav_data->n_channels();
+  }
+  size_t
+  n_frames() const override
+  {
+    return wav_data->n_values() / wav_data->n_channels();
+  }
+  Error
+  read_frames (std::vector<float>& samples, size_t count) override
+  {
+    size_t read_count = min (n_frames() - read_pos, count);
+
+    const auto& wsamples = wav_data->samples();
+    samples.assign (wsamples.begin() + read_pos * n_channels(), wsamples.begin() + (read_pos + read_count) * n_channels());
+
+    read_pos += read_count;
+
+    return Error::Code::NONE;
+  }
+};
+
 int
 mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 {
@@ -246,22 +289,23 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
   samples.insert (samples.begin(), zero_frames * wav_data.n_channels(), /* value */ 0);
   wav_data.set_samples (samples);
 
-  FILE *tmp_in = tmpfile();
-  ScopedFile tmp_in_s (tmp_in);
-  string tmp_in_name = string_printf ("/dev/fd/%d", fileno (tmp_in));
-
   FILE *tmp_out = tmpfile();
   ScopedFile tmp_out_s (tmp_out);
   string tmp_out_name = string_printf ("/dev/fd/%d", fileno (tmp_out));
 
-  Error err = wav_data.save (tmp_in_name);
+  Error err;
+  WDInputStream in_stream (&wav_data);
+
+  const int out_bit_depth = in_stream.bit_depth() > 16 ? 24 : 16;
+  std::unique_ptr<AudioOutputStream> out_stream;
+  out_stream = AudioOutputStream::create (tmp_out_name, in_stream.n_channels(), in_stream.sample_rate(), out_bit_depth, in_stream.n_frames(), err);
   if (err)
     {
-      error ("mark zexpand save: %s", err.message());
+      error ("audiowmark: error writing to %s: %s\n", tmp_out_name.c_str(), err.message());
       return 1;
     }
 
-  int rc = add_watermark (tmp_in_name, tmp_out_name, bits);
+  int rc = add_stream_watermark (&in_stream, out_stream.get(), bits);
   if (rc != 0)
     return rc;
 
