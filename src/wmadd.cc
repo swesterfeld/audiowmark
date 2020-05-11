@@ -241,6 +241,17 @@ public:
         return out_samples;
       }
   }
+  vector<float>
+  skip()
+  {
+    if (first_frame)
+      {
+        first_frame = false;
+        return {};
+      }
+    else
+      return vector<float> (Params::frame_size * n_channels);
+  }
 };
 
 /* generates a watermark signal
@@ -276,19 +287,11 @@ public:
     ab = 1;
   }
   vector<float>
-  run (const vector<float>& samples)
+  run (const vector<float>& samples, bool skip = false)
   {
     assert (samples.size() == Params::frame_size * n_channels);
 
-    vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
-
-    vector<vector<complex<float>>> fft_delta_spect;
-    for (int ch = 0; ch < n_channels; ch++)
-      fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
-
     const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
-    for (int ch = 0; ch < n_channels; ch++)
-      apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
 
     frame_number++;
     if (frame_number == frame_mod_vec.size())
@@ -302,7 +305,21 @@ public:
         if (frame_mod_vec_a.empty())
           init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
       }
-    return wm_synth.run (fft_delta_spect);
+    if (skip)
+      return wm_synth.skip();
+    else
+      {
+        vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
+
+        vector<vector<complex<float>>> fft_delta_spect;
+        for (int ch = 0; ch < n_channels; ch++)
+          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
+
+        for (int ch = 0; ch < n_channels; ch++)
+          apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+
+        return wm_synth.run (fft_delta_spect);
+      }
   }
   int
   data_blocks() const
@@ -505,12 +522,12 @@ public:
       return true;
   }
   vector<float>
-  run (const vector<float>& samples)
+  run (const vector<float>& samples, bool skip = false)
   {
     if (!need_resampler)
       {
         /* cheap case: if no resampling is necessary, just generate the watermark signal */
-        return wm_gen.run (samples);
+        return wm_gen.run (samples, skip);
       }
 
     /* resample to the watermark sample rate */
@@ -626,7 +643,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
       total_input_frames += samples.size() / n_channels;
 
       audio_buffer.write_frames (samples);
-      samples = wm_resampler.run (samples);
+      samples = wm_resampler.run (samples, true);
       size_t to_read = samples.size() / n_channels;
       vector<float> orig_samples  = audio_buffer.read_frames (to_read);
       assert (samples.size() == orig_samples.size());
