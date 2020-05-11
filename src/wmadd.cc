@@ -636,17 +636,17 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
+  size_t audio_buffer_frames = 0;
   Error err;
   while (zero_frames >= Params::frame_size)
     {
       samples.assign (Params::frame_size * n_channels, 0);
       total_input_frames += samples.size() / n_channels;
 
-      audio_buffer.write_frames (samples);
+      audio_buffer_frames += Params::frame_size;
       samples = wm_resampler.run (samples, true);
       size_t to_read = samples.size() / n_channels;
-      vector<float> orig_samples  = audio_buffer.read_frames (to_read);
-      assert (samples.size() == orig_samples.size());
+      audio_buffer_frames -= to_read;
 
       samples = limiter.process (samples);
 
@@ -655,6 +655,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
       zero_frames -= Params::frame_size;
     }
+  audio_buffer.write_frames (std::vector<float> (audio_buffer_frames * n_channels));
   while (true)
     {
       if (zero_frames > 0)
