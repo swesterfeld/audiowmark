@@ -280,6 +280,44 @@ public:
   }
 };
 
+class WDOutputStream : public AudioOutputStream
+{
+  WavData *wav_data;
+  vector<float> samples;
+public:
+  WDOutputStream (WavData *wav_data) :
+    wav_data (wav_data)
+  {
+  }
+  int
+  bit_depth() const override
+  {
+    return wav_data->bit_depth();
+  }
+  int
+  sample_rate() const override
+  {
+    return wav_data->sample_rate();
+  }
+  int
+  n_channels() const override
+  {
+    return wav_data->n_channels();
+  }
+  Error
+  write_frames (const std::vector<float>& frames)
+  {
+    samples.insert (samples.end(), frames.begin(), frames.end());
+    return Error::Code::NONE;
+  }
+  Error
+  close()
+  {
+    wav_data->set_samples (samples); // only do this once at end for performance reasons
+    return Error::Code::NONE;
+  }
+};
+
 int
 mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 {
@@ -289,34 +327,17 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
   samples.insert (samples.begin(), zero_frames * wav_data.n_channels(), /* value */ 0);
   wav_data.set_samples (samples);
 
-  FILE *tmp_out = tmpfile();
-  ScopedFile tmp_out_s (tmp_out);
-  string tmp_out_name = string_printf ("/dev/fd/%d", fileno (tmp_out));
-
   Error err;
   WDInputStream in_stream (&wav_data);
 
-  const int out_bit_depth = in_stream.bit_depth() > 16 ? 24 : 16;
-  std::unique_ptr<AudioOutputStream> out_stream;
-  out_stream = AudioOutputStream::create (tmp_out_name, in_stream.n_channels(), in_stream.sample_rate(), out_bit_depth, in_stream.n_frames(), err);
-  if (err)
-    {
-      error ("audiowmark: error writing to %s: %s\n", tmp_out_name.c_str(), err.message());
-      return 1;
-    }
+  WavData wav_data_out ({ /* no samples */ }, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
+  WDOutputStream out_stream (&wav_data_out);
 
-  int rc = add_stream_watermark (&in_stream, out_stream.get(), bits);
+  int rc = add_stream_watermark (&in_stream, &out_stream, bits);
   if (rc != 0)
     return rc;
 
-  err = wav_data.load (tmp_out_name);
-  if (err)
-    {
-      error ("mark zexpand load: %s", err.message());
-      return 1;
-    }
-
-  samples = wav_data.samples();
+  samples = wav_data_out.samples();
   samples.erase (samples.begin(), samples.begin() + zero_frames * wav_data.n_channels());
   wav_data.set_samples (samples);
 
