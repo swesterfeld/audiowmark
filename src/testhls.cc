@@ -323,16 +323,12 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 {
   vector<float> samples;
 
-  samples = wav_data.samples();
-  samples.insert (samples.begin(), zero_frames * wav_data.n_channels(), /* value */ 0);
-  wav_data.set_samples (samples);
-
   WDInputStream in_stream (&wav_data);
 
   WavData wav_data_out ({ /* no samples */ }, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
   WDOutputStream out_stream (&wav_data_out);
 
-  int rc = add_stream_watermark (&in_stream, &out_stream, bits);
+  int rc = add_stream_watermark (&in_stream, &out_stream, bits, zero_frames);
   if (rc != 0)
     return rc;
 

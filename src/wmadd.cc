@@ -546,7 +546,7 @@ info_format (const string& label, const RawFormat& format)
 }
 
 int
-add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits)
+add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits, size_t zero_frames)
 {
   auto bitvec = bit_str_to_vec (bits);
   if (bitvec.empty())
@@ -620,9 +620,36 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
   Error err;
+  while (zero_frames >= Params::frame_size)
+    {
+      samples.assign (Params::frame_size * n_channels, 0);
+      total_input_frames += samples.size() / n_channels;
+
+      audio_buffer.write_frames (samples);
+      samples = wm_resampler.run (samples);
+      size_t to_read = samples.size() / n_channels;
+      vector<float> orig_samples  = audio_buffer.read_frames (to_read);
+      assert (samples.size() == orig_samples.size());
+
+      samples = limiter.process (samples);
+
+      err = out_stream->write_frames (samples);
+      total_output_frames += samples.size() / n_channels;
+
+      zero_frames -= Params::frame_size;
+    }
   while (true)
     {
-      err = in_stream->read_frames (samples, Params::frame_size);
+      if (zero_frames > 0)
+        {
+          err = in_stream->read_frames (samples, Params::frame_size - zero_frames);
+          samples.insert (samples.begin(), zero_frames * n_channels, 0);
+          zero_frames = 0;
+        }
+      else
+        {
+          err = in_stream->read_frames (samples, Params::frame_size);
+        }
       if (err)
         {
           error ("audiowmark: input stream read failed: %s\n", err.message());
@@ -673,6 +700,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
         }
       total_output_frames += samples.size() / n_channels;
     }
+#if 0
   if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
       if (total_output_frames != in_stream->n_frames())
@@ -681,6 +709,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
           return 1;
         }
     }
+#endif
 
   err = out_stream->close();
   if (err)
@@ -726,7 +755,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (Params::output_format == Format::RAW)
     info_format ("Raw Output", Params::raw_output_format);
 
-  return add_stream_watermark (in_stream.get(), out_stream.get(), bits);
+  return add_stream_watermark (in_stream.get(), out_stream.get(), bits, 0);
 }
 
 

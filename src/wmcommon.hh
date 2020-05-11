@@ -161,7 +161,7 @@ randomize_bit_order (const std::vector<T>& bit_vec, bool encode)
   return out_bits;
 }
 
-int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits);
+int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);
 int add_watermark (const std::string& infile, const std::string& outfile, const std::string& bits);
 int get_watermark (const std::string& infile, const std::string& orig_pattern);
 
