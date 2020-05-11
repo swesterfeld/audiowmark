@@ -327,7 +327,6 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
   samples.insert (samples.begin(), zero_frames * wav_data.n_channels(), /* value */ 0);
   wav_data.set_samples (samples);
 
-  Error err;
   WDInputStream in_stream (&wav_data);
 
   WavData wav_data_out ({ /* no samples */ }, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
@@ -404,6 +403,41 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
 }
 
 int
+test_seek (const string& in, const string& out, int pos, const string& bits)
+{
+  vector<float> samples;
+  WavData wav_data;
+  Error err = wav_data.load (in);
+  if (err)
+    {
+      error ("load error: %s\n", err.message());
+      return 1;
+    }
+
+  samples = wav_data.samples();
+  samples.erase (samples.begin(), samples.begin() + pos * wav_data.n_channels());
+  wav_data.set_samples (samples);
+
+  int rc = mark_zexpand (wav_data, pos, bits);
+  if (rc != 0)
+    {
+      return rc;
+    }
+
+  samples = wav_data.samples();
+  samples.insert (samples.begin(), pos * wav_data.n_channels(), 0);
+  wav_data.set_samples (samples);
+
+  err = wav_data.save (out);
+  if (err)
+    {
+      error ("save error: %s\n", err.message());
+      return 1;
+    }
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   if (argc == 5 && strcmp (argv[1], "hls-embed-context") == 0)
@@ -415,9 +449,14 @@ main (int argc, char **argv)
     {
       return hls_mark (argv[2], argv[3], argv[4]);
     }
+  else if (argc == 6 && strcmp (argv[1], "test-seek") == 0)
+    {
+      return test_seek (argv[2], argv[3], atoi (argv[4]), argv[5]);
+    }
   else
     {
       error ("testhls: error parsing command line arguments\n");
+      return 1;
     }
 }
 
