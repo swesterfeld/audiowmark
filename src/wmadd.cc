@@ -684,7 +684,10 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
   err = out_stream->close();
   if (err)
-    error ("audiowmark: closing output stream failed: %s\n", err.message());
+    {
+      error ("audiowmark: closing output stream failed: %s\n", err.message());
+      return 1;
+    }
 
   if (Params::snr)
     info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
