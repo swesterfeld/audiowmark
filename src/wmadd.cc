@@ -241,16 +241,17 @@ public:
         return out_samples;
       }
   }
-  vector<float>
-  skip()
+  size_t
+  skip (size_t zeros)
   {
+    assert (zeros == Params::frame_size);
     if (first_frame)
       {
         first_frame = false;
-        return {};
+        return 0;
       }
     else
-      return vector<float> (Params::frame_size * n_channels);
+      return Params::frame_size;
   }
 };
 
@@ -287,10 +288,36 @@ public:
     ab = 1;
   }
   vector<float>
-  run (const vector<float>& samples, bool skip = false)
+  run (const vector<float>& samples)
   {
     assert (samples.size() == Params::frame_size * n_channels);
 
+    vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
+
+    vector<vector<complex<float>>> fft_delta_spect;
+    for (int ch = 0; ch < n_channels; ch++)
+      fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
+
+    const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
+    for (int ch = 0; ch < n_channels; ch++)
+      apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+
+    bump_frame_number();
+
+    return wm_synth.run (fft_delta_spect);
+  }
+  size_t
+  skip (size_t zeros)
+  {
+    assert (zeros == Params::frame_size);
+
+    bump_frame_number();
+
+    return wm_synth.skip (Params::frame_size);
+  }
+  void
+  bump_frame_number()
+  {
     const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
 
     frame_number++;
@@ -304,21 +331,6 @@ public:
         // initialize A-block frame mod vector here to minimize startup latency
         if (frame_mod_vec_a.empty())
           init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
-      }
-    if (skip)
-      return wm_synth.skip();
-    else
-      {
-        vector<vector<complex<float>>> fft_out = fft_analyzer.run_fft (samples, 0);
-
-        vector<vector<complex<float>>> fft_delta_spect;
-        for (int ch = 0; ch < n_channels; ch++)
-          fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
-
-        for (int ch = 0; ch < n_channels; ch++)
-          apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
-
-        return wm_synth.run (fft_delta_spect);
       }
   }
   int
@@ -500,13 +512,14 @@ class WatermarkResampler
   std::unique_ptr<ResamplerImpl> in_resampler;
   std::unique_ptr<ResamplerImpl> out_resampler;
   WatermarkGen                   wm_gen;
-  bool                           need_resampler = false;
+  const bool                     need_resampler = false;
+  const int                      n_channels = 0;
 public:
   WatermarkResampler (int n_channels, int input_rate, const vector<int>& bitvec) :
-    wm_gen (n_channels, bitvec)
+    wm_gen (n_channels, bitvec),
+    need_resampler (input_rate != Params::mark_sample_rate),
+    n_channels (n_channels)
   {
-    need_resampler = (input_rate != Params::mark_sample_rate);
-
     if (need_resampler)
       {
         in_resampler.reset (create_resampler (n_channels, input_rate, Params::mark_sample_rate));
@@ -522,12 +535,12 @@ public:
       return true;
   }
   vector<float>
-  run (const vector<float>& samples, bool skip = false)
+  run (const vector<float>& samples)
   {
     if (!need_resampler)
       {
         /* cheap case: if no resampling is necessary, just generate the watermark signal */
-        return wm_gen.run (samples, skip);
+        return wm_gen.run (samples);
       }
 
     /* resample to the watermark sample rate */
@@ -545,6 +558,21 @@ public:
 
     size_t to_read = out_resampler->can_read_frames();
     return out_resampler->read_frames (to_read);
+  }
+  size_t
+  skip (size_t zeros)
+  {
+    if (!need_resampler)
+      {
+        return wm_gen.skip (zeros); /* cheap case */
+      }
+    else
+      {
+        /* FIXME: inefficient */
+        vector<float> samples (zeros * n_channels);
+        size_t n_values = run (samples).size();
+        return n_values / n_channels;
+      }
   }
   int
   data_blocks() const
@@ -640,11 +668,9 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
   Error err;
   while (zero_frames >= Params::frame_size)
     {
-      samples.assign (Params::frame_size * n_channels, 0);
-      total_input_frames += samples.size() / n_channels;
-
+      total_input_frames += Params::frame_size;
       audio_buffer_frames += Params::frame_size;
-      samples = wm_resampler.run (samples, true);
+      samples.assign (wm_resampler.skip (Params::frame_size) * n_channels, 0);
       size_t to_read = samples.size() / n_channels;
       audio_buffer_frames -= to_read;
 
