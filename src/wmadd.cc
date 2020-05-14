@@ -670,13 +670,12 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
     {
       total_input_frames += Params::frame_size;
       audio_buffer_frames += Params::frame_size;
-      samples.assign (wm_resampler.skip (Params::frame_size) * n_channels, 0);
-      size_t to_read = samples.size() / n_channels;
-      audio_buffer_frames -= to_read;
+      size_t frames = wm_resampler.skip (Params::frame_size);
+      audio_buffer_frames -= frames;
 
-      samples = limiter.process (samples);
+      frames = limiter.skip (frames);
 
-      err = out_stream->write_frames (samples);
+      err = out_stream->write_frames (vector<float> (frames * n_channels));
       total_output_frames += samples.size() / n_channels;
 
       zero_frames -= Params::frame_size;
