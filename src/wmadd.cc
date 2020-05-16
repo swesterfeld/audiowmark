@@ -562,17 +562,24 @@ public:
   size_t
   skip (size_t zeros)
   {
-    if (!need_resampler)
+    assert (zeros % Params::frame_size == 0);
+    size_t out = 0;
+    while (zeros)
       {
-        return wm_gen.skip (zeros); /* cheap case */
+        if (!need_resampler)
+          {
+            out += wm_gen.skip (Params::frame_size); /* cheap case */
+          }
+        else
+          {
+            /* FIXME: inefficient */
+            vector<float> samples (Params::frame_size * n_channels);
+            size_t n_values = run (samples).size();
+            out += n_values / n_channels;
+          }
+        zeros -= Params::frame_size;
       }
-    else
-      {
-        /* FIXME: inefficient */
-        vector<float> samples (zeros * n_channels);
-        size_t n_values = run (samples).size();
-        return n_values / n_channels;
-      }
+    return out;
   }
   int
   data_blocks() const
@@ -666,19 +673,36 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
   size_t total_output_frames = 0;
   size_t audio_buffer_frames = 0;
   Error err;
-  while (zero_frames >= Params::frame_size)
+  if (zero_frames >= Params::frame_size)
     {
-      total_input_frames += Params::frame_size;
-      audio_buffer_frames += Params::frame_size;
-      size_t frames = wm_resampler.skip (Params::frame_size);
+      size_t skip_blocks = zero_frames / Params::frame_size;
+
+      total_input_frames += Params::frame_size * skip_blocks;
+      audio_buffer_frames += Params::frame_size * skip_blocks;
+      size_t frames = wm_resampler.skip (Params::frame_size * skip_blocks);
       audio_buffer_frames -= frames;
 
       frames = limiter.skip (frames);
 
-      err = out_stream->write_frames (vector<float> (frames * n_channels));
+      vector<float> zblock (Params::frame_size * n_channels);
+      size_t wframes = frames;
+      while (wframes > 0)
+        {
+          if (wframes >= Params::frame_size)
+            {
+              err = out_stream->write_frames (zblock);
+              wframes -= Params::frame_size;
+            }
+          else
+            {
+              zblock.resize (wframes * n_channels);
+              err = out_stream->write_frames (zblock);
+              wframes = 0;
+            }
+        }
       total_output_frames += frames;
 
-      zero_frames -= Params::frame_size;
+      zero_frames -= Params::frame_size * skip_blocks;
     }
   audio_buffer.write_frames (std::vector<float> (audio_buffer_frames * n_channels));
   while (true)
