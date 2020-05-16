@@ -321,8 +321,6 @@ public:
 int
 mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 {
-  vector<float> samples;
-
   WDInputStream in_stream (&wav_data);
 
   WavData wav_data_out ({ /* no samples */ }, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
@@ -332,9 +330,7 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
   if (rc != 0)
     return rc;
 
-  samples = wav_data_out.samples();
-  samples.erase (samples.begin(), samples.begin() + zero_frames * wav_data.n_channels());
-  wav_data.set_samples (samples);
+  wav_data.set_samples (wav_data_out.samples());
 
   return 0;
 }

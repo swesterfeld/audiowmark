@@ -35,6 +35,7 @@
 using std::string;
 using std::vector;
 using std::complex;
+using std::min;
 using std::max;
 
 enum class FrameMod : uint8_t {
@@ -672,6 +673,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
   size_t audio_buffer_frames = 0;
+  size_t zero_frames_out = zero_frames;
   Error err;
   if (zero_frames >= Params::frame_size)
     {
@@ -684,22 +686,9 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
       frames = limiter.skip (frames);
 
-      vector<float> zblock (Params::frame_size * n_channels);
-      size_t wframes = frames;
-      while (wframes > 0)
-        {
-          if (wframes >= Params::frame_size)
-            {
-              err = out_stream->write_frames (zblock);
-              wframes -= Params::frame_size;
-            }
-          else
-            {
-              zblock.resize (wframes * n_channels);
-              err = out_stream->write_frames (zblock);
-              wframes = 0;
-            }
-        }
+      assert (frames < zero_frames_out);
+      zero_frames_out -= frames;
+
       total_output_frames += frames;
 
       zero_frames -= Params::frame_size * skip_blocks;
@@ -758,6 +747,14 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
       size_t max_write_frames = total_input_frames - total_output_frames;
       if (samples.size() > max_write_frames * n_channels)
         samples.resize (max_write_frames * n_channels);
+
+      const size_t cut_frames = min (samples.size() / n_channels, zero_frames_out);
+      if (cut_frames > 0)
+        {
+          samples.erase (samples.begin(), samples.begin() + cut_frames * n_channels);
+          total_output_frames += cut_frames;
+          zero_frames_out -= cut_frames;
+        }
 
       err = out_stream->write_frames (samples);
       if (err)
