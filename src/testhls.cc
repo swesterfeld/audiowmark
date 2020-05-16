@@ -434,6 +434,27 @@ test_seek (const string& in, const string& out, int pos, const string& bits)
 }
 
 int
+seek_perf (int sample_rate, int seconds)
+{
+  vector<float> samples (100);
+  WavData wav_data (samples, 2, sample_rate, 16);
+
+  double start_time = get_time();
+
+  int rc = mark_zexpand (wav_data, seconds * sample_rate, "0c");
+  if (rc != 0)
+    return rc;
+
+  double end_time = get_time();
+
+  printf ("\n\n");
+  printf ("total time %7.3f sec\n", end_time - start_time);
+  printf ("per second %7.3f ms\n", (end_time - start_time) / seconds * 1000);
+
+  return 0;
+}
+
+int
 main (int argc, char **argv)
 {
   if (argc == 5 && strcmp (argv[1], "hls-embed-context") == 0)
@@ -448,6 +469,10 @@ main (int argc, char **argv)
   else if (argc == 6 && strcmp (argv[1], "test-seek") == 0)
     {
       return test_seek (argv[2], argv[3], atoi (argv[4]), argv[5]);
+    }
+  else if (argc == 4 && strcmp (argv[1], "seek-perf") == 0)
+    {
+      return seek_perf (atoi (argv[2]), atoi (argv[3]));
     }
   else
     {
