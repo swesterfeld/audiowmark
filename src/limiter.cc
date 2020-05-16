@@ -69,22 +69,21 @@ Limiter::process (const vector<float>& samples)
 size_t
 Limiter::skip (size_t zeros)
 {
-  vector<float> samples (zeros * n_channels);
-
   assert (block_size >= 1);
-  assert (samples.size() % n_channels == 0);    // process should be called with whole frames
 
-  buffer.insert (buffer.end(), samples.begin(), samples.end());
+  size_t buffer_size = buffer.size();
+  buffer_size += zeros * n_channels;
 
   /* need at least two complete blocks in buffer to produce output */
-  const uint buffered_blocks = buffer.size() / n_channels / block_size;
+  const uint buffered_blocks = buffer_size / n_channels / block_size;
   if (buffered_blocks < 2)
-    return 0;
+    {
+      buffer.resize (buffer_size);
+      return 0;
+    }
 
   const uint blocks_todo = buffered_blocks - 1;
-
-  buffer.erase (buffer.begin(), buffer.begin() + blocks_todo * block_size * n_channels);
-
+  buffer.resize (buffer_size - blocks_todo * block_size * n_channels);
   return blocks_todo * block_size;
 }
 
