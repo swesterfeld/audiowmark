@@ -384,7 +384,7 @@ public:
   {
   }
 
-  virtual void          write_frames (const vector<float>& frames) = 0;
+  virtual void          write_frames (const vector<float>& frames, bool skip = false) = 0;
   virtual vector<float> read_frames (size_t frames) = 0;
   virtual size_t        can_read_frames() const = 0;
 };
@@ -393,13 +393,17 @@ template<class Resampler>
 class BufferedResamplerImpl : public ResamplerImpl
 {
   const int     n_channels = 0;
+  const int     old_rate = 0;
+  const int     new_rate = 0;
   bool          first_write = true;
   Resampler     m_resampler;
 
   vector<float> buffer;
 public:
-  BufferedResamplerImpl (int n_channels) :
-    n_channels (n_channels)
+  BufferedResamplerImpl (int n_channels, int old_rate, int new_rate) :
+    n_channels (n_channels),
+    old_rate (old_rate),
+    new_rate (new_rate)
   {
   }
   Resampler&
@@ -408,7 +412,7 @@ public:
     return m_resampler;
   }
   void
-  write_frames (const vector<float>& frames)
+  write_frames (const vector<float>& frames, bool skip)
   {
     if (first_write)
       {
@@ -426,20 +430,28 @@ public:
     uint start = 0;
     do
       {
-        const int out_count = Params::frame_size;
-        float out[out_count * n_channels];
+        if (frames.size() / n_channels - start >= old_rate && skip)
+          {
+            buffer.resize (buffer.size() + new_rate * n_channels);
+            start += old_rate;
+          }
+        else
+          {
+            const int out_count = Params::frame_size;
+            float out[out_count * n_channels];
 
-        m_resampler.out_count = out_count;
-        m_resampler.out_data  = out;
+            m_resampler.out_count = out_count;
+            m_resampler.out_data  = out;
 
-        m_resampler.inp_count = frames.size() / n_channels - start;
-        m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
-        m_resampler.process();
+            m_resampler.inp_count = frames.size() / n_channels - start;
+            m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
+            m_resampler.process();
 
-        size_t count = out_count - m_resampler.out_count;
-        buffer.insert (buffer.end(), out, out + count * n_channels);
+            size_t count = out_count - m_resampler.out_count;
+            buffer.insert (buffer.end(), out, out + count * n_channels);
 
-        start += frames.size() / n_channels - start - m_resampler.inp_count;
+            start += frames.size() / n_channels - start - m_resampler.inp_count;
+          }
       }
     while (start != frames.size() / n_channels);
   }
@@ -482,7 +494,7 @@ create_resampler (int n_channels, int old_rate, int new_rate)
        */
       const int hlen = 16;
 
-      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels);
+      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels, old_rate, new_rate);
       if (resampler->resampler().setup (old_rate, new_rate, n_channels, hlen) == 0)
         {
           return resampler;
@@ -490,7 +502,7 @@ create_resampler (int n_channels, int old_rate, int new_rate)
       else
         delete resampler;
 
-      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels);
+      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels, old_rate, new_rate);
       const double ratio = double (new_rate) / old_rate;
       if (vresampler->resampler().setup (ratio, n_channels, hlen) == 0)
         {
@@ -576,7 +588,7 @@ public:
         vector<float> samples (zeros * n_channels);
 
         /* resample to the watermark sample rate */
-        in_resampler->write_frames (samples);
+        in_resampler->write_frames (samples, true);
 
         size_t skip_blocks = in_resampler->can_read_frames() / Params::frame_size;
 
@@ -587,7 +599,7 @@ public:
         wm_samples.resize (wm_gen.skip (r_samples.size() / n_channels) * n_channels);
 
         /* resample back to the original sample rate of the audio file */
-        out_resampler->write_frames (wm_samples);
+        out_resampler->write_frames (wm_samples, true);
 
         size_t to_read = out_resampler->can_read_frames();
         return out_resampler->read_frames (to_read).size() / n_channels;
