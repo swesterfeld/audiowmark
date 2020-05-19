@@ -247,7 +247,6 @@ public:
   {
     assert (zeros % Params::frame_size == 0 && zeros > 0);
 
-    size_t out = 0;
     if (first_frame)
       {
         first_frame = false;
@@ -314,7 +313,7 @@ public:
   {
     assert (zeros % Params::frame_size == 0);
 
-    for (int i = 0; i < zeros / Params::frame_size; i++)
+    for (size_t i = 0; i < zeros / Params::frame_size; i++)
       bump_frame_number();
 
     return wm_synth.skip (zeros);
@@ -574,14 +573,24 @@ public:
     else
       {
         /* FIXME: inefficient */
-        vector<float> samples (Params::frame_size * n_channels);
-        size_t out = 0;
-        while (zeros)
-          {
-            zeros -= Params::frame_size;
-            out += run (samples).size() / n_channels;
-          }
-        return out;
+        vector<float> samples (zeros * n_channels);
+
+        /* resample to the watermark sample rate */
+        in_resampler->write_frames (samples);
+
+        size_t skip_blocks = in_resampler->can_read_frames() / Params::frame_size;
+
+        vector<float> r_samples = in_resampler->read_frames (Params::frame_size * skip_blocks);
+
+        /* generate watermark at normalized sample rate */
+        vector<float> wm_samples;
+        wm_samples.resize (wm_gen.skip (r_samples.size() / n_channels) * n_channels);
+
+        /* resample back to the original sample rate of the audio file */
+        out_resampler->write_frames (wm_samples);
+
+        size_t to_read = out_resampler->can_read_frames();
+        return out_resampler->read_frames (to_read).size() / n_channels;
       }
   }
   int
