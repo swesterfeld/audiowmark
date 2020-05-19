@@ -245,14 +245,16 @@ public:
   size_t
   skip (size_t zeros)
   {
-    assert (zeros == Params::frame_size);
+    assert (zeros % Params::frame_size == 0 && zeros > 0);
+
+    size_t out = 0;
     if (first_frame)
       {
         first_frame = false;
-        return 0;
+        return zeros - Params::frame_size;
       }
     else
-      return Params::frame_size;
+      return zeros;
   }
 };
 
@@ -310,11 +312,12 @@ public:
   size_t
   skip (size_t zeros)
   {
-    assert (zeros == Params::frame_size);
+    assert (zeros % Params::frame_size == 0);
 
-    bump_frame_number();
+    for (int i = 0; i < zeros / Params::frame_size; i++)
+      bump_frame_number();
 
-    return wm_synth.skip (Params::frame_size);
+    return wm_synth.skip (zeros);
   }
   void
   bump_frame_number()
@@ -564,23 +567,22 @@ public:
   skip (size_t zeros)
   {
     assert (zeros % Params::frame_size == 0);
-    size_t out = 0;
-    while (zeros)
+    if (!need_resampler)
       {
-        if (!need_resampler)
-          {
-            out += wm_gen.skip (Params::frame_size); /* cheap case */
-          }
-        else
-          {
-            /* FIXME: inefficient */
-            vector<float> samples (Params::frame_size * n_channels);
-            size_t n_values = run (samples).size();
-            out += n_values / n_channels;
-          }
-        zeros -= Params::frame_size;
+        return wm_gen.skip (zeros); /* cheap case */
       }
-    return out;
+    else
+      {
+        /* FIXME: inefficient */
+        vector<float> samples (Params::frame_size * n_channels);
+        size_t out = 0;
+        while (zeros)
+          {
+            zeros -= Params::frame_size;
+            out += run (samples).size() / n_channels;
+          }
+        return out;
+      }
   }
   int
   data_blocks() const
