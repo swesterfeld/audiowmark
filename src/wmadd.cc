@@ -384,7 +384,8 @@ public:
   {
   }
 
-  virtual void          write_frames (const vector<float>& frames, bool skip = false) = 0;
+  virtual size_t        skip (size_t zeros) = 0;
+  virtual void          write_frames (const vector<float>& frames) = 0;
   virtual vector<float> read_frames (size_t frames) = 0;
   virtual size_t        can_read_frames() const = 0;
 };
@@ -411,8 +412,26 @@ public:
   {
     return m_resampler;
   }
+  size_t
+  skip (size_t zeros)
+  {
+    size_t extra = 0;
+    while (zeros > size_t (old_rate))
+      {
+        /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
+        zeros -= old_rate;
+        extra += new_rate;
+      }
+
+    vector<float> samples (zeros * n_channels);
+    write_frames (samples);
+    size_t cr = can_read_frames() + extra;
+    cr -= cr % Params::frame_size;
+    read_frames (cr - extra);
+    return cr;
+  }
   void
-  write_frames (const vector<float>& frames, bool skip)
+  write_frames (const vector<float>& frames)
   {
     if (first_write)
       {
@@ -430,28 +449,20 @@ public:
     uint start = 0;
     do
       {
-        if (frames.size() / n_channels - start >= old_rate && skip)
-          {
-            buffer.resize (buffer.size() + new_rate * n_channels);
-            start += old_rate;
-          }
-        else
-          {
-            const int out_count = Params::frame_size;
-            float out[out_count * n_channels];
+        const int out_count = Params::frame_size;
+        float out[out_count * n_channels];
 
-            m_resampler.out_count = out_count;
-            m_resampler.out_data  = out;
+        m_resampler.out_count = out_count;
+        m_resampler.out_data  = out;
 
-            m_resampler.inp_count = frames.size() / n_channels - start;
-            m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
-            m_resampler.process();
+        m_resampler.inp_count = frames.size() / n_channels - start;
+        m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
+        m_resampler.process();
 
-            size_t count = out_count - m_resampler.out_count;
-            buffer.insert (buffer.end(), out, out + count * n_channels);
+        size_t count = out_count - m_resampler.out_count;
+        buffer.insert (buffer.end(), out, out + count * n_channels);
 
-            start += frames.size() / n_channels - start - m_resampler.inp_count;
-          }
+        start = frames.size() / n_channels - m_resampler.inp_count;
       }
     while (start != frames.size() / n_channels);
   }
@@ -584,25 +595,12 @@ public:
       }
     else
       {
-        /* FIXME: inefficient */
-        vector<float> samples (zeros * n_channels);
-
         /* resample to the watermark sample rate */
-        in_resampler->write_frames (samples, true);
+        size_t out = in_resampler->skip (zeros);
 
-        size_t skip_blocks = in_resampler->can_read_frames() / Params::frame_size;
+        out = wm_gen.skip (out);
 
-        vector<float> r_samples = in_resampler->read_frames (Params::frame_size * skip_blocks);
-
-        /* generate watermark at normalized sample rate */
-        vector<float> wm_samples;
-        wm_samples.resize (wm_gen.skip (r_samples.size() / n_channels) * n_channels);
-
-        /* resample back to the original sample rate of the audio file */
-        out_resampler->write_frames (wm_samples, true);
-
-        size_t to_read = out_resampler->can_read_frames();
-        return out_resampler->read_frames (to_read).size() / n_channels;
+        return out_resampler->skip (out);
       }
   }
   int
