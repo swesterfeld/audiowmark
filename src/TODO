@@ -3,3 +3,10 @@ possible improvements:
 
 videowmark:
 opus length ffprobe -show_format phil.mkv
+
+video-streaming:
+- bump frame number should be loop-free
+- total sample test should be reenabled
+- on demand init of frame mod vectors
+- localize audio_buffer_frames
+- clang
