@@ -415,20 +415,20 @@ public:
   size_t
   skip (size_t zeros)
   {
-    size_t extra = 0;
-    while (zeros > size_t (old_rate))
-      {
-        /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
-        zeros -= old_rate;
-        extra += new_rate;
-      }
+    /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
+    int seconds = 0;
+    if (zeros >= Params::frame_size)
+      seconds = (zeros - Params::frame_size) / old_rate;
 
-    vector<float> samples (zeros * n_channels);
-    write_frames (samples);
-    size_t cr = can_read_frames() + extra;
-    cr -= cr % Params::frame_size;
-    read_frames (cr - extra);
-    return cr;
+    const int extra = new_rate * seconds;
+    zeros -= old_rate * seconds;
+
+    write_frames (vector<float> (zeros * n_channels));
+
+    size_t out = can_read_frames() + extra;
+    out -= out % Params::frame_size; /* always skip whole frames */
+    read_frames (out - extra);
+    return out;
   }
   void
   write_frames (const vector<float>& frames)
