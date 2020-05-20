@@ -245,9 +245,9 @@ public:
   size_t
   skip (size_t zeros)
   {
-    assert (zeros % Params::frame_size == 0 && zeros > 0);
+    assert (zeros % Params::frame_size == 0);
 
-    if (first_frame)
+    if (first_frame && zeros > 0)
       {
         first_frame = false;
         return zeros - Params::frame_size;
