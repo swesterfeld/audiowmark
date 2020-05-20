@@ -430,7 +430,7 @@ test_seek (const string& in, const string& out, int pos, const string& bits)
 }
 
 int
-seek_perf (int sample_rate, int seconds)
+seek_perf (int sample_rate, double seconds)
 {
   vector<float> samples (100);
   WavData wav_data (samples, 2, sample_rate, 16);
@@ -468,7 +468,7 @@ main (int argc, char **argv)
     }
   else if (argc == 4 && strcmp (argv[1], "seek-perf") == 0)
     {
-      return seek_perf (atoi (argv[2]), atoi (argv[3]));
+      return seek_perf (atoi (argv[2]), atof (argv[3]));
     }
   else
     {
