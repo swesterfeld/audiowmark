@@ -693,11 +693,12 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
+  size_t zero_frames_in  = zero_frames;
   size_t zero_frames_out = zero_frames;
   Error err;
-  if (zero_frames >= Params::frame_size)
+  if (zero_frames_in >= Params::frame_size)
     {
-      const size_t skip_frames = zero_frames - zero_frames % Params::frame_size;
+      const size_t skip_frames = zero_frames_in - zero_frames_in % Params::frame_size;
 
       total_input_frames += skip_frames;
       size_t out = wm_resampler.skip (skip_frames);
@@ -709,15 +710,15 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
       zero_frames_out -= out;
       total_output_frames += out;
-      zero_frames -= skip_frames;
+      zero_frames_in -= skip_frames;
     }
   while (true)
     {
-      if (zero_frames > 0)
+      if (zero_frames_in > 0)
         {
-          err = in_stream->read_frames (samples, Params::frame_size - zero_frames);
-          samples.insert (samples.begin(), zero_frames * n_channels, 0);
-          zero_frames = 0;
+          err = in_stream->read_frames (samples, Params::frame_size - zero_frames_in);
+          samples.insert (samples.begin(), zero_frames_in * n_channels, 0);
+          zero_frames_in = 0;
         }
       else
         {
@@ -781,16 +782,15 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
         }
       total_output_frames += samples.size() / n_channels;
     }
-#if 0
   if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
-      if (total_output_frames != in_stream->n_frames())
+      const size_t expect_frames = in_stream->n_frames() + zero_frames;
+      if (total_output_frames != expect_frames)
         {
-          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", in_stream->n_frames(), total_output_frames);
+          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", expect_frames, total_output_frames);
           return 1;
         }
     }
-#endif
 
   err = out_stream->close();
   if (err)

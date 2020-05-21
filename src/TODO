@@ -5,5 +5,4 @@ videowmark:
 opus length ffprobe -show_format phil.mkv
 
 video-streaming:
-- total sample test should be reenabled
 - clang
