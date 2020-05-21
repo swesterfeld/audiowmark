@@ -693,28 +693,24 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
-  size_t audio_buffer_frames = 0;
   size_t zero_frames_out = zero_frames;
   Error err;
   if (zero_frames >= Params::frame_size)
     {
-      size_t skip_blocks = zero_frames / Params::frame_size;
+      const size_t skip_frames = zero_frames - zero_frames % Params::frame_size;
 
-      total_input_frames += Params::frame_size * skip_blocks;
-      audio_buffer_frames += Params::frame_size * skip_blocks;
-      size_t frames = wm_resampler.skip (Params::frame_size * skip_blocks);
-      audio_buffer_frames -= frames;
+      total_input_frames += skip_frames;
+      size_t out = wm_resampler.skip (skip_frames);
 
-      frames = limiter.skip (frames);
+      audio_buffer.write_frames (std::vector<float> ((skip_frames - out) * n_channels));
 
-      assert (frames < zero_frames_out);
-      zero_frames_out -= frames;
+      out = limiter.skip (out);
+      assert (out < zero_frames_out);
 
-      total_output_frames += frames;
-
-      zero_frames -= Params::frame_size * skip_blocks;
+      zero_frames_out -= out;
+      total_output_frames += out;
+      zero_frames -= skip_frames;
     }
-  audio_buffer.write_frames (std::vector<float> (audio_buffer_frames * n_channels));
   while (true)
     {
       if (zero_frames > 0)
