@@ -416,11 +416,11 @@ public:
   skip (size_t zeros)
   {
     /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
-    int seconds = 0;
+    size_t seconds = 0;
     if (zeros >= Params::frame_size)
       seconds = (zeros - Params::frame_size) / old_rate;
 
-    const int extra = new_rate * seconds;
+    const size_t extra = new_rate * seconds;
     zeros -= old_rate * seconds;
 
     write_frames (vector<float> (zeros * n_channels));
