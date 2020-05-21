@@ -265,8 +265,8 @@ public:
 class WatermarkGen
 {
   const int                 n_channels = 0;
+  const size_t              frames_per_block = 0;
   size_t                    frame_number = 0;
-  int                       ab = 0;
   int                       m_data_blocks = 0;
 
   FFTAnalyzer               fft_analyzer;
@@ -278,16 +278,15 @@ class WatermarkGen
 public:
   WatermarkGen (int n_channels, const vector<int>& bitvec) :
     n_channels (n_channels),
+    frames_per_block (mark_sync_frame_count() + mark_data_frame_count()),
     fft_analyzer (n_channels),
     wm_synth (n_channels),
     bitvec (bitvec)
   {
-    /* start writing a partial B-block as padding */
-    init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
 
-    assert (frame_mod_vec_b.size() > Params::frames_pad_start);
-    frame_number = frame_mod_vec_b.size() - Params::frames_pad_start;
-    ab = 1;
+    /* start writing a partial B-block as padding */
+    assert (frames_per_block > Params::frames_pad_start);
+    frame_number = 2 * frames_per_block - Params::frames_pad_start;
   }
   vector<float>
   run (const vector<float>& samples)
@@ -300,11 +299,13 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
 
-    const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
+    const vector<FrameMod>& frame_mod = get_frame_mod();
     for (int ch = 0; ch < n_channels; ch++)
-      apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+      apply_frame_mod (frame_mod, fft_out[ch], fft_delta_spect[ch]);
 
-    bump_frame_number();
+    frame_number++;
+    if (frame_number % frames_per_block == 0)
+      m_data_blocks++;
 
     return wm_synth.run (fft_delta_spect);
   }
@@ -313,27 +314,26 @@ public:
   {
     assert (zeros % Params::frame_size == 0);
 
-    for (size_t i = 0; i < zeros / Params::frame_size; i++)
-      bump_frame_number();
-
+    frame_number += zeros / Params::frame_size;
     return wm_synth.skip (zeros);
   }
-  void
-  bump_frame_number()
+  const vector<FrameMod>&
+  get_frame_mod()
   {
-    const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
-
-    frame_number++;
-    if (frame_number == frame_mod_vec.size())
+    const size_t f = frame_number % (frames_per_block * 2);
+    if (f >= frames_per_block) /* B block */
       {
-        frame_number = 0;
+        if (frame_mod_vec_b.empty())
+          init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
 
-        ab = (ab + 1) & 1; // write A|B|A|B|...
-        m_data_blocks++;
-
-        // initialize A-block frame mod vector here to minimize startup latency
+        return frame_mod_vec_b[f - frames_per_block];
+      }
+    else /* A block */
+      {
         if (frame_mod_vec_a.empty())
           init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
+
+        return frame_mod_vec_a[f];
       }
   }
   int
