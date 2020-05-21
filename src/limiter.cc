@@ -75,14 +75,14 @@ Limiter::skip (size_t zeros)
   buffer_size += zeros * n_channels;
 
   /* need at least two complete blocks in buffer to produce output */
-  const uint buffered_blocks = buffer_size / n_channels / block_size;
+  const size_t buffered_blocks = buffer_size / n_channels / block_size;
   if (buffered_blocks < 2)
     {
       buffer.resize (buffer_size);
       return 0;
     }
 
-  const uint blocks_todo = buffered_blocks - 1;
+  const size_t blocks_todo = buffered_blocks - 1;
   buffer.resize (buffer_size - blocks_todo * block_size * n_channels);
   return blocks_todo * block_size;
 }
