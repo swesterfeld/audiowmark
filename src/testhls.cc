@@ -470,6 +470,23 @@ main (int argc, char **argv)
     {
       return seek_perf (atoi (argv[2]), atof (argv[3]));
     }
+  else if (argc == 4 && strcmp (argv[1], "ff-decode") == 0)
+    {
+      WavData wd;
+      Error err = ff_decode (argv[2], TSReader(), wd);
+      if (err)
+        {
+          error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
+          return 1;
+        }
+      err = wd.save (argv[3]);
+      if (err)
+        {
+          error ("audiowmark: hls: save failed: %s\n", err.message());
+          return 1;
+        }
+      return 0;
+    }
   else
     {
       error ("testhls: error parsing command line arguments\n");
