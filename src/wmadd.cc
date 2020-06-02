@@ -30,6 +30,7 @@
 #include "rawinputstream.hh"
 #include "rawoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
+#include "shortcode.hh"
 
 using std::string;
 using std::vector;
@@ -149,7 +150,7 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
 
   /* forward error correction */
   ConvBlockType block_type  = ab ? ConvBlockType::b : ConvBlockType::a;
-  vector<int>   bitvec_fec  = randomize_bit_order (conv_encode (block_type, bitvec), /* encode */ true);
+  vector<int>   bitvec_fec  = randomize_bit_order (code_encode (block_type, bitvec), /* encode */ true);
 
   mark_sync (frame_mod_vec, ab);
   mark_data (frame_mod_vec, bitvec_fec);
@@ -551,6 +552,11 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (bitvec.empty())
     {
       error ("audiowmark: cannot parse bits %s\n", bits.c_str());
+      return 1;
+    }
+  if (Params::payload_short && bitvec.size() != Params::payload_size)
+    {
+      error ("audiowmark: number of message bits must match payload size (%zd bits)\n", Params::payload_size);
       return 1;
     }
   if (bitvec.size() > Params::payload_size)

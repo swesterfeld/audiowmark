@@ -43,7 +43,8 @@ public:
   static           bool snr;                       // compute/show snr while adding watermark
   static           int  have_key;
 
-  static constexpr size_t payload_size     = 128;  // number of payload bits for the watermark
+  static           size_t payload_size;            // number of payload bits for the watermark
+  static           bool   payload_short;
 
   static constexpr int sync_bits           = 6;
   static constexpr int sync_frames_per_bit = 85;

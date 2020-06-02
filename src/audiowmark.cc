@@ -57,6 +57,7 @@ print_usage()
   printf ("Global options:\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --linear              disable non-linear bit storage\n");
+  printf ("  --short               enable short payload mode (16 bits)\n");
   printf ("  --key <file>          load watermarking key from file\n");
   printf ("  -q, --quiet           disable information messages\n");
   printf ("\n");
@@ -183,6 +184,11 @@ parse_options (int   *argc_p,
 	{
           Params::mix = false;
 	}
+      else if (check_arg (argc, argv, &i, "--short"))
+        {
+          Params::payload_size = 16;
+          Params::payload_short = true;
+        }
       else if (check_arg (argc, argv, &i, "--hard"))
 	{
           Params::hard = true;
