@@ -16,6 +16,8 @@
  */
 
 #include <vector>
+#include <map>
+#include <sstream>
 
 #include <sys/time.h>
 #include <assert.h>
@@ -24,6 +26,7 @@
 
 using std::vector;
 using std::string;
+using std::map;
 
 static double
 gettime()
@@ -32,6 +35,50 @@ gettime()
   gettimeofday (&tv, 0);
 
   return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
+
+vector<int>
+generate_error_vector (size_t n, int errors)
+{
+  vector<int> ev (n);
+
+  while (errors)
+    {
+      size_t pos = rand() % ev.size();
+      if (ev[pos] != 1)
+        {
+          ev[pos] = 1;
+          errors--;
+        }
+    }
+  return ev;
+}
+
+int
+hamming_weight (const vector<int>& bits)
+{
+  int w = 0;
+  for (auto b : bits)
+    w += b;
+  return w;
+}
+
+double
+factorial (int x)
+{
+  double p = 1;
+  for (int i = 1; i <= x; i++)
+    p *= i;
+  return p;
+}
+
+string
+number_format (double d)
+{
+  std::ostringstream buff;
+  buff.imbue (std::locale(""));
+  buff << (uint64_t) d;
+  return buff.str();
 }
 
 int
@@ -72,5 +119,51 @@ main (int argc, char **argv)
           assert (out_bits == in_bits);
         }
       printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);
+    }
+  if (argc == 2 && string (argv[1]) == "table")
+    {
+      map<vector<int>, vector<int>> table;
+      vector<int> weight (48 + 1);
+      for (size_t i = 0; i < (1 << 16); i++)
+        {
+          vector<int> in;
+          for (size_t bit = 0; bit < 16; bit++)
+            {
+              if (i & (1 << bit))
+                in.push_back (1);
+              else
+                in.push_back (0);
+            }
+          vector<int> coded_bits = short_encode_blk (in);
+          table[coded_bits] = in;
+          weight[hamming_weight (coded_bits)]++;
+          printf ("T: ");
+          for (auto b : coded_bits)
+            printf ("%d", b);
+          printf ("\n");
+
+        }
+      for (size_t i = 0; i <= 48; i++)
+        {
+          if (weight[i])
+            printf ("W %3zd %6d %20s\n", i, weight[i], number_format (factorial (48) / (factorial (i) * factorial (48 - i)) / weight[i]).c_str());
+        }
+
+      const size_t runs = 50LL * 1000 * 1000 * 1000;
+      size_t match = 0;
+      for (size_t i = 0; i < runs; i++)
+        {
+          vector<int> in_bits = generate_error_vector (48, 16);
+          auto it = table.find (in_bits);
+
+          if (it != table.end())
+            match++;
+
+          if ((i % 1000000) == 0)
+            {
+              printf ("%zd / %zd\r", match, i);
+              fflush (stdout);
+            }
+        }
     }
 }
