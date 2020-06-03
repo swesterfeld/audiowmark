@@ -31,4 +31,7 @@ size_t           short_code_size (ConvBlockType block_type, size_t msg_size);
 std::vector<int> short_encode (ConvBlockType block_type, const std::vector<int>& in_bits);
 std::vector<int> short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out = nullptr);
 
+std::vector<int> short_encode_blk (const std::vector<int>& in_bits);
+std::vector<int> short_decode_blk (const std::vector<int>& coded_bits);
+
 #endif /* AUDIOWMARK_SHORT_CODE_HH */

@@ -87,7 +87,7 @@ code_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits
 }
 
 vector<int>
-short_encode (ConvBlockType block_type, const vector<int>& in_bits)
+short_encode_blk (const vector<int>& in_bits)
 {
   assert (gen_matrix.size() == in_bits.size());
 
@@ -104,7 +104,13 @@ short_encode (ConvBlockType block_type, const vector<int>& in_bits)
         }
       out_bits.push_back (x);
     }
-  return conv_encode (block_type, out_bits);
+  return out_bits;
+}
+
+vector<int>
+short_encode (ConvBlockType block_type, const vector<int>& in_bits)
+{
+  return conv_encode (block_type, short_encode_blk (in_bits));
 }
 
 size_t
@@ -116,10 +122,8 @@ short_code_size (ConvBlockType block_type, size_t msg_size)
 }
 
 vector<int>
-short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out)
+short_decode_blk (const vector<int>& coded_bits)
 {
-  vector<int> xbits = conv_decode_soft (block_type, coded_bits, error_out);
-
   vector<int> out_bits;
   for (size_t c = 0; c < (1 << gen_in_count); c++)
     {
@@ -136,7 +140,7 @@ short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bit
             }
           w.push_back (x);
         }
-      if (w == xbits)
+      if (w == coded_bits)
         {
           for (size_t bit = 0; bit < gen_in_count; bit++)
             {
@@ -154,4 +158,10 @@ short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bit
     }
 
   return out_bits;
+}
+
+vector<int>
+short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out)
+{
+  return short_decode_blk (conv_decode_soft (block_type, coded_bits, error_out));
 }
