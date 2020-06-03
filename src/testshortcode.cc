@@ -84,9 +84,16 @@ number_format (double d)
 int
 main (int argc, char **argv)
 {
+  constexpr int K = 16;
+  constexpr int N = 48;
+
+  srand (time (NULL));
+
   if (argc == 1)
     {
-      vector<int> in_bits = { 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0 };
+      vector<int> in_bits;
+      while (in_bits.size() != K)
+        in_bits.push_back (rand() & 1);
 
       printf ("in: ");
       for (auto b : in_bits)
@@ -108,7 +115,7 @@ main (int argc, char **argv)
   if (argc == 2 && string (argv[1]) == "perf")
     {
       vector<int> in_bits;
-      while (in_bits.size() != 16)
+      while (in_bits.size() != K)
         in_bits.push_back (rand() & 1);
 
       const double start_t = gettime();
@@ -123,11 +130,11 @@ main (int argc, char **argv)
   if (argc == 2 && string (argv[1]) == "table")
     {
       map<vector<int>, vector<int>> table;
-      vector<int> weight (48 + 1);
-      for (size_t i = 0; i < (1 << 16); i++)
+      vector<int> weight (N + 1);
+      for (size_t i = 0; i < (1 << K); i++)
         {
           vector<int> in;
-          for (size_t bit = 0; bit < 16; bit++)
+          for (size_t bit = 0; bit < K; bit++)
             {
               if (i & (1 << bit))
                 in.push_back (1);
@@ -143,17 +150,17 @@ main (int argc, char **argv)
           printf ("\n");
 
         }
-      for (size_t i = 0; i <= 48; i++)
+      for (size_t i = 0; i <= N; i++)
         {
           if (weight[i])
-            printf ("W %3zd %6d %20s\n", i, weight[i], number_format (factorial (48) / (factorial (i) * factorial (48 - i)) / weight[i]).c_str());
+            printf ("W %3zd %6d %20s\n", i, weight[i], number_format (factorial (N) / (factorial (i) * factorial (N - i)) / weight[i]).c_str());
         }
 
       const size_t runs = 50LL * 1000 * 1000 * 1000;
       size_t match = 0;
       for (size_t i = 0; i < runs; i++)
         {
-          vector<int> in_bits = generate_error_vector (48, 16);
+          vector<int> in_bits = generate_error_vector (N, K);
           auto it = table.find (in_bits);
 
           if (it != table.end())
@@ -165,5 +172,44 @@ main (int argc, char **argv)
               fflush (stdout);
             }
         }
+    }
+  if (argc == 2 && string (argv[1]) == "distance")
+    {
+      vector<vector<int>> cwords;
+      for (size_t i = 0; i < (1 << K); i++)
+        {
+          vector<int> in;
+          for (size_t bit = 0; bit < K; bit++)
+            {
+              if (i & (1 << bit))
+                in.push_back (1);
+              else
+                in.push_back (0);
+            }
+          cwords.push_back (short_encode_blk (in));
+        }
+      int mhd = 100000;
+      for (size_t a = 0; a < cwords.size(); a++)
+        {
+          for (size_t b = 0; b < cwords.size(); b++)
+            {
+              if (a != b)
+                {
+                  size_t hd = 0;
+
+                  for (size_t c = 0; c < cwords[a].size(); c++)
+                    hd += cwords[a][c] ^ cwords[b][c];
+                  if (hd < mhd)
+                    mhd = hd;
+                }
+            }
+          if ((a & 255) == 0)
+            {
+              printf ("%zd\r", a);
+              fflush (stdout);
+            }
+        }
+      printf ("\n");
+      printf ("%d\n", mhd);
     }
 }
