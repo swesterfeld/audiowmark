@@ -19,6 +19,9 @@ fi
 if [ "x$AWM_MULTI_CLIP" == "x" ]; then
   AWM_MULTI_CLIP=1
 fi
+if [ "x$AWM_PATTERN_BITS" == "x" ]; then
+  AWM_PATTERN_BITS=128
+fi
 
 {
   if [ "x$AWM_SET" == "xsmall" ]; then
@@ -49,6 +52,7 @@ do
       # pseudo random pattern, 128 bit
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
     fi
+    PATTERN=${PATTERN:0:$((AWM_PATTERN_BITS / 4))}
     echo in_pattern $PATTERN
     echo in_flags $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED
     audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet
