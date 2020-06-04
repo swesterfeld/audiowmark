@@ -84,8 +84,8 @@ number_format (double d)
 int
 main (int argc, char **argv)
 {
-  constexpr int K = 16;
-  constexpr int N = 48;
+  constexpr int K = 12;
+  constexpr int N = 56;
 
   srand (time (NULL));
 

@@ -186,7 +186,7 @@ parse_options (int   *argc_p,
 	}
       else if (check_arg (argc, argv, &i, "--short"))
         {
-          Params::payload_size = 16;
+          Params::payload_size = 12;
           Params::payload_short = true;
         }
       else if (check_arg (argc, argv, &i, "--hard"))
