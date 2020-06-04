@@ -56,8 +56,14 @@ do
     echo in_pattern $PATTERN
     echo in_flags $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED
     audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet
+    CUT=0
+    if [ "x$AWM_ALWAYS_CUT" != x ]; then
+      CUT="$AWM_ALWAYS_CUT"
+    fi
     if [ "x$AWM_RAND_CUT" != x ]; then
-      CUT=$RANDOM
+      CUT=$((CUT + RANDOM))
+    fi
+    if [ "x$CUT" != x0 ]; then
       audiowmark cut-start "${AWM_FILE}.wav" "${AWM_FILE}.wav" $CUT
       TEST_CUT_ARGS="--test-cut $CUT"
       echo in_cut $CUT
