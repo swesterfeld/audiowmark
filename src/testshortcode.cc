@@ -114,14 +114,14 @@ main (int argc, char **argv)
     }
   if (argc == 2 && string (argv[1]) == "perf")
     {
-      vector<int> in_bits;
-      while (in_bits.size() != K)
-        in_bits.push_back (rand() & 1);
-
       const double start_t = gettime();
-      const size_t runs = 20;
+      const size_t runs = 100;
       for (size_t i = 0; i < runs; i++)
         {
+          vector<int> in_bits;
+          while (in_bits.size() != K)
+            in_bits.push_back (rand() & 1);
+
           vector<int> out_bits = short_decode_blk (short_encode_blk (in_bits));
           assert (out_bits == in_bits);
         }
@@ -154,6 +154,11 @@ main (int argc, char **argv)
         {
           if (weight[i])
             printf ("W %3zd %6d %20s\n", i, weight[i], number_format (factorial (N) / (factorial (i) * factorial (N - i)) / weight[i]).c_str());
+        }
+      /* decoding test */
+      for (auto it : table)
+        {
+          assert (short_decode_blk (it.first) == it.second);
         }
 
       const size_t runs = 50LL * 1000 * 1000 * 1000;

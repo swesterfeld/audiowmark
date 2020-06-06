@@ -24,7 +24,7 @@
 using std::vector;
 
 #if 0
-/* codetables.de */
+/* codetables.de / magma online calculator BKLC (GF(2), N, K) */
 static vector<vector<int>> block_48_16_16 = {
   { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1 },
   { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0 },
@@ -148,7 +148,7 @@ short_decode_blk (const vector<int>& coded_bits)
   vector<int> out_bits;
   for (size_t c = 0; c < (1 << gen_in_count); c++)
     {
-      vector<int> w;
+      bool match = true;
       for (size_t j = 0; j < gen_out_count; j++)
         {
           int x = 0;
@@ -159,9 +159,13 @@ short_decode_blk (const vector<int>& coded_bits)
                   x ^= gen_matrix[bit][j];
                 }
             }
-          w.push_back (x);
+          if (coded_bits[j] != x)
+            {
+              match = false;
+              break;
+            }
         }
-      if (w == coded_bits)
+      if (match)
         {
           for (size_t bit = 0; bit < gen_in_count; bit++)
             {
