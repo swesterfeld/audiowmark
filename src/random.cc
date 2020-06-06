@@ -120,9 +120,10 @@ Random::seed (uint64_t seed, Stream stream)
   buffer_pos = 0;
   buffer.clear();
 
-  unsigned char plain_text[aes_key.size()] = { 0, };
+  unsigned char plain_text[aes_key.size()];
   unsigned char cipher_text[aes_key.size()];
 
+  memset (plain_text, 0, sizeof (plain_text));
   uint64_to_buffer (seed, &plain_text[0]);
 
   plain_text[8] = uint8_t (stream);
