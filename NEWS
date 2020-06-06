@@ -1,3 +1,8 @@
+Overview of Changes in audiowmark-0.4.2:
+
+* compile fixes for g++-9 and clang++-10
+* add experimental support for short (12 bit) payload
+
 Overview of Changes in audiowmark-0.4.1:
 
 * initial public release
