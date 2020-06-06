@@ -170,6 +170,28 @@ watermark. Fractional strengths (like 7.5) are possible.
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
 
+== Short Payload (experimental)
+
+By default, the watermark will store a 128-bit message. In this mode, we
+recommend using a 128bit hash (or HMAC) as payload. No error checking is
+performed, the user needs to test patterns that the watermarker decodes to
+ensure that they really are one of the expected patterns, not a decoding
+error.
+
+As an alternative, a an experimental short (12 bits) payload option is
+available, used like
+
+  audiowmark add --short in.wav out.wav abc
+  audiowmark get --short out.wav
+
+Internally, a larger set of bits is sent to ensure that decoded short patterns
+are really valid, so in this mode, error checking is performed after decoding,
+and only valid patterns are reported.
+
+Besides error checking, the advantage of a short payload is that fewer bits
+need to be sent, so decoding will more likely to be successful on shorter
+clips.
+
 == Video Files
 
 For video files, `videowmark` can be used to add a watermark to the audio track
