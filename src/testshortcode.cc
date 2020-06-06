@@ -200,7 +200,7 @@ main (int argc, char **argv)
             {
               if (a != b)
                 {
-                  size_t hd = 0;
+                  int hd = 0;
 
                   for (size_t c = 0; c < cwords[a].size(); c++)
                     hd += cwords[a][c] ^ cwords[b][c];
