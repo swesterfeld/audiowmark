@@ -43,11 +43,11 @@ public:
   ~SFInputStream();
 
   Error               open (const std::string& filename);
-  Error               read_frames (std::vector<float>& samples, size_t count);
+  Error               read_frames (std::vector<float>& samples, size_t count) override;
   void                close();
 
   int
-  n_channels() const
+  n_channels() const override
   {
     return m_n_channels;
   }

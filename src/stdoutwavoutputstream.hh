@@ -44,7 +44,7 @@ public:
 
   Error open (int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   Error write_frames (const std::vector<float>& frames) override;
-  Error close();
+  Error close() override;
   int  sample_rate() const override;
   int  bit_depth() const override;
   int  n_channels() const override;
