@@ -178,8 +178,8 @@ performed, the user needs to test patterns that the watermarker decodes to
 ensure that they really are one of the expected patterns, not a decoding
 error.
 
-As an alternative, a an experimental short (12 bits) payload option is
-available, used like
+As an alternative, an experimental short (12 bits) payload option is available,
+used like
 
   audiowmark add --short in.wav out.wav abc
   audiowmark get --short out.wav
