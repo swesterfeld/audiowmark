@@ -84,8 +84,9 @@ number_format (double d)
 int
 main (int argc, char **argv)
 {
-  constexpr int K = 12;
-  constexpr int N = 56;
+  size_t N, K;
+  short_code_get_n_k (N, K);
+  printf ("using (%zd,%zd) code\n", N, K);
 
   srand (time (NULL));
 
@@ -131,7 +132,7 @@ main (int argc, char **argv)
     {
       map<vector<int>, vector<int>> table;
       vector<int> weight (N + 1);
-      for (size_t i = 0; i < (1 << K); i++)
+      for (size_t i = 0; i < size_t (1 << K); i++)
         {
           vector<int> in;
           for (size_t bit = 0; bit < K; bit++)
@@ -181,7 +182,7 @@ main (int argc, char **argv)
   if (argc == 2 && string (argv[1]) == "distance")
     {
       vector<vector<int>> cwords;
-      for (size_t i = 0; i < (1 << K); i++)
+      for (size_t i = 0; i < size_t (1 << K); i++)
         {
           vector<int> in;
           for (size_t bit = 0; bit < K; bit++)
