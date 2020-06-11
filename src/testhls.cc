@@ -124,7 +124,7 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
 }
 
 int
-hls_embed_context (const string& in_dir, const string& out_dir, const string& filename)
+hls_embed_context (const string& in_dir, const string& out_dir, const string& filename, const string& audio_master)
 {
   string in_name = in_dir + "/" + filename;
   FILE *in_file = fopen (in_name.c_str(), "r");
@@ -143,6 +143,14 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
   if (!out_file)
     {
       error ("audiowmark: error opening output playlist %s\n", out_name.c_str());
+      return 1;
+    }
+
+  WavData audio_master_data;
+  Error err = audio_master_data.load (audio_master);
+  if (err)
+    {
+      error ("audiowmark: failed to load audio master: %s\n", audio_master.c_str());
       return 1;
     }
 
@@ -453,10 +461,10 @@ seek_perf (int sample_rate, double seconds)
 int
 main (int argc, char **argv)
 {
-  if (argc == 5 && strcmp (argv[1], "hls-embed-context") == 0)
+  if (argc == 6 && strcmp (argv[1], "hls-embed-context") == 0)
     {
-      printf ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s\n", argv[2], argv[3], argv[4]);
-      return hls_embed_context (argv[2], argv[3], argv[4]);
+      printf ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s audio_master=%s\n", argv[2], argv[3], argv[4], argv[5]);
+      return hls_embed_context (argv[2], argv[3], argv[4], argv[5]);
     }
   else if (argc == 5 && strcmp (argv[1], "hls-mark") == 0)
     {
