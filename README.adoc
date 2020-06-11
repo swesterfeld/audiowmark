@@ -178,11 +178,12 @@ performed, the user needs to test patterns that the watermarker decodes to
 ensure that they really are one of the expected patterns, not a decoding
 error.
 
-As an alternative, an experimental short (12 bits) payload option is available,
-used like
+As an alternative, an experimental short payload option is available, for very
+short payloads (12, 16 or 20 bits). It is enabled using the `--short <bits>`
+command line option, for instance for 16 bits:
 
-  audiowmark add --short in.wav out.wav abc
-  audiowmark get --short out.wav
+  audiowmark add --short 16 in.wav out.wav abcd
+  audiowmark get --short 16 out.wav
 
 Internally, a larger set of bits is sent to ensure that decoded short patterns
 are really valid, so in this mode, error checking is performed after decoding,
