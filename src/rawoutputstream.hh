@@ -45,7 +45,7 @@ public:
 
   Error open (const std::string& filename, const RawFormat& format);
   Error write_frames (const std::vector<float>& frames) override;
-  Error close();
+  Error close() override;
 };
 
 #endif /* AUDIOWMARK_RAW_OUTPUT_STREAM_HH */

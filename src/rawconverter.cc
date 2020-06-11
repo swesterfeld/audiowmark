@@ -21,6 +21,10 @@
 
 using std::vector;
 
+RawConverter::~RawConverter()
+{
+}
+
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 class RawConverterImpl : public RawConverter
 {

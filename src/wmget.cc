@@ -24,6 +24,7 @@
 #include "wavdata.hh"
 #include "wmcommon.hh"
 #include "convcode.hh"
+#include "shortcode.hh"
 
 using std::string;
 using std::vector;
@@ -758,7 +759,7 @@ public:
     SyncFinder sync_finder;
     sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::BLOCK);
 
-    vector<float> raw_bit_vec_all (conv_code_size (ConvBlockType::ab, Params::payload_size));
+    vector<float> raw_bit_vec_all (code_size (ConvBlockType::ab, Params::payload_size));
     vector<int>   raw_bit_vec_norm (2);
 
     SyncFinder::Score score_all { 0, 0 };
@@ -787,15 +788,16 @@ public:
               {
                 raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
               }
-            assert (raw_bit_vec.size() == conv_code_size (ConvBlockType::a, Params::payload_size));
+            assert (raw_bit_vec.size() == code_size (ConvBlockType::a, Params::payload_size));
 
             raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
 
             /* ---- deal with this pattern ---- */
             float decode_error = 0;
-            vector<int> bit_vec = conv_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
+            vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
-            result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+            if (!bit_vec.empty())
+              result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
             total_count += 1;
 
             /* ---- update "all" pattern ---- */
@@ -819,10 +821,13 @@ public:
                     ab_bits[i * 2] = ab_raw_bit_vec[0][i];
                     ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
                   }
-                vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
-                score_ab.index = sync_score.index;
-                score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-                result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
+                if (!bit_vec.empty())
+                  {
+                    score_ab.index = sync_score.index;
+                    score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
+                    result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                  }
               }
             last_block_type = sync_score.block_type;
           }
@@ -839,9 +844,10 @@ public:
         vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
         float decode_error = 0;
-        vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
+        vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
-        result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+        if (!bit_vec.empty())
+          result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
       }
 
     debug_sync_frame_count = frame_count (wav_data);
@@ -943,11 +949,13 @@ class ClipDecoder
               }
 
             float decode_error = 0;
-            vector<int> bit_vec = conv_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
-
-            SyncFinder::Score sync_score_nopad = sync_score;
-            sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
-            result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+            vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
+            if (!bit_vec.empty())
+              {
+                SyncFinder::Score sync_score_nopad = sync_score;
+                sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
+                result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+              }
           }
       }
   }

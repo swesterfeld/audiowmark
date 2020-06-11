@@ -18,6 +18,7 @@
 #include "wmcommon.hh"
 #include "fft.hh"
 #include "convcode.hh"
+#include "shortcode.hh"
 
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
@@ -25,6 +26,8 @@ bool   Params::mix             = true;
 bool   Params::hard            = false; // hard decode bits? (soft decoding is better)
 bool   Params::snr             = false; // compute/show snr while adding watermark
 int    Params::have_key        = 0;
+size_t Params::payload_size    = 128;
+bool   Params::payload_short   = false;
 int    Params::test_cut        = 0; // for sync test
 bool   Params::test_no_sync    = false; // disable sync
 bool   Params::test_no_limiter = false; // disable limiter
@@ -209,7 +212,7 @@ data_frame_pos (int f)
 size_t
 mark_data_frame_count()
 {
-  return conv_code_size (ConvBlockType::a, Params::payload_size) * Params::frames_per_bit;
+  return code_size (ConvBlockType::a, Params::payload_size) * Params::frames_per_bit;
 }
 
 size_t

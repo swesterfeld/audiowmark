@@ -26,6 +26,7 @@
 #include "utils.hh"
 #include "random.hh"
 #include "wmcommon.hh"
+#include "shortcode.hh"
 
 #include <assert.h>
 
@@ -57,6 +58,7 @@ print_usage()
   printf ("Global options:\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --linear              disable non-linear bit storage\n");
+  printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
   printf ("  -q, --quiet           disable information messages\n");
   printf ("\n");
@@ -183,6 +185,16 @@ parse_options (int   *argc_p,
 	{
           Params::mix = false;
 	}
+      else if (check_arg (argc, argv, &i, "--short", &opt_arg))
+        {
+          Params::payload_size = atoi (opt_arg);
+          if (!short_code_init (Params::payload_size))
+            {
+              error ("audiowmark: unsupported short payload size %zd\n", Params::payload_size);
+              exit (1);
+            }
+          Params::payload_short = true;
+        }
       else if (check_arg (argc, argv, &i, "--hard"))
 	{
           Params::hard = true;

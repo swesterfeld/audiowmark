@@ -1,4 +1,4 @@
-AC_INIT([audiowmark], [0.4.1])
+AC_INIT([audiowmark], [0.4.2])
 AC_CONFIG_SRCDIR([src/audiowmark.cc])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
@@ -72,8 +72,8 @@ AC_ZITA_REQUIREMENTS
 AC_FFTW_CHECK
 AM_PATH_LIBGCRYPT
 
-# need c++11 mode
-AX_CXX_COMPILE_STDCXX_11(ext)
+# need c++14 mode
+AX_CXX_COMPILE_STDCXX_14(ext)
 
 # use -Wall
 AC_LANG_PUSH([C++])
