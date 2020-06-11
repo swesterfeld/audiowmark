@@ -84,13 +84,23 @@ number_format (double d)
 int
 main (int argc, char **argv)
 {
-  size_t N, K;
-  short_code_get_n_k (N, K);
-  printf ("using (%zd,%zd) code\n", N, K);
-
   srand (time (NULL));
 
-  if (argc == 1)
+  if (argc < 2)
+    {
+      printf ("first argument must be code size (12, 16, 20)\n");
+      return 1;
+    }
+  size_t K = atoi (argv[1]);
+  size_t N = short_code_init (K);
+  if (!N)
+    {
+      printf ("bad code size\n");
+      return 1;
+    }
+  printf ("using (%zd,%zd) code\n", N, K);
+
+  if (argc == 2)
     {
       vector<int> in_bits;
       while (in_bits.size() != K)
@@ -113,7 +123,7 @@ main (int argc, char **argv)
         printf ("%d", b);
       printf ("\n");
     }
-  if (argc == 2 && string (argv[1]) == "perf")
+  if (argc == 3 && string (argv[2]) == "perf")
     {
       const double start_t = gettime();
       const size_t runs = 100;
@@ -128,7 +138,7 @@ main (int argc, char **argv)
         }
       printf ("%.1f ms/block\n", (gettime() - start_t) / runs * 1000.0);
     }
-  if (argc == 2 && string (argv[1]) == "table")
+  if (argc == 3 && string (argv[2]) == "table")
     {
       map<vector<int>, vector<int>> table;
       vector<int> weight (N + 1);
@@ -179,7 +189,7 @@ main (int argc, char **argv)
             }
         }
     }
-  if (argc == 2 && string (argv[1]) == "distance")
+  if (argc == 3 && string (argv[2]) == "distance")
     {
       vector<vector<int>> cwords;
       for (size_t i = 0; i < size_t (1 << K); i++)

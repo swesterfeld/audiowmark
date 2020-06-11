@@ -25,7 +25,6 @@ using std::vector;
 
 /* Codes from codetables.de / magma online calculator BKLC (GF(2), N, K) */
 
-#if 0
 static vector<vector<int>> block_65_20_20 = {
   {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1,0,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,0,0,1,1,1,0,1,1,1},
   {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1,0,1,0,0,0,1,1,0,1,0,0,0,0,0,1,1,1,1,0,1,1,0,0,1,0,0,0,0,0,1,1,1,0,1,1,1,1,1,1},
@@ -49,12 +48,6 @@ static vector<vector<int>> block_65_20_20 = {
   {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,0,1,1,1,0,1,1,1,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,1,1,1,1,0,1,1,1,0,0,1,0,0,0,0,1},
 };
 
-static const auto&   gen_matrix    = block_65_20_20;
-static constexpr int gen_in_count  = 20;
-static constexpr int gen_out_count = 65;
-#endif
-
-#if 0
 static vector<vector<int>> block_61_16_21 = {
   {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,1,0,1,1,1,0,1,0,1,1,1,1,1,1,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1,1,0,0,1,0,0,1,0,0},
   {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,1,0,1,1,1,0,1,0,1,1,1,1,1,1,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1,1,0,0,1,0,0,1,0},
@@ -74,11 +67,6 @@ static vector<vector<int>> block_61_16_21 = {
   {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,0,0,0,1,0,0,0,1,1,1,1,1,1,1,1,0,1,0,1,1,0,1,0,1,0,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1,1},
 };
 
-static const auto&   gen_matrix    = block_61_16_21;
-static constexpr int gen_in_count  = 16;
-static constexpr int gen_out_count = 61;
-#endif
-
 static vector<vector<int>> block_56_12_22 = {
   { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1 },
   { 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0 },
@@ -94,9 +82,37 @@ static vector<vector<int>> block_56_12_22 = {
   { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1 },
 };
 
-static const auto&   gen_matrix    = block_56_12_22;
-static constexpr int gen_in_count  = 12;
-static constexpr int gen_out_count = 56;
+static vector<vector<int>> gen_matrix;
+static size_t              gen_in_count = 0;
+static size_t              gen_out_count = 0;
+
+size_t
+short_code_init (size_t k)
+{
+  if (k == 12)
+    {
+      gen_matrix    = block_56_12_22;
+      gen_in_count  = 12;
+      gen_out_count = 56;
+    }
+  else if (k == 16)
+    {
+      gen_matrix    = block_61_16_21;
+      gen_in_count  = 16;
+      gen_out_count = 61;
+    }
+  else if (k == 20)
+    {
+      gen_matrix    = block_65_20_20;
+      gen_in_count  = 20;
+      gen_out_count = 65;
+    }
+  else /* unsupported k */
+    {
+      return 0;
+    }
+  return gen_out_count;
+}
 
 vector<int>
 code_encode (ConvBlockType block_type, const vector<int>& in_bits)
@@ -157,7 +173,7 @@ vector<int>
 short_decode_blk (const vector<int>& coded_bits)
 {
   vector<int> out_bits;
-  for (size_t c = 0; c < (1 << gen_in_count); c++)
+  for (size_t c = 0; c < size_t (1 << gen_in_count); c++)
     {
       bool match = true;
       for (size_t j = 0; j < gen_out_count; j++)
@@ -200,11 +216,4 @@ vector<int>
 short_decode_soft (ConvBlockType block_type, const std::vector<float>& coded_bits, float *error_out)
 {
   return short_decode_blk (conv_decode_soft (block_type, coded_bits, error_out));
-}
-
-void
-short_code_get_n_k (size_t& n, size_t& k)
-{
-  k = gen_in_count;
-  n = gen_out_count;
 }
