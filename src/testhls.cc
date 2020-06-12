@@ -215,6 +215,15 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
 
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
+
+      /* write a part of audio master here */
+      size_t start_point = start_pos;
+      size_t end_point = start_point + segment.size;
+      vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
+                                audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
+      WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
+      err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
+
       start_pos += segment.size;
     }
 
@@ -239,6 +248,7 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
         writer.append_file ("prev.ts", in_dir + "/" + segments[i - 1].name);
       if (i + 1 < segments.size())
         writer.append_file ("next.ts", in_dir + "/" + segments[i + 1].name);
+      writer.append_file ("full.wav", out_dir + "/" + segments[i].name + ".wav");
       writer.append_vars ("vars", segments[i].vars);
       writer.process (in_dir + "/" + segments[i].name, out_dir + "/" + segments[i].name);
     }
