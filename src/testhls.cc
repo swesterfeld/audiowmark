@@ -46,7 +46,7 @@ xsystem (const string& cmd)
 }
 
 Error
-ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data)
+ff_decode (const string& filename, WavData& out_wav_data)
 {
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
@@ -56,15 +56,6 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
   ScopedFile input_tmp_file_s (input_tmp_file);
   string input_tmp_file_name = string_printf ("/dev/fd/%d", fileno (input_tmp_file));
 
-  /* build input file by concatenating previous ts and current ts */
-  auto prev_ts = reader.find ("prev.ts");
-  if (prev_ts)
-    {
-      // write previous ts
-      size_t r = fwrite (prev_ts->data.data(), 1, prev_ts->data.size(), input_tmp_file);
-      if (r != prev_ts->data.size())
-        return Error (string_printf ("unable to write ff_decode:prev.ts to %s\n", input_tmp_file_name.c_str()));
-    }
   // write current ts
   FILE *main = fopen (filename.c_str(), "r");
   ScopedFile main_s (main);
@@ -72,14 +63,6 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
   while ((c = fgetc (main)) >= 0)
     fputc (c, input_tmp_file);
 
-  auto next_ts = reader.find ("next.ts");
-  if (next_ts)
-    {
-      // write next ts
-      size_t r = fwrite (next_ts->data.data(), 1, next_ts->data.size(), input_tmp_file);
-      if (r != next_ts->data.size())
-        return Error (string_printf ("unable to write ff_decode:next.ts to %s\n", input_tmp_file_name.c_str()));
-    }
   fflush (input_tmp_file);
   string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
   Error err = xsystem (cmd.c_str());
@@ -212,7 +195,7 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
   for (auto& segment : segments)
     {
       WavData out;
-      Error err = ff_decode (in_dir + "/" + segment.name, /* FIXME: no context */ TSReader(), out);
+      Error err = ff_decode (in_dir + "/" + segment.name, out);
       if (err)
         {
           error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
@@ -273,10 +256,6 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
     {
       TSWriter writer;
 
-      if (i > 0)
-        writer.append_file ("prev.ts", in_dir + "/" + segments[i - 1].name);
-      if (i + 1 < segments.size())
-        writer.append_file ("next.ts", in_dir + "/" + segments[i + 1].name);
       writer.append_file ("full.wav", out_dir + "/" + segments[i].name + ".wav");
       writer.append_vars ("vars", segments[i].vars);
       writer.process (in_dir + "/" + segments[i].name, out_dir + "/" + segments[i].name);
@@ -520,7 +499,7 @@ main (int argc, char **argv)
   else if (argc == 4 && strcmp (argv[1], "ff-decode") == 0)
     {
       WavData wd;
-      Error err = ff_decode (argv[2], TSReader(), wd);
+      Error err = ff_decode (argv[2], wd);
       if (err)
         {
           error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
