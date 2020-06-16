@@ -91,6 +91,26 @@ ff_decode (const string& filename, const TSReader& reader, WavData& out_wav_data
 }
 
 Error
+decode_context (const TSReader& reader, WavData& out_wav_data)
+{
+  FILE *tmp_file = tmpfile();
+  ScopedFile tmp_file_s (tmp_file);
+  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  /* write wav data */
+  auto full_wav = reader.find ("full.wav");
+  if (!full_wav)
+    return Error ("no embedded context found");
+
+  size_t r = fwrite (full_wav->data.data(), 1, full_wav->data.size(), tmp_file);
+  if (r != full_wav->data.size())
+    return Error (string_printf ("unable to write decode_context"));
+
+  Error err = out_wav_data.load (tmp_file_name);
+  return err;
+}
+
+Error
 ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
 {
   FILE *tmp_file = tmpfile();
@@ -216,14 +236,6 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
 
-      /* write a part of audio master here */
-      size_t start_point = start_pos;
-      size_t end_point = start_point + segment.size;
-      vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
-                                audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
-      WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
-      err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
-
       start_pos += segment.size;
     }
 
@@ -240,6 +252,23 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       else
         segments[i].vars["next_size"] = "0";
     }
+
+  /* write audio segments with context */
+  for (auto& segment : segments)
+    {
+      /* write a part of audio master here */
+      const size_t prev_size = atoi (segment.vars["prev_size"].c_str());
+      const size_t next_size = atoi (segment.vars["next_size"].c_str());
+
+      const size_t start_point = atoi (segment.vars["start_pos"].c_str()) - prev_size;
+      const size_t end_point = start_point + prev_size + segment.size + next_size;
+
+      vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
+                                audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
+      WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
+      err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
+    }
+
   for (size_t i = 0; i < segments.size(); i++)
     {
       TSWriter writer;
@@ -368,7 +397,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
     }
 
   WavData wav_data;
-  err = ff_decode (infile, reader, wav_data);
+  err = decode_context (reader, wav_data);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
