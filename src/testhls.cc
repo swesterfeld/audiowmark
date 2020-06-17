@@ -88,6 +88,7 @@ decode_context (const TSReader& reader, WavData& out_wav_data)
   size_t r = fwrite (full_wav->data.data(), 1, full_wav->data.size(), tmp_file);
   if (r != full_wav->data.size())
     return Error (string_printf ("unable to write decode_context"));
+  fflush (tmp_file);
 
   Error err = out_wav_data.load (tmp_file_name);
   return err;
