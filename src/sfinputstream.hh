@@ -19,6 +19,7 @@
 #define AUDIOWMARK_SF_INPUT_STREAM_HH
 
 #include <string>
+#include <functional>
 
 #include <sndfile.h>
 
@@ -26,6 +27,16 @@
 
 class SFInputStream : public AudioInputStream
 {
+public:
+  /* to support read from memory */
+  struct VirtualData
+  {
+    std::vector<unsigned char> *mem    = nullptr;
+    sf_count_t                  offset = 0;
+  };
+
+private:
+  VirtualData virtual_data;
   SNDFILE    *m_sndfile = nullptr;
   int         m_n_channels = 0;
   int         m_n_values = 0;
@@ -40,10 +51,12 @@ class SFInputStream : public AudioInputStream
   };
   State       m_state = State::NEW;
 
+  Error open (std::function<SNDFILE* (SF_INFO *)> open_func);
 public:
   ~SFInputStream();
 
   Error               open (const std::string& filename);
+  Error               open (const std::vector<unsigned char> *data);
   Error               read_frames (std::vector<float>& samples, size_t count) override;
   void                close();
 

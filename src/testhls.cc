@@ -24,6 +24,7 @@
 #include "mpegts.hh"
 #include "wavdata.hh"
 #include "wmcommon.hh"
+#include "sfinputstream.hh"
 
 using std::string;
 using std::regex;
@@ -76,21 +77,16 @@ ff_decode (const string& filename, WavData& out_wav_data)
 Error
 decode_context (const TSReader& reader, WavData& out_wav_data)
 {
-  FILE *tmp_file = tmpfile();
-  ScopedFile tmp_file_s (tmp_file);
-  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
-
-  /* write wav data */
   auto full_wav = reader.find ("full.wav");
   if (!full_wav)
     return Error ("no embedded context found");
 
-  size_t r = fwrite (full_wav->data.data(), 1, full_wav->data.size(), tmp_file);
-  if (r != full_wav->data.size())
-    return Error (string_printf ("unable to write decode_context"));
-  fflush (tmp_file);
+  SFInputStream input_stream;
+  Error err = input_stream.open (&full_wav->data);
+  if (err)
+    return err;
 
-  Error err = out_wav_data.load (tmp_file_name);
+  err = out_wav_data.load (&input_stream);
   return err;
 }
 

@@ -30,11 +30,20 @@ SFInputStream::~SFInputStream()
 Error
 SFInputStream::open (const string& filename)
 {
+  return open ([&] (SF_INFO *sfinfo) {
+    return sf_open (filename.c_str(), SFM_READ, sfinfo);
+  });
+}
+
+
+Error
+SFInputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func)
+{
   assert (m_state == State::NEW);
 
   SF_INFO sfinfo = { 0, };
 
-  m_sndfile = sf_open (filename.c_str(), SFM_READ, &sfinfo);
+  m_sndfile = open_func (&sfinfo);
 
   int error = sf_error (m_sndfile);
   if (error)
@@ -154,4 +163,97 @@ SFInputStream::close()
       m_sndfile = nullptr;
       m_state = State::CLOSED;
     }
+}
+
+static sf_count_t
+virtual_get_len (void *data)
+{
+  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+
+  return vdata->mem->size();
+}
+
+static sf_count_t
+virtual_seek (sf_count_t offset, int whence, void *data)
+{
+  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+
+  if (whence == SEEK_CUR)
+    {
+      vdata->offset = vdata->offset + offset;
+    }
+  else if (whence == SEEK_SET)
+    {
+      vdata->offset = offset;
+    }
+  else if (whence == SEEK_END)
+    {
+      vdata->offset = vdata->mem->size() + offset;
+    }
+
+  /* can't seek beyond eof */
+  vdata->offset = bound<sf_count_t> (0, vdata->offset, vdata->mem->size());
+  return vdata->offset;
+}
+
+static sf_count_t
+virtual_read (void *ptr, sf_count_t count, void *data)
+{
+  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+
+  int rcount = 0;
+  unsigned char *uptr = static_cast<unsigned char *> (ptr);
+  for (sf_count_t i = 0; i < count; i++)
+    {
+      size_t rpos = i + vdata->offset;
+      if (rpos < vdata->mem->size())
+        {
+          uptr[i] = (*vdata->mem)[rpos];
+          rcount++;
+        }
+    }
+  vdata->offset += rcount;
+  return rcount;
+}
+
+static sf_count_t
+virtual_write (const void *ptr, sf_count_t count, void *data)
+{
+  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+
+  const unsigned char *uptr = static_cast<const unsigned char *> (ptr);
+  for (sf_count_t i = 0; i < count; i++)
+    {
+      unsigned char ch = uptr[i];
+
+      size_t wpos = i + vdata->offset;
+      if (wpos >= vdata->mem->size())
+        vdata->mem->resize (wpos + 1);
+      (*vdata->mem)[wpos] = ch;
+    }
+  vdata->offset += count;
+  return count;
+}
+
+static sf_count_t
+virtual_tell (void *data)
+{
+  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  return vdata->offset;
+}
+
+Error
+SFInputStream::open (const vector<unsigned char> *data)
+{
+  virtual_data.mem = const_cast<vector<unsigned char> *> (data);
+  SF_VIRTUAL_IO sf_virtual_io = {
+    virtual_get_len,
+    virtual_seek,
+    virtual_read,
+    virtual_write,
+    virtual_tell
+  };
+  return open ([&] (SF_INFO *sfinfo) {
+    return sf_open_virtual (&sf_virtual_io, SFM_READ, sfinfo, &virtual_data);
+  });
 }
