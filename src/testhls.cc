@@ -374,6 +374,8 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
       error ("hls_mark: %s\n", err.message());
       return 1;
     }
+  printf ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
+  double start_time1 = get_time();
 
   WavData wav_data;
   err = decode_context (reader, wav_data);
@@ -397,6 +399,9 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
+  printf ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  start_time1 = get_time();
+
   int zrc = mark_zexpand (wav_data, start_pos - prev_size, bits);
   if (zrc != 0)
     return zrc;
@@ -407,12 +412,17 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
+  printf ("hls_time_elapsed_mark %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  start_time1 = get_time();
+
   err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx, pts_start);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
       return 1;
     }
+
+  printf ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
 
   double end_time = get_time();
   printf ("hls_time %f %f\n", start_pos / double (wav_data.sample_rate()), (end_time - start_time) * 1000 /* ms */);
