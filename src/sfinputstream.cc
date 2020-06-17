@@ -18,6 +18,7 @@
 #include "sfinputstream.hh"
 
 #include <assert.h>
+#include <string.h>
 
 using std::string;
 using std::vector;
@@ -202,14 +203,23 @@ virtual_read (void *ptr, sf_count_t count, void *data)
   SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
 
   int rcount = 0;
-  unsigned char *uptr = static_cast<unsigned char *> (ptr);
-  for (sf_count_t i = 0; i < count; i++)
+  if (size_t (vdata->offset + count) <= vdata->mem->size())
     {
-      size_t rpos = i + vdata->offset;
-      if (rpos < vdata->mem->size())
+      /* fast case: read can be fully satisfied with the data we have */
+      memcpy (ptr, &(*vdata->mem)[vdata->offset], count);
+      rcount = count;
+    }
+  else
+    {
+      unsigned char *uptr = static_cast<unsigned char *> (ptr);
+      for (sf_count_t i = 0; i < count; i++)
         {
-          uptr[i] = (*vdata->mem)[rpos];
-          rcount++;
+          size_t rpos = i + vdata->offset;
+          if (rpos < vdata->mem->size())
+            {
+              uptr[i] = (*vdata->mem)[rpos];
+              rcount++;
+            }
         }
     }
   vdata->offset += rcount;
