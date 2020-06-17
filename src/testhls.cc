@@ -75,22 +75,6 @@ ff_decode (const string& filename, WavData& out_wav_data)
 }
 
 Error
-decode_context (const TSReader& reader, WavData& out_wav_data)
-{
-  auto full_wav = reader.find ("full.wav");
-  if (!full_wav)
-    return Error ("no embedded context found");
-
-  SFInputStream input_stream;
-  Error err = input_stream.open (&full_wav->data);
-  if (err)
-    return err;
-
-  err = out_wav_data.load (&input_stream);
-  return err;
-}
-
-Error
 ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
 {
   FILE *tmp_file = tmpfile();
@@ -374,8 +358,15 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   printf ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
   double start_time1 = get_time();
 
-  WavData wav_data;
-  err = decode_context (reader, wav_data);
+  const TSReader::Entry *full_wav = reader.find ("full.wav");
+  if (!full_wav)
+    {
+      error ("hls_mark: no embedded context found in %s\n", infile.c_str());
+      return 1;
+    }
+
+  SFInputStream in_stream;
+  err = in_stream.open (&full_wav->data);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
@@ -399,7 +390,10 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   printf ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
   start_time1 = get_time();
 
-  int zrc = mark_zexpand (wav_data, start_pos - prev_size, bits);
+  WavData wav_data ({ /* no samples */ }, in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
+  WDOutputStream out_stream (&wav_data);
+
+  int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
   if (zrc != 0)
     return zrc;
 
