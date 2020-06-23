@@ -122,6 +122,8 @@ struct OutputStream {
 
     const WavData *wav_data = nullptr;
     int64_t t;
+    size_t  cut_frames_start = 0;
+    size_t  keep_frames = 0;
 
     struct SwsContext *sws_ctx;
     struct SwrContext *swr_ctx;
@@ -424,14 +426,24 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
         exit(1);
     }
 
-    if (got_packet) {
-        ret = write_frame(oc, &c->time_base, ost->st, &pkt);
-        if (ret < 0) {
-            fprintf(stderr, "Error while writing audio frame: %s\n",
-                    av_err2str(ret));
-            exit(1);
-        }
-    }
+    if (got_packet)
+      {
+        if (ost->cut_frames_start)
+          {
+            ost->cut_frames_start--;
+          }
+        else if (ost->keep_frames)
+          {
+            ret = write_frame(oc, &c->time_base, ost->st, &pkt);
+            if (ret < 0)
+              {
+                fprintf(stderr, "Error while writing audio frame: %s\n",
+                        av_err2str(ret));
+                exit(1);
+              }
+            ost->keep_frames--;
+          }
+      }
 
     return (frame || got_packet) ? 0 : 1;
 }
@@ -465,6 +477,8 @@ ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos
 
   OutputStream audio_st = { 0 };
   audio_st.wav_data = &wav_data;
+  audio_st.cut_frames_start = cut_start / 1024;
+  audio_st.keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
   AVCodec *audio_codec;
   AVOutputFormat *fmt;
   AVDictionary *opt = nullptr;
