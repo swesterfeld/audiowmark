@@ -109,7 +109,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
  */
 
 // a wrapper around a single output AVStream
-typedef struct OutputStream {
+struct OutputStream {
     AVStream *st;
     AVCodecContext *enc;
 
@@ -120,11 +120,12 @@ typedef struct OutputStream {
     AVFrame *frame;
     AVFrame *tmp_frame;
 
-    float t, tincr, tincr2;
+    const WavData *wav_data = nullptr;
+    int64_t t;
 
     struct SwsContext *sws_ctx;
     struct SwrContext *swr_ctx;
-} OutputStream;
+};
 
 
 /* Add an output stream. */
@@ -160,7 +161,7 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
     case AVMEDIA_TYPE_AUDIO:
         c->sample_fmt  = (*codec)->sample_fmts ?
             (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-        c->bit_rate    = 64000;
+        c->bit_rate    = 128000;
         c->sample_rate = 44100;
         if ((*codec)->supported_samplerates) {
             c->sample_rate = (*codec)->supported_samplerates[0];
@@ -270,9 +271,6 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, A
 
     /* init signal generator */
     ost->t     = 0;
-    ost->tincr = 2 * M_PI * 110.0 / c->sample_rate;
-    /* increment frequency by 110 Hz per second */
-    ost->tincr2 = 2 * M_PI * 110.0 / c->sample_rate / c->sample_rate;
 
     if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
         nb_samples = 10000;
@@ -313,8 +311,6 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, A
         }
 }
 
-#define STREAM_DURATION 0.1
-
 /* Prepare a 16 bit dummy audio frame of 'frame_size' samples and
  * 'nb_channels' channels. */
 static AVFrame *get_audio_frame(OutputStream *ost)
@@ -324,17 +320,23 @@ static AVFrame *get_audio_frame(OutputStream *ost)
     int16_t *q = (int16_t*)frame->data[0];
 
     /* check if we want to generate more frames */
-    if (av_compare_ts(ost->next_pts, ost->enc->time_base,
-                      STREAM_DURATION, (AVRational){ 1, 1 }) > 0)
-        return NULL;
+    if (ost->t >= ost->wav_data->samples().size())
+      return NULL;
 
-    for (j = 0; j <frame->nb_samples; j++) {
-        v = (int)(sin(ost->t) * 10000);
+    const vector<float>& wd_samples = ost->wav_data->samples();
+    for (j = 0; j < frame->nb_samples; j++)
+      {
         for (i = 0; i < ost->enc->channels; i++)
-            *q++ = v;
-        ost->t     += ost->tincr;
-        ost->tincr += ost->tincr2;
-    }
+          {
+            if (ost->t < wd_samples.size())
+              {
+                *q++ = (int)(wd_samples[ost->t] * 32768);
+                ost->t++;
+              }
+            else
+              *q++ = 0;
+          }
+      }
 
     frame->pts = ost->next_pts;
     ost->next_pts  += frame->nb_samples;
@@ -458,6 +460,7 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
     }
 
   OutputStream audio_st = { 0 };
+  audio_st.wav_data = &wav_data;
   AVCodec *audio_codec;
   AVOutputFormat *fmt;
   AVDictionary *opt = nullptr;
