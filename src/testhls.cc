@@ -116,6 +116,7 @@ struct OutputStream {
     /* pts of the next frame that will be generated */
     int64_t next_pts;
     int samples_count;
+    int start_pos;
 
     AVFrame *frame;
     AVFrame *tmp_frame;
@@ -416,7 +417,7 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
         }
         frame = ost->frame;
 
-        frame->pts = av_rescale_q(ost->samples_count, (AVRational){1, c->sample_rate}, c->time_base);
+        frame->pts = av_rescale_q(ost->samples_count + ost->start_pos, (AVRational){1, c->sample_rate}, c->time_base);
         ost->samples_count += dst_nb_samples;
     }
 
@@ -479,6 +480,11 @@ ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos
   audio_st.wav_data = &wav_data;
   audio_st.cut_frames_start = cut_start / 1024;
   audio_st.keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
+
+  // FIXME: correct?
+  audio_st.start_pos = pts_start * wav_data.sample_rate() - cut_start;
+  audio_st.start_pos += 1024;
+
   AVCodec *audio_codec;
   AVOutputFormat *fmt;
   AVDictionary *opt = nullptr;
