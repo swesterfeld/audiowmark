@@ -768,7 +768,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
       error ("hls_mark: %s\n", err.message());
       return 1;
     }
-  printf ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
+  info ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
   double start_time1 = get_time();
 
   const TSReader::Entry *full_wav = reader.find ("full.wav");
@@ -787,11 +787,11 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
     }
 
   for (auto entry : reader.entries())
-    printf ("%s %zd\n", entry.filename.c_str(), entry.data.size());
+    info ("%s %zd\n", entry.filename.c_str(), entry.data.size());
 
   map<string, string> vars = reader.parse_vars ("vars");
   for (auto kv : vars)
-    printf ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
+    info ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
 
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
@@ -800,7 +800,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
-  printf ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
   start_time1 = get_time();
 
   WavData wav_data ({ /* no samples */ }, in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
@@ -816,7 +816,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
   wav_data.set_samples (samples);
 
-  printf ("hls_time_elapsed_mark %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  info ("hls_time_elapsed_mark %f\n", (get_time() - start_time1) * 1000 /* ms */);
   start_time1 = get_time();
 
   err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx, pts_start);
@@ -826,10 +826,10 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
 
-  printf ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  info ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
 
   double end_time = get_time();
-  printf ("hls_time %f %f\n", start_pos / double (wav_data.sample_rate()), (end_time - start_time) * 1000 /* ms */);
+  info ("hls_time %f %f\n", start_pos / double (wav_data.sample_rate()), (end_time - start_time) * 1000 /* ms */);
 
   return 0;
 }
@@ -883,9 +883,9 @@ seek_perf (int sample_rate, double seconds)
 
   double end_time = get_time();
 
-  printf ("\n\n");
-  printf ("total time %7.3f sec\n", end_time - start_time);
-  printf ("per second %7.3f ms\n", (end_time - start_time) / seconds * 1000);
+  info ("\n\n");
+  info ("total time %7.3f sec\n", end_time - start_time);
+  info ("per second %7.3f ms\n", (end_time - start_time) / seconds * 1000);
 
   return 0;
 }
@@ -895,7 +895,7 @@ main (int argc, char **argv)
 {
   if (argc == 6 && strcmp (argv[1], "hls-embed-context") == 0)
     {
-      printf ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s audio_master=%s\n", argv[2], argv[3], argv[4], argv[5]);
+      info ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s audio_master=%s\n", argv[2], argv[3], argv[4], argv[5]);
       return hls_embed_context (argv[2], argv[3], argv[4], argv[5]);
     }
   else if (argc == 5 && strcmp (argv[1], "hls-mark") == 0)
