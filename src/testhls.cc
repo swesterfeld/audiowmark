@@ -446,13 +446,17 @@ static void close_stream(AVFormatContext *oc, OutputStream *ost)
 
 
 Error
-ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
+ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
 {
+  string filename = out_filename;
+  if (filename == "-")
+    filename = "pipe:1";
+
   AVFormatContext *oc;
   avformat_alloc_output_context2 (&oc, NULL, "mpegts", NULL);
   if (!oc)
     return Error ("failed to alloc avformat output context");
-  int ret = avio_open (&oc->pb, "pipe:1", AVIO_FLAG_WRITE);
+  int ret = avio_open (&oc->pb, filename.c_str(), AVIO_FLAG_WRITE);
   if (ret < 0)
     {
       error ("Could not open output: %s\n", av_err2str (ret));
@@ -476,7 +480,7 @@ ff_encode (const WavData& wav_data, const string& filename, size_t start_pos, si
       error ("Error occurred when writing output file: %s\n",  av_err2str(ret));
       return Error ("avformat_write_header failed\n");
     }
-  av_dump_format(oc, 0, "pipe:1", 1);
+  av_dump_format(oc, 0, filename.c_str(), 1);
   while (write_audio_frame(oc, &audio_st) == 0);
   av_write_trailer(oc);
 
