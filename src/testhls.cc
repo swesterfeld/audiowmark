@@ -109,25 +109,25 @@ ff_decode (const string& filename, WavData& out_wav_data)
  */
 
 // a wrapper around a single output AVStream
-struct HLSOutputStream {
-    AVStream         *m_st = nullptr;
-    AVCodecContext   *m_enc = nullptr;
-    AVFormatContext  *m_fmt_ctx = nullptr;
+class HLSOutputStream {
+  AVStream         *m_st = nullptr;
+  AVCodecContext   *m_enc = nullptr;
+  AVFormatContext  *m_fmt_ctx = nullptr;
 
-    /* pts of the next frame that will be generated */
-    int64_t           m_next_pts = 0;
-    int               m_samples_count = 0;
-    int               m_start_pos = 0;
+  /* pts of the next frame that will be generated */
+  int64_t           m_next_pts = 0;
+  int               m_samples_count = 0;
+  int               m_start_pos = 0;
 
-    AVFrame          *m_frame = nullptr;
-    AVFrame          *m_tmp_frame = nullptr;
+  AVFrame          *m_frame = nullptr;
+  AVFrame          *m_tmp_frame = nullptr;
 
-    const WavData    *m_wav_data = nullptr;
-    size_t            m_t = 0;
-    size_t            m_cut_frames_start = 0;
-    size_t            m_keep_frames = 0;
+  const WavData    *m_wav_data = nullptr;
+  size_t            m_t = 0;
+  size_t            m_cut_frames_start = 0;
+  size_t            m_keep_frames = 0;
 
-    SwrContext       *m_swr_ctx = nullptr;
+  SwrContext       *m_swr_ctx = nullptr;
 
   void add_stream (AVCodec **codec, enum AVCodecID codec_id);
   void open_audio (AVCodec *codec, AVDictionary *opt_arg);
@@ -136,8 +136,8 @@ struct HLSOutputStream {
   void close_stream();
   AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples);
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
-
-  Error open (const string& output_filename);
+public:
+  Error open (const string& output_filename, const WavData& wav_data, size_t cut_start, size_t cut_end, double pts_start);
   void write();
   Error close();
 };
@@ -429,7 +429,7 @@ HLSOutputStream::close_stream()
 }
 
 Error
-HLSOutputStream::open (const string& out_filename)
+HLSOutputStream::open (const string& out_filename, const WavData& wav_data, size_t cut_start, size_t cut_end, double pts_start)
 {
   avformat_alloc_output_context2 (&m_fmt_ctx, NULL, "mpegts", NULL);
   if (!m_fmt_ctx)
@@ -459,6 +459,15 @@ HLSOutputStream::open (const string& out_filename)
       return Error ("avformat_write_header failed\n");
     }
   av_dump_format (m_fmt_ctx, 0, filename.c_str(), 1);
+
+  m_wav_data = &wav_data;
+  m_cut_frames_start = cut_start / 1024;
+  m_keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
+
+  // FIXME: correct?
+  m_start_pos = pts_start * wav_data.sample_rate() - cut_start;
+  m_start_pos += 1024;
+
   return Error::Code::NONE;
 }
 
@@ -489,17 +498,9 @@ Error
 ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
 {
   HLSOutputStream audio_st;
-  Error err = audio_st.open (out_filename);
+  Error err = audio_st.open (out_filename, wav_data, cut_start, cut_end, pts_start);
   if (err)
     return err;
-  audio_st.m_wav_data = &wav_data;
-  audio_st.m_cut_frames_start = cut_start / 1024;
-  audio_st.m_keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
-
-  // FIXME: correct?
-  audio_st.m_start_pos = pts_start * wav_data.sample_rate() - cut_start;
-  audio_st.m_start_pos += 1024;
-
   audio_st.write ();
 
   err = audio_st.close();
