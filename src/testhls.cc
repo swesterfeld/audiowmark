@@ -110,24 +110,23 @@ ff_decode (const string& filename, WavData& out_wav_data)
 
 // a wrapper around a single output AVStream
 struct OutputStream {
-    AVStream *st;
-    AVCodecContext *enc;
+    AVStream         *m_st = nullptr;
+    AVCodecContext   *m_enc = nullptr;
 
     /* pts of the next frame that will be generated */
-    int64_t next_pts;
-    int samples_count;
-    int start_pos;
+    int64_t           m_next_pts = 0;
+    int               m_samples_count = 0;
+    int               m_start_pos = 0;
 
-    AVFrame *frame;
-    AVFrame *tmp_frame;
+    AVFrame          *m_frame = nullptr;
+    AVFrame          *m_tmp_frame = nullptr;
 
-    const WavData *wav_data = nullptr;
-    int64_t t;
-    size_t  cut_frames_start = 0;
-    size_t  keep_frames = 0;
+    const WavData    *m_wav_data = nullptr;
+    size_t            m_t = 0;
+    size_t            m_cut_frames_start = 0;
+    size_t            m_keep_frames = 0;
 
-    struct SwsContext *sws_ctx;
-    struct SwrContext *swr_ctx;
+    SwrContext       *m_swr_ctx = nullptr;
 };
 
 
@@ -147,18 +146,18 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
         exit(1);
     }
 
-    ost->st = avformat_new_stream(oc, NULL);
-    if (!ost->st) {
+    ost->m_st = avformat_new_stream(oc, NULL);
+    if (!ost->m_st) {
         fprintf(stderr, "Could not allocate stream\n");
         exit(1);
     }
-    ost->st->id = oc->nb_streams-1;
+    ost->m_st->id = oc->nb_streams-1;
     c = avcodec_alloc_context3(*codec);
     if (!c) {
         fprintf(stderr, "Could not alloc an encoding context\n");
         exit(1);
     }
-    ost->enc = c;
+    ost->m_enc = c;
 
     switch ((*codec)->type) {
     case AVMEDIA_TYPE_AUDIO:
@@ -183,7 +182,7 @@ static void add_stream(OutputStream *ost, AVFormatContext *oc,
             }
         }
         c->channels        = av_get_channel_layout_nb_channels(c->channel_layout);
-        ost->st->time_base = (AVRational){ 1, c->sample_rate };
+        ost->m_st->time_base = (AVRational){ 1, c->sample_rate };
         break;
 
 #if 0
@@ -261,7 +260,7 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, A
     int ret;
     AVDictionary *opt = NULL;
 
-    c = ost->enc;
+    c = ost->m_enc;
 
     /* open it */
     av_dict_copy(&opt, opt_arg, 0);
@@ -273,42 +272,42 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, A
     }
 
     /* init signal generator */
-    ost->t     = 0;
+    ost->m_t = 0;
 
     if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
         nb_samples = 10000;
     else
         nb_samples = c->frame_size;
 
-    ost->frame     = alloc_audio_frame(c->sample_fmt, c->channel_layout,
-                                       c->sample_rate, nb_samples);
-    ost->tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, c->channel_layout,
-                                       c->sample_rate, nb_samples);
+    ost->m_frame     = alloc_audio_frame(c->sample_fmt, c->channel_layout,
+                                         c->sample_rate, nb_samples);
+    ost->m_tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, c->channel_layout,
+                                         c->sample_rate, nb_samples);
 
     /* copy the stream parameters to the muxer */
-    ret = avcodec_parameters_from_context(ost->st->codecpar, c);
+    ret = avcodec_parameters_from_context(ost->m_st->codecpar, c);
     if (ret < 0) {
         fprintf(stderr, "Could not copy the stream parameters\n");
         exit(1);
     }
 
     /* create resampler context */
-        ost->swr_ctx = swr_alloc();
-        if (!ost->swr_ctx) {
+        ost->m_swr_ctx = swr_alloc();
+        if (!ost->m_swr_ctx) {
             fprintf(stderr, "Could not allocate resampler context\n");
             exit(1);
         }
 
         /* set options */
-        av_opt_set_int       (ost->swr_ctx, "in_channel_count",   c->channels,       0);
-        av_opt_set_int       (ost->swr_ctx, "in_sample_rate",     c->sample_rate,    0);
-        av_opt_set_sample_fmt(ost->swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16, 0);
-        av_opt_set_int       (ost->swr_ctx, "out_channel_count",  c->channels,       0);
-        av_opt_set_int       (ost->swr_ctx, "out_sample_rate",    c->sample_rate,    0);
-        av_opt_set_sample_fmt(ost->swr_ctx, "out_sample_fmt",     c->sample_fmt,     0);
+        av_opt_set_int       (ost->m_swr_ctx, "in_channel_count",   c->channels,       0);
+        av_opt_set_int       (ost->m_swr_ctx, "in_sample_rate",     c->sample_rate,    0);
+        av_opt_set_sample_fmt(ost->m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16, 0);
+        av_opt_set_int       (ost->m_swr_ctx, "out_channel_count",  c->channels,       0);
+        av_opt_set_int       (ost->m_swr_ctx, "out_sample_rate",    c->sample_rate,    0);
+        av_opt_set_sample_fmt(ost->m_swr_ctx, "out_sample_fmt",     c->sample_fmt,     0);
 
         /* initialize the resampling context */
-        if ((ret = swr_init(ost->swr_ctx)) < 0) {
+        if ((ret = swr_init(ost->m_swr_ctx)) < 0) {
             fprintf(stderr, "Failed to initialize the resampling context\n");
             exit(1);
         }
@@ -318,31 +317,31 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, OutputStream *ost, A
  * 'nb_channels' channels. */
 static AVFrame *get_audio_frame(OutputStream *ost)
 {
-    AVFrame *frame = ost->tmp_frame;
-    int j, i, v;
+    AVFrame *frame = ost->m_tmp_frame;
+    int j, i;
     int16_t *q = (int16_t*)frame->data[0];
 
     /* check if we want to generate more frames */
-    if (ost->t >= ost->wav_data->samples().size())
+    if (ost->m_t >= ost->m_wav_data->samples().size())
       return NULL;
 
-    const vector<float>& wd_samples = ost->wav_data->samples();
+    const vector<float>& wd_samples = ost->m_wav_data->samples();
     for (j = 0; j < frame->nb_samples; j++)
       {
-        for (i = 0; i < ost->enc->channels; i++)
+        for (i = 0; i < ost->m_enc->channels; i++)
           {
-            if (ost->t < wd_samples.size())
+            if (ost->m_t < wd_samples.size())
               {
-                *q++ = (int)(wd_samples[ost->t] * 32768);
-                ost->t++;
+                *q++ = (int)(wd_samples[ost->m_t] * 32768);
+                ost->m_t++;
               }
             else
               *q++ = 0;
           }
       }
 
-    frame->pts = ost->next_pts;
-    ost->next_pts  += frame->nb_samples;
+    frame->pts = ost->m_next_pts;
+    ost->m_next_pts  += frame->nb_samples;
 
     return frame;
 }
@@ -350,9 +349,9 @@ static AVFrame *get_audio_frame(OutputStream *ost)
 
 static void log_packet(const AVFormatContext *fmt_ctx, const AVPacket *pkt)
 {
+#if 0 // FIXME
     AVRational *time_base = &fmt_ctx->streams[pkt->stream_index]->time_base;
 
-#if 0 // FIXME
     printf("pts:%s pts_time:%s dts:%s dts_time:%s duration:%s duration_time:%s stream_index:%d\n",
            av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, time_base),
            av_ts2str(pkt->dts), av_ts2timestr(pkt->dts, time_base),
@@ -388,14 +387,14 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
     int dst_nb_samples;
 
     av_init_packet(&pkt);
-    c = ost->enc;
+    c = ost->m_enc;
 
     frame = get_audio_frame(ost);
 
     if (frame) {
         /* convert samples from native format to destination codec format, using the resampler */
             /* compute destination number of samples */
-            dst_nb_samples = av_rescale_rnd(swr_get_delay(ost->swr_ctx, c->sample_rate) + frame->nb_samples,
+            dst_nb_samples = av_rescale_rnd(swr_get_delay(ost->m_swr_ctx, c->sample_rate) + frame->nb_samples,
                                             c->sample_rate, c->sample_rate, AV_ROUND_UP);
             av_assert0(dst_nb_samples == frame->nb_samples);
 
@@ -403,22 +402,22 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
          * internally;
          * make sure we do not overwrite it here
          */
-        ret = av_frame_make_writable(ost->frame);
+        ret = av_frame_make_writable(ost->m_frame);
         if (ret < 0)
             exit(1);
 
         /* convert to destination format */
-        ret = swr_convert(ost->swr_ctx,
-                          ost->frame->data, dst_nb_samples,
+        ret = swr_convert(ost->m_swr_ctx,
+                          ost->m_frame->data, dst_nb_samples,
                           (const uint8_t **)frame->data, frame->nb_samples);
         if (ret < 0) {
             fprintf(stderr, "Error while converting\n");
             exit(1);
         }
-        frame = ost->frame;
+        frame = ost->m_frame;
 
-        frame->pts = av_rescale_q(ost->samples_count + ost->start_pos, (AVRational){1, c->sample_rate}, c->time_base);
-        ost->samples_count += dst_nb_samples;
+        frame->pts = av_rescale_q(ost->m_samples_count + ost->m_start_pos, (AVRational){1, c->sample_rate}, c->time_base);
+        ost->m_samples_count += dst_nb_samples;
     }
 
     ret = avcodec_encode_audio2(c, &pkt, frame, &got_packet);
@@ -429,20 +428,20 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 
     if (got_packet)
       {
-        if (ost->cut_frames_start)
+        if (ost->m_cut_frames_start)
           {
-            ost->cut_frames_start--;
+            ost->m_cut_frames_start--;
           }
-        else if (ost->keep_frames)
+        else if (ost->m_keep_frames)
           {
-            ret = write_frame(oc, &c->time_base, ost->st, &pkt);
+            ret = write_frame(oc, &c->time_base, ost->m_st, &pkt);
             if (ret < 0)
               {
                 fprintf(stderr, "Error while writing audio frame: %s\n",
                         av_err2str(ret));
                 exit(1);
               }
-            ost->keep_frames--;
+            ost->m_keep_frames--;
           }
       }
 
@@ -451,10 +450,10 @@ static int write_audio_frame(AVFormatContext *oc, OutputStream *ost)
 
 static void close_stream(AVFormatContext *oc, OutputStream *ost)
 {
-    avcodec_free_context(&ost->enc);
-    av_frame_free(&ost->frame);
-    av_frame_free(&ost->tmp_frame);
-    swr_free(&ost->swr_ctx);
+    avcodec_free_context(&ost->m_enc);
+    av_frame_free(&ost->m_frame);
+    av_frame_free(&ost->m_tmp_frame);
+    swr_free(&ost->m_swr_ctx);
 }
 
 
@@ -477,13 +476,13 @@ ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos
     }
 
   OutputStream audio_st = { 0 };
-  audio_st.wav_data = &wav_data;
-  audio_st.cut_frames_start = cut_start / 1024;
-  audio_st.keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
+  audio_st.m_wav_data = &wav_data;
+  audio_st.m_cut_frames_start = cut_start / 1024;
+  audio_st.m_keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
 
   // FIXME: correct?
-  audio_st.start_pos = pts_start * wav_data.sample_rate() - cut_start;
-  audio_st.start_pos += 1024;
+  audio_st.m_start_pos = pts_start * wav_data.sample_rate() - cut_start;
+  audio_st.m_start_pos += 1024;
 
   AVCodec *audio_codec;
   AVOutputFormat *fmt;
