@@ -129,13 +129,13 @@ struct HLSOutputStream {
 
     SwrContext       *m_swr_ctx = nullptr;
 
-  void add_stream (AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id);
-  void open_audio (AVFormatContext *oc, AVCodec *codec, AVDictionary *opt_arg);
+  void add_stream (AVCodec **codec, enum AVCodecID codec_id);
+  void open_audio (AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
-  int write_audio_frame (AVFormatContext *oc);
-  void close_stream (AVFormatContext *oc);
+  int write_audio_frame();
+  void close_stream();
   AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples);
-  int write_frame (AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt);
+  int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
 
   Error open (const string& output_filename);
   void write();
@@ -145,7 +145,7 @@ struct HLSOutputStream {
 
 /* Add an output stream. */
 void
-HLSOutputStream::add_stream (AVFormatContext *oc, AVCodec **codec, enum AVCodecID codec_id)
+HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 {
     AVCodecContext *c;
     int i;
@@ -158,12 +158,12 @@ HLSOutputStream::add_stream (AVFormatContext *oc, AVCodec **codec, enum AVCodecI
         exit(1);
     }
 
-    m_st = avformat_new_stream(oc, NULL);
+    m_st = avformat_new_stream (m_fmt_ctx, NULL);
     if (!m_st) {
         fprintf(stderr, "Could not allocate stream\n");
         exit(1);
     }
-    m_st->id = oc->nb_streams-1;
+    m_st->id = m_fmt_ctx->nb_streams - 1;
     c = avcodec_alloc_context3(*codec);
     if (!c) {
         fprintf(stderr, "Could not alloc an encoding context\n");
@@ -202,7 +202,7 @@ HLSOutputStream::add_stream (AVFormatContext *oc, AVCodec **codec, enum AVCodecI
     }
 
     /* Some formats want stream headers to be separate. */
-    if (oc->oformat->flags & AVFMT_GLOBALHEADER)
+    if (m_fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
         c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 }
 
@@ -236,7 +236,7 @@ HLSOutputStream::alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t chan
 
 
 void
-HLSOutputStream::open_audio (AVFormatContext *oc, AVCodec *codec, AVDictionary *opt_arg)
+HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
 {
     AVCodecContext *c;
     int nb_samples;
@@ -332,14 +332,14 @@ HLSOutputStream::get_audio_frame()
 
 
 int
-HLSOutputStream::write_frame (AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt)
+HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt)
 {
     /* rescale output packet timestamp values from codec to stream timebase */
     av_packet_rescale_ts(pkt, *time_base, st->time_base);
     pkt->stream_index = st->index;
 
     /* Write the compressed frame to the media file. */
-    return av_interleaved_write_frame(fmt_ctx, pkt);
+    return av_interleaved_write_frame (m_fmt_ctx, pkt);
 }
 
 
@@ -348,7 +348,7 @@ HLSOutputStream::write_frame (AVFormatContext *fmt_ctx, const AVRational *time_b
  * return 1 when encoding is finished, 0 otherwise
  */
 int
-HLSOutputStream::write_audio_frame (AVFormatContext *oc)
+HLSOutputStream::write_audio_frame()
 {
     AVCodecContext *c;
     AVPacket pkt = { 0 }; // data and size must be 0;
@@ -405,7 +405,7 @@ HLSOutputStream::write_audio_frame (AVFormatContext *oc)
           }
         else if (m_keep_frames)
           {
-            ret = write_frame(oc, &c->time_base, m_st, &pkt);
+            ret = write_frame (&c->time_base, m_st, &pkt);
             if (ret < 0)
               {
                 fprintf(stderr, "Error while writing audio frame: %s\n",
@@ -420,7 +420,7 @@ HLSOutputStream::write_audio_frame (AVFormatContext *oc)
 }
 
 void
-HLSOutputStream::close_stream (AVFormatContext *oc)
+HLSOutputStream::close_stream()
 {
     avcodec_free_context(&m_enc);
     av_frame_free(&m_frame);
@@ -448,8 +448,8 @@ HLSOutputStream::open (const string& out_filename)
 
   AVDictionary *opt = nullptr;
   AVCodec *audio_codec;
-  add_stream (m_fmt_ctx, &audio_codec, AV_CODEC_ID_AAC);
-  open_audio (m_fmt_ctx, audio_codec, opt);
+  add_stream (&audio_codec, AV_CODEC_ID_AAC);
+  open_audio (audio_codec, opt);
 
   /* Write the stream header, if any. */
   ret = avformat_write_header (m_fmt_ctx, &opt);
@@ -467,7 +467,7 @@ HLSOutputStream::close()
 {
   av_write_trailer (m_fmt_ctx);
 
-  close_stream (m_fmt_ctx);
+  close_stream();
 
   /* Close the output file. */
   if (!(m_fmt_ctx->oformat->flags & AVFMT_NOFILE))
@@ -482,7 +482,7 @@ HLSOutputStream::close()
 void
 HLSOutputStream::write()
 {
-  while (write_audio_frame (m_fmt_ctx) == 0);
+  while (write_audio_frame() == 0);
 }
 
 Error
