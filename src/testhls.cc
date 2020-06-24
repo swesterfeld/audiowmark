@@ -1,4 +1,4 @@
-/*
+/*,
  * Copyright (C) 2018-2020 Stefan Westerfeld
  *
  * This program is free software: you can redistribute it and/or modify
@@ -112,6 +112,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
 struct HLSOutputStream {
     AVStream         *m_st = nullptr;
     AVCodecContext   *m_enc = nullptr;
+    AVFormatContext  *m_fmt_ctx = nullptr;
 
     /* pts of the next frame that will be generated */
     int64_t           m_next_pts = 0;
@@ -135,6 +136,10 @@ struct HLSOutputStream {
   void close_stream (AVFormatContext *oc);
   AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples);
   int write_frame (AVFormatContext *fmt_ctx, const AVRational *time_base, AVStream *st, AVPacket *pkt);
+
+  Error open (const string& output_filename);
+  void write();
+  Error close();
 };
 
 
@@ -192,35 +197,6 @@ HLSOutputStream::add_stream (AVFormatContext *oc, AVCodec **codec, enum AVCodecI
         m_st->time_base = (AVRational){ 1, c->sample_rate };
         break;
 
-#if 0
-    case AVMEDIA_TYPE_VIDEO:
-        c->codec_id = codec_id;
-
-        c->bit_rate = 400000;
-        /* Resolution must be a multiple of two. */
-        c->width    = 352;
-        c->height   = 288;
-        /* timebase: This is the fundamental unit of time (in seconds) in terms
-         * of which frame timestamps are represented. For fixed-fps content,
-         * timebase should be 1/framerate and timestamp increments should be
-         * identical to 1. */
-        ost->st->time_base = (AVRational){ 1, STREAM_FRAME_RATE };
-        c->time_base       = ost->st->time_base;
-
-        c->gop_size      = 12; /* emit one intra frame every twelve frames at most */
-        c->pix_fmt       = STREAM_PIX_FMT;
-        if (c->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
-            /* just for testing, we also add B-frames */
-            c->max_b_frames = 2;
-        }
-        if (c->codec_id == AV_CODEC_ID_MPEG1VIDEO) {
-            /* Needed to avoid using macroblocks in which some coeffs overflow.
-             * This does not happen with normal video, it just happens here as
-             * the motion of the chroma plane does not match the luma plane. */
-            c->mb_decision = 2;
-        }
-    break;
-#endif
     default:
         break;
     }
@@ -452,26 +428,70 @@ HLSOutputStream::close_stream (AVFormatContext *oc)
     swr_free(&m_swr_ctx);
 }
 
-
 Error
-ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
+HLSOutputStream::open (const string& out_filename)
 {
+  avformat_alloc_output_context2 (&m_fmt_ctx, NULL, "mpegts", NULL);
+  if (!m_fmt_ctx)
+    return Error ("failed to alloc avformat output context");
+
   string filename = out_filename;
   if (filename == "-")
     filename = "pipe:1";
 
-  AVFormatContext *oc;
-  avformat_alloc_output_context2 (&oc, NULL, "mpegts", NULL);
-  if (!oc)
-    return Error ("failed to alloc avformat output context");
-  int ret = avio_open (&oc->pb, filename.c_str(), AVIO_FLAG_WRITE);
+  int ret = avio_open (&m_fmt_ctx->pb, filename.c_str(), AVIO_FLAG_WRITE);
   if (ret < 0)
     {
       error ("Could not open output: %s\n", av_err2str (ret));
-      return Error ("open pipe failed");
+      return Error ("open hls output failed");
     }
 
+  AVDictionary *opt = nullptr;
+  AVCodec *audio_codec;
+  add_stream (m_fmt_ctx, &audio_codec, AV_CODEC_ID_AAC);
+  open_audio (m_fmt_ctx, audio_codec, opt);
+
+  /* Write the stream header, if any. */
+  ret = avformat_write_header (m_fmt_ctx, &opt);
+  if (ret < 0)
+    {
+      error ("Error occurred when writing output file: %s\n",  av_err2str(ret));
+      return Error ("avformat_write_header failed\n");
+    }
+  av_dump_format (m_fmt_ctx, 0, filename.c_str(), 1);
+  return Error::Code::NONE;
+}
+
+Error
+HLSOutputStream::close()
+{
+  av_write_trailer (m_fmt_ctx);
+
+  close_stream (m_fmt_ctx);
+
+  /* Close the output file. */
+  if (!(m_fmt_ctx->oformat->flags & AVFMT_NOFILE))
+    avio_closep (&m_fmt_ctx->pb);
+
+  /* free the stream */
+  avformat_free_context (m_fmt_ctx);
+
+  return Error::Code::NONE;
+}
+
+void
+HLSOutputStream::write()
+{
+  while (write_audio_frame (m_fmt_ctx) == 0);
+}
+
+Error
+ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
+{
   HLSOutputStream audio_st;
+  Error err = audio_st.open (out_filename);
+  if (err)
+    return err;
   audio_st.m_wav_data = &wav_data;
   audio_st.m_cut_frames_start = cut_start / 1024;
   audio_st.m_keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
@@ -480,33 +500,11 @@ ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos
   audio_st.m_start_pos = pts_start * wav_data.sample_rate() - cut_start;
   audio_st.m_start_pos += 1024;
 
-  AVCodec *audio_codec;
-  AVOutputFormat *fmt;
-  AVDictionary *opt = nullptr;
+  audio_st.write ();
 
-  fmt = oc->oformat;
-  audio_st.add_stream (oc, &audio_codec, AV_CODEC_ID_AAC);
-  audio_st.open_audio (oc, audio_codec, opt);
-
-  /* Write the stream header, if any. */
-  ret = avformat_write_header (oc, &opt);
-  if (ret < 0)
-    {
-      error ("Error occurred when writing output file: %s\n",  av_err2str(ret));
-      return Error ("avformat_write_header failed\n");
-    }
-  av_dump_format(oc, 0, filename.c_str(), 1);
-  while (audio_st.write_audio_frame (oc) == 0);
-  av_write_trailer(oc);
-
-  audio_st.close_stream (oc);
-
-  if (!(fmt->flags & AVFMT_NOFILE))
-      /* Close the output file. */
-      avio_closep(&oc->pb);
-
-  /* free the stream */
-  avformat_free_context(oc);
+  err = audio_st.close();
+  if (err)
+    return err;
 
 /*------------------------------- end code from ffmpeg...muxing.c -------------------------------*/
 
