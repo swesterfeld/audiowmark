@@ -367,6 +367,11 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   const size_t keep_aac_frames = size / 1024;
 
   err = out_stream.open (outfile, cut_aac_frames, keep_aac_frames, pts_start, delete_input_start);
+  if (err)
+    {
+      error ("audiowmark: error opening HLS output stream %s: %s\n", outfile.c_str(), err.message());
+      return 1;
+    }
 
   int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
   if (zrc != 0)

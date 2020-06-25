@@ -89,7 +89,7 @@ class HLSOutputStream : public AudioOutputStream {
   AudioBuffer       m_audio_buffer;
   size_t            m_delete_input_start = 0;
 
-  void add_stream (AVCodec **codec, enum AVCodecID codec_id);
+  Error add_stream (AVCodec **codec, enum AVCodecID codec_id);
   void open_audio (AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
   int write_audio_frame();

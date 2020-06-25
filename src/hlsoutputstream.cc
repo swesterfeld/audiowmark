@@ -54,37 +54,26 @@ HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth
 }
 
 /* Add an output stream. */
-void
+Error
 HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 {
   /* find the encoder */
   *codec = avcodec_find_encoder (codec_id);
   if (!(*codec))
-    {
-      fprintf(stderr, "Could not find encoder for '%s'\n", avcodec_get_name (codec_id));
-      exit(1);
-    }
+    return Error (string_printf ("could not find encoder for '%s'", avcodec_get_name (codec_id)));
 
   m_st = avformat_new_stream (m_fmt_ctx, NULL);
   if (!m_st)
-    {
-      fprintf (stderr, "Could not allocate stream\n");
-      exit(1);
-    }
+    return Error ("could not allocate stream");
+
   m_st->id = m_fmt_ctx->nb_streams - 1;
 
   m_enc = avcodec_alloc_context3 (*codec);
   if (!m_enc)
-    {
-      fprintf (stderr, "Could not alloc an encoding context\n");
-      exit(1);
-    }
+    return Error ("could not alloc an encoding context");
 
   if ((*codec)->type != AVMEDIA_TYPE_AUDIO)
-    {
-      error ("HLSOutputStream: codec type must be audio");
-      exit (1);
-    }
+    return Error ("codec type must be audio");
 
   m_enc->sample_fmt  = (*codec)->sample_fmts ? (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
   m_enc->bit_rate    = 128000;
@@ -101,10 +90,7 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
             }
         }
       if (!match)
-        {
-          error ("HLSOutputStream: unsupported sample rate %d\n", m_sample_rate);
-          exit (1);
-        }
+        return Error (string_printf ("no codec support for sample rate %d", m_sample_rate));
     }
   m_enc->channels       = av_get_channel_layout_nb_channels (m_enc->channel_layout);
   m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
@@ -123,6 +109,8 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
   /* Some formats want stream headers to be separate. */
   if (m_fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
     m_enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+  return Error::Code::NONE;
 }
 
 
@@ -344,14 +332,14 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
 
   int ret = avio_open (&m_fmt_ctx->pb, filename.c_str(), AVIO_FLAG_WRITE);
   if (ret < 0)
-    {
-      error ("Could not open output: %s\n", av_err2str (ret));
-      return Error ("open hls output failed");
-    }
+    return Error (av_err2str (ret));
 
   AVDictionary *opt = nullptr;
   AVCodec *audio_codec;
-  add_stream (&audio_codec, AV_CODEC_ID_AAC);
+  Error err = add_stream (&audio_codec, AV_CODEC_ID_AAC);
+  if (err)
+    return err;
+
   open_audio (audio_codec, opt);
 
   /* Write the stream header, if any. */
