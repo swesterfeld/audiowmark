@@ -108,8 +108,40 @@ ff_decode (const string& filename, WavData& out_wav_data)
  * THE SOFTWARE.
  */
 
+class AudioBuffer
+{
+  const int     n_channels = 0;
+  vector<float> buffer;
+
+public:
+  AudioBuffer (int n_channels) :
+    n_channels (n_channels)
+  {
+  }
+  void
+  write_frames (const vector<float>& samples)
+  {
+    buffer.insert (buffer.end(), samples.begin(), samples.end());
+  }
+  vector<float>
+  read_frames (size_t frames)
+  {
+    assert (frames * n_channels <= buffer.size());
+    const auto begin = buffer.begin();
+    const auto end   = begin + frames * n_channels;
+    vector<float> result (begin, end);
+    buffer.erase (begin, end);
+    return result;
+  }
+  size_t
+  can_read_frames() const
+  {
+    return buffer.size() / n_channels;
+  }
+};
+
 // a wrapper around a single output AVStream
-class HLSOutputStream {
+class HLSOutputStream : public AudioOutputStream {
   AVStream         *m_st = nullptr;
   AVCodecContext   *m_enc = nullptr;
   AVFormatContext  *m_fmt_ctx = nullptr;
@@ -122,12 +154,17 @@ class HLSOutputStream {
   AVFrame          *m_frame = nullptr;
   AVFrame          *m_tmp_frame = nullptr;
 
-  const WavData    *m_wav_data = nullptr;
   size_t            m_t = 0;
   size_t            m_cut_frames_start = 0;
-  size_t            m_keep_frames = 0;
+  size_t            m_keep_aac_frames = 0;
 
   SwrContext       *m_swr_ctx = nullptr;
+
+  int               m_bit_depth = 0;
+  int               m_sample_rate = 0;
+  int               m_n_channels = 0;
+  AudioBuffer       m_audio_buffer;
+  size_t            m_delete_input_start = 0;
 
   void add_stream (AVCodec **codec, enum AVCodecID codec_id);
   void open_audio (AVCodec *codec, AVDictionary *opt_arg);
@@ -137,11 +174,24 @@ class HLSOutputStream {
   AVFrame *alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples);
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
 public:
-  Error open (const string& output_filename, const WavData& wav_data, size_t cut_start, size_t cut_end, double pts_start);
+  HLSOutputStream (int n_channels, int sample_rate, int bit_depth);
+
+  Error open (const string& output_filename, size_t cut_start, size_t cut_end, double pts_start, size_t delete_input_start, size_t keep_aac_frames);
+  int bit_depth() const override;
+  int sample_rate() const override;
+  int n_channels() const override;
+  Error write_frames (const std::vector<float>& frames) override;
   void write();
   Error close();
 };
 
+HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth) :
+  m_bit_depth (bit_depth),
+  m_sample_rate (sample_rate),
+  m_n_channels (n_channels),
+  m_audio_buffer (n_channels)
+{
+}
 
 /* Add an output stream. */
 void
@@ -305,19 +355,20 @@ HLSOutputStream::get_audio_frame()
     int j, i;
     int16_t *q = (int16_t*)frame->data[0];
 
-    /* check if we want to generate more frames */
-    if (m_t >= m_wav_data->samples().size())
+    if (m_audio_buffer.can_read_frames() < frame->nb_samples)
       return NULL;
 
-    const vector<float>& wd_samples = m_wav_data->samples();
+    vector<float> samples = m_audio_buffer.read_frames (frame->nb_samples);
+
+    int t = 0;
     for (j = 0; j < frame->nb_samples; j++)
       {
         for (i = 0; i < m_enc->channels; i++)
           {
-            if (m_t < wd_samples.size())
+            if (t < samples.size())
               {
-                *q++ = (int)(wd_samples[m_t] * 32768);
-                m_t++;
+                *q++ = (int)(samples[t] * 32768);
+                t++;
               }
             else
               *q++ = 0;
@@ -403,7 +454,7 @@ HLSOutputStream::write_audio_frame()
           {
             m_cut_frames_start--;
           }
-        else if (m_keep_frames)
+        else if (m_keep_aac_frames)
           {
             ret = write_frame (&c->time_base, m_st, &pkt);
             if (ret < 0)
@@ -412,7 +463,7 @@ HLSOutputStream::write_audio_frame()
                         av_err2str(ret));
                 exit(1);
               }
-            m_keep_frames--;
+            m_keep_aac_frames--;
           }
       }
 
@@ -429,7 +480,7 @@ HLSOutputStream::close_stream()
 }
 
 Error
-HLSOutputStream::open (const string& out_filename, const WavData& wav_data, size_t cut_start, size_t cut_end, double pts_start)
+HLSOutputStream::open (const string& out_filename, size_t cut_start, size_t cut_end, double pts_start, size_t delete_input_start, size_t keep_aac_frames)
 {
   avformat_alloc_output_context2 (&m_fmt_ctx, NULL, "mpegts", NULL);
   if (!m_fmt_ctx)
@@ -460,12 +511,12 @@ HLSOutputStream::open (const string& out_filename, const WavData& wav_data, size
     }
   av_dump_format (m_fmt_ctx, 0, filename.c_str(), 1);
 
-  m_wav_data = &wav_data;
   m_cut_frames_start = cut_start / 1024;
-  m_keep_frames = (wav_data.n_values() / wav_data.n_channels() - cut_start - cut_end) / 1024;
+  m_delete_input_start = delete_input_start;
+  m_keep_aac_frames = keep_aac_frames;
 
   // FIXME: correct?
-  m_start_pos = pts_start * wav_data.sample_rate() - cut_start;
+  m_start_pos = pts_start * m_sample_rate - cut_start;
   m_start_pos += 1024;
 
   return Error::Code::NONE;
@@ -474,6 +525,8 @@ HLSOutputStream::open (const string& out_filename, const WavData& wav_data, size
 Error
 HLSOutputStream::close()
 {
+  write(); // drain
+
   av_write_trailer (m_fmt_ctx);
 
   close_stream();
@@ -495,50 +548,40 @@ HLSOutputStream::write()
 }
 
 Error
-ff_encode (const WavData& wav_data, const string& out_filename, size_t start_pos, size_t cut_start, size_t cut_end, double pts_start)
+HLSOutputStream::write_frames (const std::vector<float>& frames)
 {
-  HLSOutputStream audio_st;
-  Error err = audio_st.open (out_filename, wav_data, cut_start, cut_end, pts_start);
-  if (err)
-    return err;
-  audio_st.write ();
+  m_audio_buffer.write_frames (frames);
 
-  err = audio_st.close();
-  if (err)
-    return err;
+  size_t delete_input = min (m_delete_input_start, m_audio_buffer.can_read_frames());
+  if (delete_input)
+    {
+      m_audio_buffer.read_frames (delete_input);
+      m_delete_input_start -= delete_input;
+    }
 
-/*------------------------------- end code from ffmpeg...muxing.c -------------------------------*/
-
-
-#if 0
-  FILE *tmp_file = tmpfile();
-  ScopedFile tmp_file_s (tmp_file);
-  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
-
-  Error err = wav_data.save (tmp_file_name);
-
-  string cmd = string_printf ("ffmpeg -v error -y -i %s -f mpegts -c:a aac '%s'", tmp_file_name.c_str(), filename.c_str());
-  err = xsystem (cmd);
-  if (err)
-    return err;
-
-  double length_s = double (wav_data.n_values()) / wav_data.n_channels() / wav_data.sample_rate();
-
-  // cut_start_s is corrected down to avoid cutting one frame more or than intended
-  double cut_start_s = cut_start / double (wav_data.sample_rate());
-  double cut_end_s = cut_end / double (wav_data.sample_rate());
-  cmd = string_printf ("ffmpeg -v error -y -i '%s' -ss %.6f -t %.6f -f mpegts -output_ts_offset %f -muxdelay 0 -muxpreload 0 -c copy '%s-tcpy'",
-                       filename.c_str(), cut_start_s - 1. / wav_data.sample_rate(), length_s - (cut_start_s + cut_end_s), pts_start, filename.c_str());
-  err = xsystem (cmd);
-  if (err)
-    return err;
-
-  cmd = string_printf ("mv '%s-tcpy' '%s'", filename.c_str(), filename.c_str());
-  xsystem (cmd);
-  if (err)
-    return err;
-#endif
+  while (m_audio_buffer.can_read_frames() >= 1024)
+    {
+      write_audio_frame();
+    }
   return Error::Code::NONE;
+}
+
+int
+HLSOutputStream::bit_depth() const
+{
+  return m_bit_depth;
+}
+
+int
+HLSOutputStream::sample_rate() const
+{
+  return m_sample_rate;
+}
+
+int
+HLSOutputStream::n_channels() const
+{
+  return m_n_channels;
 }
 
 int
@@ -817,6 +860,7 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
   size_t next_size = atoi (vars["next_size"].c_str());
+  size_t size      = atoi (vars["size"].c_str());
   double pts_start = atof (vars["pts_start"].c_str());
   size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
@@ -824,33 +868,25 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
   start_time1 = get_time();
 
-  WavData wav_data ({ /* no samples */ }, in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
-  WDOutputStream out_stream (&wav_data);
+  HLSOutputStream out_stream (in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
+
+  info ("n_frames = %zd\n", in_stream.n_frames() - prev_size - next_size);
+  const size_t shift = 1024;
+  const size_t cut_start = prev_ctx + shift;
+  const size_t cut_end = next_ctx;
+  const size_t delete_input_start = prev_size - prev_ctx;
+  const size_t keep_aac_frames = size / 1024;
+
+  err = out_stream.open (outfile, cut_start, cut_end, pts_start, delete_input_start, keep_aac_frames);
 
   int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
   if (zrc != 0)
     return zrc;
 
-  /* erase extra samples caused by concatting with prev.ts */
-  auto samples = wav_data.samples();
-  samples.erase (samples.begin(), samples.begin() + (prev_size - prev_ctx) * wav_data.n_channels());
-  samples.erase (samples.end() - (next_size - next_ctx) * wav_data.n_channels(), samples.end());
-  wav_data.set_samples (samples);
-
-  info ("hls_time_elapsed_mark %f\n", (get_time() - start_time1) * 1000 /* ms */);
-  start_time1 = get_time();
-
-  err = ff_encode (wav_data, outfile, start_pos, start_pos == 0 ? 1024 : prev_ctx, next_ctx, pts_start);
-  if (err)
-    {
-      error ("hls_mark: %s\n", err.message());
-      return 1;
-    }
-
   info ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
 
   double end_time = get_time();
-  info ("hls_time %f %f\n", start_pos / double (wav_data.sample_rate()), (end_time - start_time) * 1000 /* ms */);
+  info ("hls_time %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
 
   return 0;
 }
