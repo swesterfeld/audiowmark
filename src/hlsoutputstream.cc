@@ -115,14 +115,14 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 
 
 AVFrame *
-HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples)
+HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples, Error& err)
 {
   AVFrame *frame = av_frame_alloc();
 
   if (!frame)
     {
-      fprintf (stderr, "Error allocating an audio frame\n");
-      exit(1);
+      err = Error ("error allocating an audio frame");
+      return nullptr;
     }
 
   frame->format = sample_fmt;
@@ -135,8 +135,8 @@ HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_
       int ret = av_frame_get_buffer (frame, 0);
       if (ret < 0)
         {
-          fprintf (stderr, "Error allocating an audio buffer\n");
-          exit(1);
+          err = Error ("Error allocating an audio buffer");
+          return nullptr;
         }
     }
 
@@ -144,7 +144,7 @@ HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_
 }
 
 
-void
+Error
 HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
 {
   int nb_samples;
@@ -166,8 +166,14 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
   else
     nb_samples = m_enc->frame_size;
 
-  m_frame     = alloc_audio_frame (m_enc->sample_fmt, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
-  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_FLT, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
+  Error err;
+  m_frame     = alloc_audio_frame (m_enc->sample_fmt, m_enc->channel_layout, m_enc->sample_rate, nb_samples, err);
+  if (err)
+    return err;
+
+  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_FLT, m_enc->channel_layout, m_enc->sample_rate, nb_samples, err);
+  if (err)
+    return err;
 
   /* copy the stream parameters to the muxer */
   ret = avcodec_parameters_from_context (m_st->codecpar, m_enc);
@@ -199,6 +205,7 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
       fprintf(stderr, "Failed to initialize the resampling context\n");
       exit(1);
     }
+  return Error::Code::NONE;
 }
 
 /* Prepare a 16 bit dummy audio frame of 'frame_size' samples and
@@ -340,7 +347,9 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
   if (err)
     return err;
 
-  open_audio (audio_codec, opt);
+  err = open_audio (audio_codec, opt);
+  if (err)
+    return err;
 
   /* Write the stream header, if any. */
   ret = avformat_write_header (m_fmt_ctx, &opt);
