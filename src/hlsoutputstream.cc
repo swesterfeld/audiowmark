@@ -57,63 +57,64 @@ HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth
 void
 HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 {
-    AVCodecContext *c;
-    int i;
-
-    /* find the encoder */
-    *codec = avcodec_find_encoder(codec_id);
-    if (!(*codec)) {
-        fprintf(stderr, "Could not find encoder for '%s'\n",
-                avcodec_get_name(codec_id));
-        exit(1);
+  /* find the encoder */
+  *codec = avcodec_find_encoder (codec_id);
+  if (!(*codec))
+    {
+      fprintf(stderr, "Could not find encoder for '%s'\n", avcodec_get_name (codec_id));
+      exit(1);
     }
 
-    m_st = avformat_new_stream (m_fmt_ctx, NULL);
-    if (!m_st) {
-        fprintf(stderr, "Could not allocate stream\n");
-        exit(1);
+  m_st = avformat_new_stream (m_fmt_ctx, NULL);
+  if (!m_st)
+    {
+      fprintf (stderr, "Could not allocate stream\n");
+      exit(1);
     }
-    m_st->id = m_fmt_ctx->nb_streams - 1;
-    c = avcodec_alloc_context3(*codec);
-    if (!c) {
-        fprintf(stderr, "Could not alloc an encoding context\n");
-        exit(1);
-    }
-    m_enc = c;
+  m_st->id = m_fmt_ctx->nb_streams - 1;
 
-    switch ((*codec)->type) {
-    case AVMEDIA_TYPE_AUDIO:
-        c->sample_fmt  = (*codec)->sample_fmts ?
-            (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-        c->bit_rate    = 128000;
-        c->sample_rate = 44100;
-        if ((*codec)->supported_samplerates) {
-            c->sample_rate = (*codec)->supported_samplerates[0];
-            for (i = 0; (*codec)->supported_samplerates[i]; i++) {
-                if ((*codec)->supported_samplerates[i] == 44100)
-                    c->sample_rate = 44100;
-            }
+  m_enc = avcodec_alloc_context3 (*codec);
+  if (!m_enc)
+    {
+      fprintf (stderr, "Could not alloc an encoding context\n");
+      exit(1);
+    }
+
+  if ((*codec)->type != AVMEDIA_TYPE_AUDIO)
+    {
+      error ("HLSOutputStream: codec type must be audio");
+      exit (1);
+    }
+
+  m_enc->sample_fmt  = (*codec)->sample_fmts ? (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+  m_enc->bit_rate    = 128000;
+  m_enc->sample_rate = 44100;
+  if ((*codec)->supported_samplerates)
+    {
+      m_enc->sample_rate = (*codec)->supported_samplerates[0];
+        for (int i = 0; (*codec)->supported_samplerates[i]; i++)
+          {
+            if ((*codec)->supported_samplerates[i] == 44100)
+              m_enc->sample_rate = 44100;
+          }
+    }
+  m_enc->channels       = av_get_channel_layout_nb_channels (m_enc->channel_layout);
+  m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
+  if ((*codec)->channel_layouts)
+    {
+      m_enc->channel_layout = (*codec)->channel_layouts[0];
+      for (int i = 0; (*codec)->channel_layouts[i]; i++)
+        {
+          if ((*codec)->channel_layouts[i] == AV_CH_LAYOUT_STEREO)
+              m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
         }
-        c->channels        = av_get_channel_layout_nb_channels(c->channel_layout);
-        c->channel_layout = AV_CH_LAYOUT_STEREO;
-        if ((*codec)->channel_layouts) {
-            c->channel_layout = (*codec)->channel_layouts[0];
-            for (i = 0; (*codec)->channel_layouts[i]; i++) {
-                if ((*codec)->channel_layouts[i] == AV_CH_LAYOUT_STEREO)
-                    c->channel_layout = AV_CH_LAYOUT_STEREO;
-            }
-        }
-        c->channels     = av_get_channel_layout_nb_channels(c->channel_layout);
-        m_st->time_base = (AVRational){ 1, c->sample_rate };
-        break;
-
-    default:
-        break;
     }
+  m_enc->channels     = av_get_channel_layout_nb_channels (m_enc->channel_layout);
+  m_st->time_base = (AVRational){ 1, m_enc->sample_rate };
 
-    /* Some formats want stream headers to be separate. */
-    if (m_fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-        c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+  /* Some formats want stream headers to be separate. */
+  if (m_fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
+      m_enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 }
 
 
