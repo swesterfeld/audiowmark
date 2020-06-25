@@ -179,7 +179,7 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
     nb_samples = m_enc->frame_size;
 
   m_frame     = alloc_audio_frame (m_enc->sample_fmt, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
-  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_S16, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
+  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_FLT, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
 
   /* copy the stream parameters to the muxer */
   ret = avcodec_parameters_from_context (m_st->codecpar, m_enc);
@@ -200,7 +200,7 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
   /* set options */
   av_opt_set_int        (m_swr_ctx, "in_channel_count",   m_enc->channels,       0);
   av_opt_set_int        (m_swr_ctx, "in_sample_rate",     m_enc->sample_rate,    0);
-  av_opt_set_sample_fmt (m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16,     0);
+  av_opt_set_sample_fmt (m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_FLT,     0);
   av_opt_set_int        (m_swr_ctx, "out_channel_count",  m_enc->channels,       0);
   av_opt_set_int        (m_swr_ctx, "out_sample_rate",    m_enc->sample_rate,    0);
   av_opt_set_sample_fmt (m_swr_ctx, "out_sample_fmt",     m_enc->sample_fmt,     0);
@@ -219,27 +219,13 @@ AVFrame *
 HLSOutputStream::get_audio_frame()
 {
   AVFrame *frame = m_tmp_frame;
-  int16_t *q = (int16_t*)frame->data[0];
 
   if (m_audio_buffer.can_read_frames() < size_t (frame->nb_samples))
-    return NULL;
+    return nullptr;
 
   vector<float> samples = m_audio_buffer.read_frames (frame->nb_samples);
 
-  size_t t = 0;
-  for (int j = 0; j < frame->nb_samples; j++)
-    {
-      for (int i = 0; i < m_enc->channels; i++)
-        {
-          if (t < samples.size())
-            {
-              *q++ = (int)(samples[t] * 32768);
-              t++;
-            }
-          else
-            *q++ = 0;
-        }
-    }
+  std::copy (samples.begin(), samples.end(), (float *)frame->data[0]);
 
   frame->pts = m_next_pts;
   m_next_pts  += frame->nb_samples;
