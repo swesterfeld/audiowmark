@@ -92,7 +92,7 @@ class HLSOutputStream : public AudioOutputStream {
   Error add_stream (AVCodec **codec, enum AVCodecID codec_id);
   Error open_audio (AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
-  int write_audio_frame();
+  int write_audio_frame (Error& err);
   void close_stream();
   AVFrame *alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples, Error& err);
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
@@ -104,7 +104,6 @@ public:
   int sample_rate() const override;
   int n_channels() const override;
   Error write_frames (const std::vector<float>& frames) override;
-  void write();
   Error close();
 };
 

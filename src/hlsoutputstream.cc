@@ -235,7 +235,7 @@ HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacke
  * return 1 when encoding is finished, 0 otherwise
  */
 int
-HLSOutputStream::write_audio_frame()
+HLSOutputStream::write_audio_frame (Error& err)
 {
   AVPacket pkt = { 0 }; // data and size must be 0;
   AVFrame *frame;
@@ -260,7 +260,10 @@ HLSOutputStream::write_audio_frame()
        */
       ret = av_frame_make_writable (m_frame);
       if (ret < 0)
-        exit(1);
+        {
+          err = Error ("error making frame writable");
+          return 1;
+        }
 
       /* convert to destination format */
       ret = swr_convert (m_swr_ctx,
@@ -268,8 +271,8 @@ HLSOutputStream::write_audio_frame()
                          (const uint8_t **)frame->data, frame->nb_samples);
       if (ret < 0)
         {
-          fprintf (stderr, "Error while converting\n");
-          exit(1);
+          err = Error ("error while converting");
+          return 1;
         }
       frame = m_frame;
 
@@ -280,8 +283,8 @@ HLSOutputStream::write_audio_frame()
   ret = avcodec_encode_audio2 (m_enc, &pkt, frame, &got_packet);
   if (ret < 0)
     {
-      fprintf(stderr, "Error encoding audio frame: %s\n", av_err2str(ret));
-      exit(1);
+      err = Error (string_printf ("error encoding audio frame: %s", av_err2str (ret)));
+      return 1;
     }
 
   if (got_packet)
@@ -295,9 +298,8 @@ HLSOutputStream::write_audio_frame()
           ret = write_frame (&m_enc->time_base, m_st, &pkt);
           if (ret < 0)
             {
-              fprintf(stderr, "Error while writing audio frame: %s\n",
-                      av_err2str(ret));
-              exit(1);
+              err = Error (string_printf ("error while writing audio frame: %s", av_err2str (ret)));
+              return 1;
             }
           m_keep_aac_frames--;
         }
@@ -363,7 +365,10 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
 Error
 HLSOutputStream::close()
 {
-  write(); // drain
+  Error err;
+  while (write_audio_frame (err) == 0);
+  if (err)
+    return err;
 
   av_write_trailer (m_fmt_ctx);
 
@@ -377,12 +382,6 @@ HLSOutputStream::close()
   avformat_free_context (m_fmt_ctx);
 
   return Error::Code::NONE;
-}
-
-void
-HLSOutputStream::write()
-{
-  while (write_audio_frame() == 0);
 }
 
 Error
@@ -401,9 +400,12 @@ HLSOutputStream::write_frames (const std::vector<float>& frames)
       m_delete_input_start -= delete_input;
     }
 
+  Error err;
   while (m_audio_buffer.can_read_frames() >= 1024)
     {
-      write_audio_frame();
+      write_audio_frame (err);
+      if (err)
+        return err;
     }
   return Error::Code::NONE;
 }
