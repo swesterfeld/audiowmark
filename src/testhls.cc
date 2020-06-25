@@ -154,8 +154,7 @@ class HLSOutputStream : public AudioOutputStream {
   AVFrame          *m_frame = nullptr;
   AVFrame          *m_tmp_frame = nullptr;
 
-  size_t            m_t = 0;
-  size_t            m_cut_frames_start = 0;
+  size_t            m_cut_aac_frames = 0;
   size_t            m_keep_aac_frames = 0;
 
   SwrContext       *m_swr_ctx = nullptr;
@@ -176,7 +175,7 @@ class HLSOutputStream : public AudioOutputStream {
 public:
   HLSOutputStream (int n_channels, int sample_rate, int bit_depth);
 
-  Error open (const string& output_filename, size_t cut_start, size_t cut_end, double pts_start, size_t delete_input_start, size_t keep_aac_frames);
+  Error open (const string& output_filename, size_t cut_aac_frames, size_t keep_aac_frames, double pts_start, size_t delete_input_start);
   int bit_depth() const override;
   int sample_rate() const override;
   int n_channels() const override;
@@ -304,9 +303,6 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
         exit(1);
     }
 
-    /* init signal generator */
-    m_t = 0;
-
     if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
         nb_samples = 10000;
     else
@@ -355,12 +351,12 @@ HLSOutputStream::get_audio_frame()
     int j, i;
     int16_t *q = (int16_t*)frame->data[0];
 
-    if (m_audio_buffer.can_read_frames() < frame->nb_samples)
+    if (m_audio_buffer.can_read_frames() < size_t (frame->nb_samples))
       return NULL;
 
     vector<float> samples = m_audio_buffer.read_frames (frame->nb_samples);
 
-    int t = 0;
+    size_t t = 0;
     for (j = 0; j < frame->nb_samples; j++)
       {
         for (i = 0; i < m_enc->channels; i++)
@@ -450,9 +446,9 @@ HLSOutputStream::write_audio_frame()
 
     if (got_packet)
       {
-        if (m_cut_frames_start)
+        if (m_cut_aac_frames)
           {
-            m_cut_frames_start--;
+            m_cut_aac_frames--;
           }
         else if (m_keep_aac_frames)
           {
@@ -480,7 +476,7 @@ HLSOutputStream::close_stream()
 }
 
 Error
-HLSOutputStream::open (const string& out_filename, size_t cut_start, size_t cut_end, double pts_start, size_t delete_input_start, size_t keep_aac_frames)
+HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t keep_aac_frames, double pts_start, size_t delete_input_start)
 {
   avformat_alloc_output_context2 (&m_fmt_ctx, NULL, "mpegts", NULL);
   if (!m_fmt_ctx)
@@ -511,12 +507,12 @@ HLSOutputStream::open (const string& out_filename, size_t cut_start, size_t cut_
     }
   av_dump_format (m_fmt_ctx, 0, filename.c_str(), 1);
 
-  m_cut_frames_start = cut_start / 1024;
   m_delete_input_start = delete_input_start;
+  m_cut_aac_frames = cut_aac_frames;
   m_keep_aac_frames = keep_aac_frames;
 
   // FIXME: correct?
-  m_start_pos = pts_start * m_sample_rate - cut_start;
+  m_start_pos = pts_start * m_sample_rate - cut_aac_frames * 1024;
   m_start_pos += 1024;
 
   return Error::Code::NONE;
@@ -866,7 +862,6 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   size_t next_size = atoi (vars["next_size"].c_str());
   size_t size      = atoi (vars["size"].c_str());
   double pts_start = atof (vars["pts_start"].c_str());
-  size_t next_ctx = min<size_t> (1024 * 3, next_size);
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
   info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
@@ -876,12 +871,11 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
 
   info ("n_frames = %zd\n", in_stream.n_frames() - prev_size - next_size);
   const size_t shift = 1024;
-  const size_t cut_start = prev_ctx + shift;
-  const size_t cut_end = next_ctx;
+  const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
   const size_t delete_input_start = prev_size - prev_ctx;
   const size_t keep_aac_frames = size / 1024;
 
-  err = out_stream.open (outfile, cut_start, cut_end, pts_start, delete_input_start, keep_aac_frames);
+  err = out_stream.open (outfile, cut_aac_frames, keep_aac_frames, pts_start, delete_input_start);
 
   int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
   if (zrc != 0)
