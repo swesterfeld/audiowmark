@@ -119,89 +119,90 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 
 
 AVFrame *
-HLSOutputStream::alloc_audio_frame(enum AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples)
+HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples)
 {
-    AVFrame *frame = av_frame_alloc();
-    int ret;
+  AVFrame *frame = av_frame_alloc();
 
-    if (!frame) {
-        fprintf(stderr, "Error allocating an audio frame\n");
-        exit(1);
+  if (!frame)
+    {
+      fprintf (stderr, "Error allocating an audio frame\n");
+      exit(1);
     }
 
-    frame->format = sample_fmt;
-    frame->channel_layout = channel_layout;
-    frame->sample_rate = sample_rate;
-    frame->nb_samples = nb_samples;
+  frame->format = sample_fmt;
+  frame->channel_layout = channel_layout;
+  frame->sample_rate = sample_rate;
+  frame->nb_samples = nb_samples;
 
-    if (nb_samples) {
-        ret = av_frame_get_buffer(frame, 0);
-        if (ret < 0) {
-            fprintf(stderr, "Error allocating an audio buffer\n");
-            exit(1);
+  if (nb_samples)
+    {
+      int ret = av_frame_get_buffer (frame, 0);
+      if (ret < 0)
+        {
+          fprintf (stderr, "Error allocating an audio buffer\n");
+          exit(1);
         }
     }
 
-    return frame;
+  return frame;
 }
 
 
 void
 HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
 {
-    AVCodecContext *c;
-    int nb_samples;
-    int ret;
-    AVDictionary *opt = NULL;
+  int nb_samples;
+  int ret;
+  AVDictionary *opt = NULL;
 
-    c = m_enc;
-
-    /* open it */
-    av_dict_copy(&opt, opt_arg, 0);
-    ret = avcodec_open2(c, codec, &opt);
-    av_dict_free(&opt);
-    if (ret < 0) {
-        fprintf(stderr, "Could not open audio codec: %s\n", av_err2str(ret));
-        exit(1);
+  /* open it */
+  av_dict_copy (&opt, opt_arg, 0);
+  ret = avcodec_open2 (m_enc, codec, &opt);
+  av_dict_free (&opt);
+  if (ret < 0)
+    {
+      fprintf(stderr, "Could not open audio codec: %s\n", av_err2str(ret));
+      exit(1);
     }
 
-    if (c->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
-        nb_samples = 10000;
-    else
-        nb_samples = c->frame_size;
+  if (m_enc->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
+    nb_samples = 10000;
+  else
+    nb_samples = m_enc->frame_size;
 
-    m_frame     = alloc_audio_frame(c->sample_fmt, c->channel_layout,
-                                         c->sample_rate, nb_samples);
-    m_tmp_frame = alloc_audio_frame(AV_SAMPLE_FMT_S16, c->channel_layout,
-                                         c->sample_rate, nb_samples);
+  m_frame     = alloc_audio_frame (m_enc->sample_fmt, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
+  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_S16, m_enc->channel_layout, m_enc->sample_rate, nb_samples);
 
-    /* copy the stream parameters to the muxer */
-    ret = avcodec_parameters_from_context(m_st->codecpar, c);
-    if (ret < 0) {
-        fprintf(stderr, "Could not copy the stream parameters\n");
-        exit(1);
+  /* copy the stream parameters to the muxer */
+  ret = avcodec_parameters_from_context (m_st->codecpar, m_enc);
+  if (ret < 0)
+    {
+      fprintf(stderr, "Could not copy the stream parameters\n");
+      exit(1);
     }
 
-    /* create resampler context */
-        m_swr_ctx = swr_alloc();
-        if (!m_swr_ctx) {
-            fprintf(stderr, "Could not allocate resampler context\n");
-            exit(1);
-        }
+  /* create resampler context */
+  m_swr_ctx = swr_alloc();
+  if (!m_swr_ctx)
+    {
+      fprintf(stderr, "Could not allocate resampler context\n");
+      exit(1);
+    }
 
-        /* set options */
-        av_opt_set_int       (m_swr_ctx, "in_channel_count",   c->channels,       0);
-        av_opt_set_int       (m_swr_ctx, "in_sample_rate",     c->sample_rate,    0);
-        av_opt_set_sample_fmt(m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16, 0);
-        av_opt_set_int       (m_swr_ctx, "out_channel_count",  c->channels,       0);
-        av_opt_set_int       (m_swr_ctx, "out_sample_rate",    c->sample_rate,    0);
-        av_opt_set_sample_fmt(m_swr_ctx, "out_sample_fmt",     c->sample_fmt,     0);
+  /* set options */
+  av_opt_set_int        (m_swr_ctx, "in_channel_count",   m_enc->channels,       0);
+  av_opt_set_int        (m_swr_ctx, "in_sample_rate",     m_enc->sample_rate,    0);
+  av_opt_set_sample_fmt (m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_S16,     0);
+  av_opt_set_int        (m_swr_ctx, "out_channel_count",  m_enc->channels,       0);
+  av_opt_set_int        (m_swr_ctx, "out_sample_rate",    m_enc->sample_rate,    0);
+  av_opt_set_sample_fmt (m_swr_ctx, "out_sample_fmt",     m_enc->sample_fmt,     0);
 
-        /* initialize the resampling context */
-        if ((ret = swr_init(m_swr_ctx)) < 0) {
-            fprintf(stderr, "Failed to initialize the resampling context\n");
-            exit(1);
-        }
+  /* initialize the resampling context */
+  if ((ret = swr_init(m_swr_ctx)) < 0)
+    {
+      fprintf(stderr, "Failed to initialize the resampling context\n");
+      exit(1);
+    }
 }
 
 /* Prepare a 16 bit dummy audio frame of 'frame_size' samples and
@@ -209,34 +210,33 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
 AVFrame *
 HLSOutputStream::get_audio_frame()
 {
-    AVFrame *frame = m_tmp_frame;
-    int j, i;
-    int16_t *q = (int16_t*)frame->data[0];
+  AVFrame *frame = m_tmp_frame;
+  int16_t *q = (int16_t*)frame->data[0];
 
-    if (m_audio_buffer.can_read_frames() < size_t (frame->nb_samples))
-      return NULL;
+  if (m_audio_buffer.can_read_frames() < size_t (frame->nb_samples))
+    return NULL;
 
-    vector<float> samples = m_audio_buffer.read_frames (frame->nb_samples);
+  vector<float> samples = m_audio_buffer.read_frames (frame->nb_samples);
 
-    size_t t = 0;
-    for (j = 0; j < frame->nb_samples; j++)
-      {
-        for (i = 0; i < m_enc->channels; i++)
-          {
-            if (t < samples.size())
-              {
-                *q++ = (int)(samples[t] * 32768);
-                t++;
-              }
-            else
-              *q++ = 0;
-          }
-      }
+  size_t t = 0;
+  for (int j = 0; j < frame->nb_samples; j++)
+    {
+      for (int i = 0; i < m_enc->channels; i++)
+        {
+          if (t < samples.size())
+            {
+              *q++ = (int)(samples[t] * 32768);
+              t++;
+            }
+          else
+            *q++ = 0;
+        }
+    }
 
-    frame->pts = m_next_pts;
-    m_next_pts  += frame->nb_samples;
+  frame->pts = m_next_pts;
+  m_next_pts  += frame->nb_samples;
 
-    return frame;
+  return frame;
 }
 
 
