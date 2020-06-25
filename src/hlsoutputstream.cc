@@ -53,6 +53,11 @@ HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth
 {
 }
 
+HLSOutputStream::~HLSOutputStream()
+{
+  close();
+}
+
 /* Add an output stream. */
 Error
 HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
@@ -320,6 +325,8 @@ HLSOutputStream::close_stream()
 Error
 HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t keep_aac_frames, double pts_start, size_t delete_input_start)
 {
+  assert (m_state == State::NEW);
+
   avformat_alloc_output_context2 (&m_fmt_ctx, NULL, "mpegts", NULL);
   if (!m_fmt_ctx)
     return Error ("failed to alloc avformat output context");
@@ -359,12 +366,19 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
   m_start_pos = pts_start * m_sample_rate - cut_aac_frames * 1024;
   m_start_pos += 1024;
 
+  m_state = State::OPEN;
   return Error::Code::NONE;
 }
 
 Error
 HLSOutputStream::close()
 {
+  if (m_state != State::OPEN)
+    return Error::Code::NONE;
+
+  // never close twice
+  m_state = State::CLOSED;
+
   Error err;
   while (write_audio_frame (err) == 0);
   if (err)

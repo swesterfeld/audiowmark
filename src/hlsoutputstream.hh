@@ -89,6 +89,13 @@ class HLSOutputStream : public AudioOutputStream {
   AudioBuffer       m_audio_buffer;
   size_t            m_delete_input_start = 0;
 
+  enum class State {
+    NEW,
+    OPEN,
+    CLOSED
+  };
+  State             m_state = State::NEW;
+
   Error add_stream (AVCodec **codec, enum AVCodecID codec_id);
   Error open_audio (AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
@@ -98,6 +105,7 @@ class HLSOutputStream : public AudioOutputStream {
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
 public:
   HLSOutputStream (int n_channels, int sample_rate, int bit_depth);
+  ~HLSOutputStream();
 
   Error open (const std::string& output_filename, size_t cut_aac_frames, size_t keep_aac_frames, double pts_start, size_t delete_input_start);
   int bit_depth() const override;
