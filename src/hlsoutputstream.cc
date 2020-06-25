@@ -114,7 +114,7 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 
   /* Some formats want stream headers to be separate. */
   if (m_fmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-      m_enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    m_enc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 }
 
 
@@ -243,12 +243,12 @@ HLSOutputStream::get_audio_frame()
 int
 HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt)
 {
-    /* rescale output packet timestamp values from codec to stream timebase */
-    av_packet_rescale_ts(pkt, *time_base, st->time_base);
-    pkt->stream_index = st->index;
+  /* rescale output packet timestamp values from codec to stream timebase */
+  av_packet_rescale_ts (pkt, *time_base, st->time_base);
+  pkt->stream_index = st->index;
 
-    /* Write the compressed frame to the media file. */
-    return av_interleaved_write_frame (m_fmt_ctx, pkt);
+  /* Write the compressed frame to the media file. */
+  return av_interleaved_write_frame (m_fmt_ctx, pkt);
 }
 
 
@@ -259,82 +259,82 @@ HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacke
 int
 HLSOutputStream::write_audio_frame()
 {
-    AVCodecContext *c;
-    AVPacket pkt = { 0 }; // data and size must be 0;
-    AVFrame *frame;
-    int ret;
-    int got_packet;
-    int dst_nb_samples;
+  AVPacket pkt = { 0 }; // data and size must be 0;
+  AVFrame *frame;
+  int ret;
+  int got_packet;
 
-    av_init_packet(&pkt);
-    c = m_enc;
+  av_init_packet (&pkt);
 
-    frame = get_audio_frame();
+  frame = get_audio_frame();
+  if (frame)
+    {
+      /* convert samples from native format to destination codec format, using the resampler */
 
-    if (frame) {
-        /* convert samples from native format to destination codec format, using the resampler */
-            /* compute destination number of samples */
-            dst_nb_samples = av_rescale_rnd(swr_get_delay(m_swr_ctx, c->sample_rate) + frame->nb_samples,
-                                            c->sample_rate, c->sample_rate, AV_ROUND_UP);
-            av_assert0(dst_nb_samples == frame->nb_samples);
+      /* compute destination number of samples */
+      int dst_nb_samples = av_rescale_rnd (swr_get_delay (m_swr_ctx, m_enc->sample_rate) + frame->nb_samples,
+                                           m_enc->sample_rate, m_enc->sample_rate, AV_ROUND_UP);
+      av_assert0 (dst_nb_samples == frame->nb_samples);
 
-        /* when we pass a frame to the encoder, it may keep a reference to it
-         * internally;
-         * make sure we do not overwrite it here
-         */
-        ret = av_frame_make_writable(m_frame);
-        if (ret < 0)
-            exit(1);
-
-        /* convert to destination format */
-        ret = swr_convert(m_swr_ctx,
-                          m_frame->data, dst_nb_samples,
-                          (const uint8_t **)frame->data, frame->nb_samples);
-        if (ret < 0) {
-            fprintf(stderr, "Error while converting\n");
-            exit(1);
-        }
-        frame = m_frame;
-
-        frame->pts = av_rescale_q(m_samples_count + m_start_pos, (AVRational){1, c->sample_rate}, c->time_base);
-        m_samples_count += dst_nb_samples;
-    }
-
-    ret = avcodec_encode_audio2(c, &pkt, frame, &got_packet);
-    if (ret < 0) {
-        fprintf(stderr, "Error encoding audio frame: %s\n", av_err2str(ret));
+      /* when we pass a frame to the encoder, it may keep a reference to it
+       * internally;
+       * make sure we do not overwrite it here
+       */
+      ret = av_frame_make_writable (m_frame);
+      if (ret < 0)
         exit(1);
+
+      /* convert to destination format */
+      ret = swr_convert (m_swr_ctx,
+                         m_frame->data, dst_nb_samples,
+                         (const uint8_t **)frame->data, frame->nb_samples);
+      if (ret < 0)
+        {
+          fprintf (stderr, "Error while converting\n");
+          exit(1);
+        }
+      frame = m_frame;
+
+      frame->pts = av_rescale_q (m_samples_count + m_start_pos, (AVRational){1, m_enc->sample_rate}, m_enc->time_base);
+      m_samples_count += dst_nb_samples;
     }
 
-    if (got_packet)
-      {
-        if (m_cut_aac_frames)
-          {
-            m_cut_aac_frames--;
-          }
-        else if (m_keep_aac_frames)
-          {
-            ret = write_frame (&c->time_base, m_st, &pkt);
-            if (ret < 0)
-              {
-                fprintf(stderr, "Error while writing audio frame: %s\n",
-                        av_err2str(ret));
-                exit(1);
-              }
-            m_keep_aac_frames--;
-          }
-      }
+  ret = avcodec_encode_audio2 (m_enc, &pkt, frame, &got_packet);
+  if (ret < 0)
+    {
+      fprintf(stderr, "Error encoding audio frame: %s\n", av_err2str(ret));
+      exit(1);
+    }
 
-    return (frame || got_packet) ? 0 : 1;
+  if (got_packet)
+    {
+      if (m_cut_aac_frames)
+        {
+          m_cut_aac_frames--;
+        }
+      else if (m_keep_aac_frames)
+        {
+          ret = write_frame (&m_enc->time_base, m_st, &pkt);
+          if (ret < 0)
+            {
+              fprintf(stderr, "Error while writing audio frame: %s\n",
+                      av_err2str(ret));
+              exit(1);
+            }
+          m_keep_aac_frames--;
+        }
+    }
+
+  return (frame || got_packet) ? 0 : 1;
 }
 
 void
 HLSOutputStream::close_stream()
 {
-    avcodec_free_context(&m_enc);
-    av_frame_free(&m_frame);
-    av_frame_free(&m_tmp_frame);
-    swr_free(&m_swr_ctx);
+  avcodec_free_context (&m_enc);
+  av_frame_free (&m_frame);
+  av_frame_free (&m_tmp_frame);
+  swr_free (&m_swr_ctx);
 }
 
 Error
@@ -445,5 +445,3 @@ HLSOutputStream::n_channels() const
 {
   return m_n_channels;
 }
-
-
