@@ -550,6 +550,10 @@ HLSOutputStream::write()
 Error
 HLSOutputStream::write_frames (const std::vector<float>& frames)
 {
+  // if we don't need any more aac frames, just throw away samples (save cpu cycles)
+  if (m_keep_aac_frames == 0)
+    return Error::Code::NONE;
+
   m_audio_buffer.write_frames (frames);
 
   size_t delete_input = min (m_delete_input_start, m_audio_buffer.can_read_frames());
