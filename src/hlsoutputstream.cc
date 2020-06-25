@@ -88,15 +88,23 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
 
   m_enc->sample_fmt  = (*codec)->sample_fmts ? (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
   m_enc->bit_rate    = 128000;
-  m_enc->sample_rate = 44100;
+  m_enc->sample_rate = m_sample_rate;
   if ((*codec)->supported_samplerates)
     {
-      m_enc->sample_rate = (*codec)->supported_samplerates[0];
-        for (int i = 0; (*codec)->supported_samplerates[i]; i++)
-          {
-            if ((*codec)->supported_samplerates[i] == 44100)
-              m_enc->sample_rate = 44100;
-          }
+      bool match = false;
+      for (int i = 0; (*codec)->supported_samplerates[i]; i++)
+        {
+          if ((*codec)->supported_samplerates[i] == m_sample_rate)
+            {
+              m_enc->sample_rate = m_sample_rate;
+              match = true;
+            }
+        }
+      if (!match)
+        {
+          error ("HLSOutputStream: unsupported sample rate %d\n", m_sample_rate);
+          exit (1);
+        }
     }
   m_enc->channels       = av_get_channel_layout_nb_channels (m_enc->channel_layout);
   m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
