@@ -156,10 +156,7 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
   ret = avcodec_open2 (m_enc, codec, &opt);
   av_dict_free (&opt);
   if (ret < 0)
-    {
-      fprintf(stderr, "Could not open audio codec: %s\n", av_err2str(ret));
-      exit(1);
-    }
+    return Error (string_printf ("could not open audio codec: %s", av_err2str (ret)));
 
   if (m_enc->codec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
     nb_samples = 10000;
@@ -178,18 +175,12 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
   /* copy the stream parameters to the muxer */
   ret = avcodec_parameters_from_context (m_st->codecpar, m_enc);
   if (ret < 0)
-    {
-      fprintf(stderr, "Could not copy the stream parameters\n");
-      exit(1);
-    }
+    return Error ("could not copy the stream parameters");
 
   /* create resampler context */
   m_swr_ctx = swr_alloc();
   if (!m_swr_ctx)
-    {
-      fprintf(stderr, "Could not allocate resampler context\n");
-      exit(1);
-    }
+    return Error ("could not allocate resampler context");
 
   /* set options */
   av_opt_set_int        (m_swr_ctx, "in_channel_count",   m_enc->channels,       0);
@@ -201,10 +192,8 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
 
   /* initialize the resampling context */
   if ((ret = swr_init(m_swr_ctx)) < 0)
-    {
-      fprintf(stderr, "Failed to initialize the resampling context\n");
-      exit(1);
-    }
+    return Error ("failed to initialize the resampling context");
+
   return Error::Code::NONE;
 }
 
