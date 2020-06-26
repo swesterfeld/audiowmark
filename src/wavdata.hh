@@ -52,6 +52,11 @@ public:
   {
     return m_samples.size();
   }
+  size_t
+  n_frames() const
+  {
+    return m_samples.size() / m_n_channels;
+  }
   const std::vector<float>&
   samples() const
   {

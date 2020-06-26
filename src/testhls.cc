@@ -165,24 +165,15 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
         }
       fclose (pts);
 
+      /* store 3 seconds of the context before this segment and after this segment (if available) */
+      size_t ctx_3sec = 3 * out.sample_rate();
+
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
+      segment.vars["prev_size"] = string_printf ("%zd", min<size_t> (start_pos, ctx_3sec));
+      segment.vars["next_size"] = string_printf ("%zd", min<size_t> (audio_master_data.n_frames() - (segment.size + start_pos), ctx_3sec));
 
       start_pos += segment.size;
-    }
-
-  /* fill out next/prev size fields */
-  for (size_t i = 0; i < segments.size(); i++)
-    {
-      if (i > 0)
-        segments[i].vars["prev_size"] = string_printf ("%zd", segments[i - 1].size);
-      else
-        segments[i].vars["prev_size"] = "0";
-
-      if (i + 1 < segments.size())
-        segments[i].vars["next_size"] = string_printf ("%zd", segments[i + 1].size);
-      else
-        segments[i].vars["next_size"] = "0";
     }
 
   /* write audio segments with context */
@@ -375,7 +366,13 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
 
   int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
   if (zrc != 0)
-    return zrc;
+    {
+      info ("hls_time_abort_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
+
+      double end_time = get_time();
+      info ("hls_time_abort %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
+      return zrc;
+    }
 
   info ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
 
