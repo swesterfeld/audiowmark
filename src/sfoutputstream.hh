@@ -27,6 +27,10 @@
 
 class SFOutputStream : public AudioOutputStream
 {
+public:
+  enum class OutFormat { WAV, FLAC };
+
+private:
   SFVirtualData m_virtual_data;
 
   SNDFILE    *m_sndfile = nullptr;
@@ -41,12 +45,12 @@ class SFOutputStream : public AudioOutputStream
   };
   State       m_state = State::NEW;
 
-  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth);
+  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, OutFormat out_format);
 public:
   ~SFOutputStream();
 
-  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth);
-  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth);
+  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
+  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
   Error  write_frames (const std::vector<float>& frames) override;
   Error  close() override;
   int    bit_depth() const override;

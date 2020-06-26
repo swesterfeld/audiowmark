@@ -30,15 +30,15 @@ SFOutputStream::~SFOutputStream()
 }
 
 Error
-SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth)
+SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
 {
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open (filename.c_str(), SFM_WRITE, sfinfo);
-  }, n_channels, sample_rate, bit_depth);
+  }, n_channels, sample_rate, bit_depth, out_format);
 }
 
 Error
-SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth)
+SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
 {
   assert (m_state == State::NEW);
 
@@ -49,14 +49,22 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
   sfinfo.samplerate = sample_rate;
   sfinfo.channels   = n_channels;
 
+   switch (out_format)
+     {
+       case OutFormat::WAV:  sfinfo.format = SF_FORMAT_WAV;
+                             break;
+       case OutFormat::FLAC: sfinfo.format = SF_FORMAT_FLAC;
+                             break;
+       default:              assert (false);
+     }
   if (bit_depth > 16)
     {
-      sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+      sfinfo.format |= SF_FORMAT_PCM_24;
       m_bit_depth   = 24;
     }
   else
     {
-      sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
+      sfinfo.format |= SF_FORMAT_PCM_16;
       m_bit_depth   = 16;
     }
 
@@ -132,11 +140,11 @@ SFOutputStream::n_channels() const
 }
 
 Error
-SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth)
+SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
 {
   m_virtual_data.mem = data;
 
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open_virtual (&m_virtual_data.io, SFM_WRITE, sfinfo, &m_virtual_data);
-  }, n_channels, sample_rate, bit_depth);
+  }, n_channels, sample_rate, bit_depth, out_format);
 }

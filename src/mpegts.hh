@@ -52,6 +52,7 @@ class TSWriter
 public:
   Error append_file (const std::string& name, const std::string& filename);
   void  append_vars (const std::string& name, const std::map<std::string, std::string>& vars);
+  void  append_data (const std::string& name, const std::vector<unsigned char>& data);
   Error process (const std::string& in_name, const std::string& out_name);
 };
 

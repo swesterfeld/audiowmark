@@ -26,6 +26,7 @@
 #include "wmcommon.hh"
 #include "sfinputstream.hh"
 #include "hlsoutputstream.hh"
+#include "sfoutputstream.hh"
 
 using std::string;
 using std::regex;
@@ -181,14 +182,36 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
 
       vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
                                 audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
-      WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
-      err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
-      err = xsystem ("flac " +  out_dir + "/" + segment.name + ".wav");
+
+      vector<unsigned char> full_flac_mem;
+      SFOutputStream out_stream;
+      err = out_stream.open (&full_flac_mem,
+                             audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth(),
+                             SFOutputStream::OutFormat::FLAC);
+      if (err)
+        {
+          error ("audiowmark: hls: open context flac failed: %s\n", err.message());
+          return 1;
+        }
+
+      err = out_stream.write_frames (out_signal);
+      if (err)
+        {
+          error ("audiowmark: hls: write context flac failed: %s\n", err.message());
+          return 1;
+        }
+
+      err = out_stream.close();
+      if (err)
+        {
+          error ("audiowmark: hls: close context flac failed: %s\n", err.message());
+          return 1;
+        }
 
       /* store everything we need in a mpegts file */
       TSWriter writer;
 
-      writer.append_file ("full.flac", out_dir + "/" + segment.name + ".flac");
+      writer.append_data ("full.flac", full_flac_mem);
       writer.append_vars ("vars", segment.vars);
       writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
 

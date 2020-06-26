@@ -185,6 +185,12 @@ TSWriter::append_vars (const string& name, const map<string, string>& vars)
   entries.push_back ({name, data});
 }
 
+void
+TSWriter::append_data (const string& name, const vector<unsigned char>& data)
+{
+  entries.push_back ({name, data});
+}
+
 Error
 TSWriter::process (const string& inname, const string& outname)
 {
