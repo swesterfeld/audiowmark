@@ -166,39 +166,33 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
       fclose (pts);
 
       /* store 3 seconds of the context before this segment and after this segment (if available) */
-      size_t ctx_3sec = 3 * out.sample_rate();
+      const size_t ctx_3sec = 3 * out.sample_rate();
+      const size_t prev_size = min<size_t> (start_pos, ctx_3sec);
+      const size_t next_size = min<size_t> (audio_master_data.n_frames() - (segment.size + start_pos), ctx_3sec);
 
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
-      segment.vars["prev_size"] = string_printf ("%zd", min<size_t> (start_pos, ctx_3sec));
-      segment.vars["next_size"] = string_printf ("%zd", min<size_t> (audio_master_data.n_frames() - (segment.size + start_pos), ctx_3sec));
+      segment.vars["prev_size"] = string_printf ("%zd", prev_size);
+      segment.vars["next_size"] = string_printf ("%zd", next_size);
 
-      start_pos += segment.size;
-    }
-
-  /* write audio segments with context */
-  for (auto& segment : segments)
-    {
-      /* write a part of audio master here */
-      const size_t prev_size = atoi (segment.vars["prev_size"].c_str());
-      const size_t next_size = atoi (segment.vars["next_size"].c_str());
-
-      const size_t start_point = atoi (segment.vars["start_pos"].c_str()) - prev_size;
+      /* write audio segment with context */
+      const size_t start_point = start_pos - prev_size;
       const size_t end_point = start_point + prev_size + segment.size + next_size;
 
       vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
                                 audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
       WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
       err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
-    }
 
-  for (size_t i = 0; i < segments.size(); i++)
-    {
+      /* store everything we need in a mpegts file */
       TSWriter writer;
 
-      writer.append_file ("full.wav", out_dir + "/" + segments[i].name + ".wav");
-      writer.append_vars ("vars", segments[i].vars);
-      writer.process (in_dir + "/" + segments[i].name, out_dir + "/" + segments[i].name);
+      writer.append_file ("full.wav", out_dir + "/" + segment.name + ".wav");
+      writer.append_vars ("vars", segment.vars);
+      writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
+
+      /* start position for the next segment */
+      start_pos += segment.size;
     }
   return 0;
 }
