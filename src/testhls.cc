@@ -183,11 +183,12 @@ hls_embed_context (const string& in_dir, const string& out_dir, const string& fi
                                 audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
       WavData out_wav_data (out_signal, audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth());
       err = out_wav_data.save (out_dir + "/" + segment.name + ".wav");
+      err = xsystem ("flac " +  out_dir + "/" + segment.name + ".wav");
 
       /* store everything we need in a mpegts file */
       TSWriter writer;
 
-      writer.append_file ("full.wav", out_dir + "/" + segment.name + ".wav");
+      writer.append_file ("full.flac", out_dir + "/" + segment.name + ".flac");
       writer.append_vars ("vars", segment.vars);
       writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
 
@@ -311,15 +312,15 @@ hls_mark (const string& infile, const string& outfile, const string& bits)
   info ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
   double start_time1 = get_time();
 
-  const TSReader::Entry *full_wav = reader.find ("full.wav");
-  if (!full_wav)
+  const TSReader::Entry *full_flac = reader.find ("full.flac");
+  if (!full_flac)
     {
       error ("hls_mark: no embedded context found in %s\n", infile.c_str());
       return 1;
     }
 
   SFInputStream in_stream;
-  err = in_stream.open (&full_wav->data);
+  err = in_stream.open (&full_flac->data);
   if (err)
     {
       error ("hls_mark: %s\n", err.message());
