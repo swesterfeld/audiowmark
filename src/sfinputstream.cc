@@ -169,7 +169,7 @@ SFInputStream::close()
 static sf_count_t
 virtual_get_len (void *data)
 {
-  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  SFVirtualData *vdata = static_cast<SFVirtualData *> (data);
 
   return vdata->mem->size();
 }
@@ -177,7 +177,7 @@ virtual_get_len (void *data)
 static sf_count_t
 virtual_seek (sf_count_t offset, int whence, void *data)
 {
-  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  SFVirtualData *vdata = static_cast<SFVirtualData *> (data);
 
   if (whence == SEEK_CUR)
     {
@@ -200,7 +200,7 @@ virtual_seek (sf_count_t offset, int whence, void *data)
 static sf_count_t
 virtual_read (void *ptr, sf_count_t count, void *data)
 {
-  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  SFVirtualData *vdata = static_cast<SFVirtualData *> (data);
 
   int rcount = 0;
   if (size_t (vdata->offset + count) <= vdata->mem->size())
@@ -229,7 +229,7 @@ virtual_read (void *ptr, sf_count_t count, void *data)
 static sf_count_t
 virtual_write (const void *ptr, sf_count_t count, void *data)
 {
-  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  SFVirtualData *vdata = static_cast<SFVirtualData *> (data);
 
   const unsigned char *uptr = static_cast<const unsigned char *> (ptr);
   for (sf_count_t i = 0; i < count; i++)
@@ -248,22 +248,26 @@ virtual_write (const void *ptr, sf_count_t count, void *data)
 static sf_count_t
 virtual_tell (void *data)
 {
-  SFInputStream::VirtualData *vdata = static_cast<SFInputStream::VirtualData *> (data);
+  SFVirtualData *vdata = static_cast<SFVirtualData *> (data);
   return vdata->offset;
 }
 
-Error
-SFInputStream::open (const vector<unsigned char> *data)
-{
-  virtual_data.mem = const_cast<vector<unsigned char> *> (data);
-  SF_VIRTUAL_IO sf_virtual_io = {
+SFVirtualData::SFVirtualData() :
+  io {
     virtual_get_len,
     virtual_seek,
     virtual_read,
     virtual_write,
     virtual_tell
-  };
+  }
+{
+}
+
+Error
+SFInputStream::open (const vector<unsigned char> *data)
+{
+  m_virtual_data.mem = const_cast<vector<unsigned char> *> (data);
   return open ([&] (SF_INFO *sfinfo) {
-    return sf_open_virtual (&sf_virtual_io, SFM_READ, sfinfo, &virtual_data);
+    return sf_open_virtual (&m_virtual_data.io, SFM_READ, sfinfo, &m_virtual_data);
   });
 }

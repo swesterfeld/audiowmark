@@ -23,9 +23,12 @@
 #include <sndfile.h>
 
 #include "audiostream.hh"
+#include "sfinputstream.hh"
 
 class SFOutputStream : public AudioOutputStream
 {
+  SFVirtualData m_virtual_data;
+
   SNDFILE    *m_sndfile = nullptr;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
@@ -38,10 +41,12 @@ class SFOutputStream : public AudioOutputStream
   };
   State       m_state = State::NEW;
 
+  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
 public:
   ~SFOutputStream();
 
   Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
   Error  write_frames (const std::vector<float>& frames) override;
   Error  close() override;
   int    bit_depth() const override;

@@ -25,18 +25,21 @@
 
 #include "audiostream.hh"
 
+/* to support virtual io read/write from/to memory */
+struct SFVirtualData
+{
+  SFVirtualData();
+
+  std::vector<unsigned char> *mem    = nullptr;
+  sf_count_t                  offset = 0;
+  SF_VIRTUAL_IO               io;
+};
+
 class SFInputStream : public AudioInputStream
 {
-public:
-  /* to support read from memory */
-  struct VirtualData
-  {
-    std::vector<unsigned char> *mem    = nullptr;
-    sf_count_t                  offset = 0;
-  };
-
 private:
-  VirtualData virtual_data;
+  SFVirtualData m_virtual_data;
+
   SNDFILE    *m_sndfile = nullptr;
   int         m_n_channels = 0;
   int         m_n_values = 0;
