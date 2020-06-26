@@ -104,7 +104,7 @@ main (int argc, char **argv)
       fprintf (stderr, "testlimiter: open input failed: %s\n", err.message());
       return 1;
     }
-  err = out.open (argv[2], in.n_channels(), in.sample_rate(), 16, in.n_frames());
+  err = out.open (argv[2], in.n_channels(), in.sample_rate(), 16);
   if (err)
     {
       fprintf (stderr, "testlimiter: open output failed: %s\n", err.message());

@@ -41,12 +41,12 @@ class SFOutputStream : public AudioOutputStream
   };
   State       m_state = State::NEW;
 
-  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth);
 public:
   ~SFOutputStream();
 
-  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
-  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, size_t n_frames);
+  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth);
+  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth);
   Error  write_frames (const std::vector<float>& frames) override;
   Error  close() override;
   int    bit_depth() const override;

@@ -30,15 +30,15 @@ SFOutputStream::~SFOutputStream()
 }
 
 Error
-SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth)
 {
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open (filename.c_str(), SFM_WRITE, sfinfo);
-  }, n_channels, sample_rate, bit_depth, n_frames);
+  }, n_channels, sample_rate, bit_depth);
 }
 
 Error
-SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth)
 {
   assert (m_state == State::NEW);
 
@@ -132,11 +132,11 @@ SFOutputStream::n_channels() const
 }
 
 Error
-SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth)
 {
   m_virtual_data.mem = data;
 
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open_virtual (&m_virtual_data.io, SFM_WRITE, sfinfo, &m_virtual_data);
-  }, n_channels, sample_rate, bit_depth, n_frames);
+  }, n_channels, sample_rate, bit_depth);
 }
