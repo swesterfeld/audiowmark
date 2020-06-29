@@ -285,15 +285,36 @@ HLSOutputStream::write_audio_frame (Error& err)
       m_samples_count += dst_nb_samples;
     }
 
-  ret = avcodec_encode_audio2 (m_enc, &pkt, frame, &got_packet);
-  if (ret < 0)
+  ret = avcodec_send_frame (m_enc, frame);
+  if (ret == AVERROR_EOF)
+    {
+      /* encoder has nothing more to do */
+      return 1;
+    }
+  else if (ret < 0)
     {
       err = Error (string_printf ("error encoding audio frame: %s", av_err2str (ret)));
       return 1;
     }
-
-  if (got_packet)
+  for (;;)
     {
+      ret = avcodec_receive_packet (m_enc, &pkt);
+      if (ret == AVERROR (EAGAIN))
+        {
+          /* encoder needs more data to produce something */
+          return 0;
+        }
+      else if (ret == AVERROR_EOF)
+        {
+          return 1; /* done */
+        }
+      else if (ret < 0)
+        {
+          err = Error (string_printf ("error while encoding audio frame: %s", av_err2str (ret)));
+          return 1;
+        }
+
+      /* one packet available */
       if (m_cut_aac_frames)
         {
           m_cut_aac_frames--;
@@ -308,9 +329,8 @@ HLSOutputStream::write_audio_frame (Error& err)
             }
           m_keep_aac_frames--;
         }
+      return 0; /* not done yet */
     }
-
-  return (frame || got_packet) ? 0 : 1;
 }
 
 void
