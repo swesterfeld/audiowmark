@@ -34,6 +34,7 @@ private:
   };
   std::vector<Entry> m_entries;
   bool parse_header (Header& header, std::vector<unsigned char>& data);
+  Error load (FILE *infile);
 public:
   Error load (const std::string& inname);
   const std::vector<Entry>& entries();

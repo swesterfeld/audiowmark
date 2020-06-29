@@ -275,11 +275,23 @@ TSReader::parse_header (Header& header, vector<unsigned char>& data)
 Error
 TSReader::load (const string& inname)
 {
-  FILE *infile = fopen (inname.c_str(), "r");
-  ScopedFile infile_s (infile);
-  if (!infile)
-    return Error (string_printf ("error opening input .ts '%s'", inname.c_str()));
+  if (inname == "-")
+    {
+      return load (stdin);
+    }
+  else
+    {
+      FILE *infile = fopen (inname.c_str(), "r");
+      ScopedFile infile_s (infile);
+      if (!infile)
+        return Error (string_printf ("error opening input .ts '%s'", inname.c_str()));
+      return load (infile);
+    }
+}
 
+Error
+TSReader::load (FILE *infile)
+{
   vector<unsigned char> awmk_stream;
   Header header;
   bool header_valid = false;
