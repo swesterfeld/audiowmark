@@ -31,6 +31,7 @@
 #include "rawoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
 #include "shortcode.hh"
+#include "audiobuffer.hh"
 
 using std::string;
 using std::vector;
@@ -341,38 +342,6 @@ public:
   {
     // first block is padding - a partial B block
     return max (m_data_blocks - 1, 0);
-  }
-};
-
-class AudioBuffer
-{
-  const int     n_channels = 0;
-  vector<float> buffer;
-
-public:
-  AudioBuffer (int n_channels) :
-    n_channels (n_channels)
-  {
-  }
-  void
-  write_frames (const vector<float>& samples)
-  {
-    buffer.insert (buffer.end(), samples.begin(), samples.end());
-  }
-  vector<float>
-  read_frames (size_t frames)
-  {
-    assert (frames * n_channels <= buffer.size());
-    const auto begin = buffer.begin();
-    const auto end   = begin + frames * n_channels;
-    vector<float> result (begin, end);
-    buffer.erase (begin, end);
-    return result;
-  }
-  size_t
-  can_read_frames() const
-  {
-    return buffer.size() / n_channels;
   }
 };
 

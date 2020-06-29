@@ -19,6 +19,7 @@
 #define AUDIOWMARK_HLS_OUTPUT_STREAM_HH
 
 #include "audiostream.hh"
+#include "audiobuffer.hh"
 
 #include <assert.h>
 
@@ -31,39 +32,6 @@ extern "C" {
 #undef av_err2str
 #define av_err2str(errnum) av_make_error_string((char*)__builtin_alloca(AV_ERROR_MAX_STRING_SIZE), AV_ERROR_MAX_STRING_SIZE, errnum)
 }
-
-/* FIXME: fix duplication with wmadd.cc */
-class AudioBuffer
-{
-  const int           n_channels = 0;
-  std::vector<float>  buffer;
-
-public:
-  AudioBuffer (int n_channels) :
-    n_channels (n_channels)
-  {
-  }
-  void
-  write_frames (const std::vector<float>& samples)
-  {
-    buffer.insert (buffer.end(), samples.begin(), samples.end());
-  }
-  std::vector<float>
-  read_frames (size_t frames)
-  {
-    assert (frames * n_channels <= buffer.size());
-    const auto begin = buffer.begin();
-    const auto end   = begin + frames * n_channels;
-    std::vector<float> result (begin, end);
-    buffer.erase (begin, end);
-    return result;
-  }
-  size_t
-  can_read_frames() const
-  {
-    return buffer.size() / n_channels;
-  }
-};
 
 class HLSOutputStream : public AudioOutputStream {
   AVStream         *m_st = nullptr;
