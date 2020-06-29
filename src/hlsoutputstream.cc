@@ -237,15 +237,14 @@ HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacke
 
 /*
  * encode one audio frame and send it to the muxer
- * return 1 when encoding is finished, 0 otherwise
+ *   returns EncResult: OK, ERROR, DONE
  */
-int
+HLSOutputStream::EncResult
 HLSOutputStream::write_audio_frame (Error& err)
 {
   AVPacket pkt = { 0 }; // data and size must be 0;
   AVFrame *frame;
   int ret;
-  int got_packet;
 
   av_init_packet (&pkt);
 
@@ -267,7 +266,7 @@ HLSOutputStream::write_audio_frame (Error& err)
       if (ret < 0)
         {
           err = Error ("error making frame writable");
-          return 1;
+          return EncResult::ERROR;
         }
 
       /* convert to destination format */
@@ -277,7 +276,7 @@ HLSOutputStream::write_audio_frame (Error& err)
       if (ret < 0)
         {
           err = Error ("error while converting");
-          return 1;
+          return EncResult::ERROR;
         }
       frame = m_frame;
 
@@ -288,30 +287,28 @@ HLSOutputStream::write_audio_frame (Error& err)
   ret = avcodec_send_frame (m_enc, frame);
   if (ret == AVERROR_EOF)
     {
-      /* encoder has nothing more to do */
-      return 1;
+      return EncResult::DONE; // encoder has nothing more to do
     }
   else if (ret < 0)
     {
       err = Error (string_printf ("error encoding audio frame: %s", av_err2str (ret)));
-      return 1;
+      return EncResult::ERROR;
     }
   for (;;)
     {
       ret = avcodec_receive_packet (m_enc, &pkt);
       if (ret == AVERROR (EAGAIN))
         {
-          /* encoder needs more data to produce something */
-          return 0;
+          return EncResult::OK; // encoder needs more data to produce something
         }
       else if (ret == AVERROR_EOF)
         {
-          return 1; /* done */
+          return EncResult::DONE;
         }
       else if (ret < 0)
         {
           err = Error (string_printf ("error while encoding audio frame: %s", av_err2str (ret)));
-          return 1;
+          return EncResult::ERROR;
         }
 
       /* one packet available */
@@ -325,11 +322,10 @@ HLSOutputStream::write_audio_frame (Error& err)
           if (ret < 0)
             {
               err = Error (string_printf ("error while writing audio frame: %s", av_err2str (ret)));
-              return 1;
+              return EncResult::ERROR;
             }
           m_keep_aac_frames--;
         }
-      return 0; /* not done yet */
     }
 }
 
@@ -400,7 +396,7 @@ HLSOutputStream::close()
   m_state = State::CLOSED;
 
   Error err;
-  while (write_audio_frame (err) == 0);
+  while (write_audio_frame (err) == EncResult::OK);
   if (err)
     return err;
 

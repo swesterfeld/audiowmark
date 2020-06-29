@@ -99,9 +99,15 @@ class HLSOutputStream : public AudioOutputStream {
   Error add_stream (AVCodec **codec, enum AVCodecID codec_id);
   Error open_audio (AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
-  int write_audio_frame (Error& err);
+  enum class EncResult {
+    OK,
+    ERROR,
+    DONE
+  };
+  EncResult write_audio_frame (Error& err);
   void close_stream();
   AVFrame *alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples, Error& err);
+
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
 public:
   HLSOutputStream (int n_channels, int sample_rate, int bit_depth);
