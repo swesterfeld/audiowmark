@@ -450,6 +450,11 @@ parse_shared_options (ArgParser& ap)
     {
       set_log_level (Log::WARNING);
     }
+  if (Params::have_key > 1)
+    {
+      error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      exit (1);
+    }
 }
 
 void
@@ -607,46 +612,31 @@ main (int argc, char **argv)
       if (ap.parse_args (1, args))
         return gen_key (args[0]);
     }
-  for (int i = 0; i < argc; i++)
+  else if (ap.parse_cmd ("gentest"))
     {
-      error ("%d %s\n", i, argv[i]);
+      if (ap.parse_args (2, args))
+        return gentest (args[0], args[1]);
+    }
+  else if (ap.parse_cmd ("cut-start"))
+    {
+      if (ap.parse_args (3, args))
+        return cut_start (args[0], args[1], args[2]);
+    }
+  else if (ap.parse_cmd ("test-subtract"))
+    {
+      if (ap.parse_args (3, args))
+        return test_subtract (args[0], args[1], args[2]);
+    }
+  else if (ap.parse_cmd ("test-snr"))
+    {
+      if (ap.parse_args (2, args))
+        return test_snr (args[0], args[1]);
+    }
+  else if (ap.parse_cmd ("test-clip"))
+    {
+      if (ap.parse_args (4, args))
+        test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;
-#if 0
-  parse_options (&argc, &argv);
-
-  if (Params::have_key > 1)
-    {
-      error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
-      return 1;
-    }
-  string op = (argc >= 2) ? argv[1] : "";
-
-  else if (op == "gentest" && argc == 4)
-    {
-      return gentest (argv[2], argv[3]);
-    }
-  else if (op == "cut-start" && argc == 5)
-    {
-      cut_start (argv[2], argv[3], argv[4]);
-    }
-  else if (op == "test-subtract" && argc == 5)
-    {
-      test_subtract (argv[2], argv[3], argv[4]);
-    }
-  else if (op == "test-snr" && argc == 4)
-    {
-      test_snr (argv[2], argv[3]);
-    }
-  else if (op == "test-clip" && argc == 6)
-    {
-      test_clip (argv[2], argv[3], atoi (argv[4]), atoi (argv[5]));
-    }
-  else
-    {
-      error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
-      return 1;
-    }
-#endif
 }
