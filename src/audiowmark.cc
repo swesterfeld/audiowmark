@@ -71,54 +71,6 @@ print_usage()
   printf ("or --raw-channels) are documented in the README file.\n");
 }
 
-static bool
-check_arg (uint         argc,
-           char        *argv[],
-           uint        *nth,
-           const char  *opt,		    /* for example: --foo */
-           const char **opt_arg = nullptr)  /* if foo needs an argument, pass a pointer to get the argument */
-{
-  assert (opt != nullptr);
-  assert (*nth < argc);
-
-  const char *arg = argv[*nth];
-  if (!arg)
-    return false;
-
-  uint opt_len = strlen (opt);
-  if (strcmp (arg, opt) == 0)
-    {
-      if (opt_arg && *nth + 1 < argc)	  /* match foo option with argument: --foo bar */
-        {
-          argv[(*nth)++] = nullptr;
-          *opt_arg = argv[*nth];
-          argv[*nth] = nullptr;
-          return true;
-        }
-      else if (!opt_arg)		  /* match foo option without argument: --foo */
-        {
-          argv[*nth] = nullptr;
-          return true;
-        }
-      /* fall through to error message */
-    }
-  else if (strncmp (arg, opt, opt_len) == 0 && arg[opt_len] == '=')
-    {
-      if (opt_arg)			  /* match foo option with argument: --foo=bar */
-        {
-          *opt_arg = arg + opt_len + 1;
-          argv[*nth] = nullptr;
-          return true;
-        }
-      /* fall through to error message */
-    }
-  else
-    return false;
-
-  print_usage();
-  exit (1);
-}
-
 Format
 parse_format (const string& str)
 {
@@ -151,52 +103,6 @@ parse_encoding (const string& str)
   error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
   exit (1);
 }
-
-void
-parse_options (int   *argc_p,
-               char **argv_p[])
-{
-  uint argc = *argc_p;
-  char **argv = *argv_p;
-  unsigned int i, e;
-
-  for (i = 1; i < argc; i++)
-    {
-      const char *opt_arg;
-      if (check_arg (argc, argv, &i, "--hard"))
-	{
-          Params::hard = true;
-	}
-      else if (check_arg (argc, argv, &i, "--test-cut", &opt_arg))
-	{
-          Params::test_cut = atoi (opt_arg);
-	}
-      else if (check_arg (argc, argv, &i, "--test-no-sync"))
-        {
-          Params::test_no_sync = true;
-        }
-      else if (check_arg (argc, argv, &i, "--test-no-limiter"))
-        {
-          Params::test_no_limiter = true;
-        }
-      else if (check_arg (argc, argv, &i, "--test-truncate", &opt_arg))
-	{
-          Params::test_truncate = atoi (opt_arg);
-	}
-    }
-
-  /* resort argc/argv */
-  e = 1;
-  for (i = 1; i < argc; i++)
-    if (argv[i])
-      {
-        argv[e++] = argv[i];
-        if (i >= e)
-          argv[i] = nullptr;
-      }
-  *argc_p = e;
-}
-
 
 int
 gentest (const string& infile, const string& outfile)
@@ -625,8 +531,27 @@ parse_add_options (ArgParser& ap)
       Params::raw_input_format.set_sample_rate (i);
       Params::raw_output_format.set_sample_rate (i);
     }
+  if (ap.parse_opt ("--test-no-limiter"))
+    {
+      Params::test_no_limiter = true;
+    }
 }
 
+void
+parse_get_options (ArgParser& ap)
+{
+  ap.parse_opt ("--test-cut", Params::test_cut);
+  ap.parse_opt ("--test-truncate", Params::test_truncate);
+
+  if (ap.parse_opt ("--hard"))
+    {
+      Params::hard = true;
+    }
+  if (ap.parse_opt ("--test-no-sync"))
+    {
+      Params::test_no_sync = true;
+    }
+}
 
 int
 main (int argc, char **argv)
@@ -664,6 +589,7 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("get"))
     {
       parse_shared_options (ap);
+      parse_get_options (ap);
 
       if (ap.parse_args (1, args))
         return get_watermark (args[0], /* no ber */ "");
@@ -671,6 +597,7 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("cmp"))
     {
       parse_shared_options (ap);
+      parse_get_options (ap);
 
       if (ap.parse_args (2, args))
         return get_watermark (args[0], args[1]);
