@@ -567,28 +567,63 @@ public:
     return false;
   }
   bool
-  parse_opt (const string& option, int& out)
+  parse_opt (const string& option, string& out_s)
   {
     bool found_option = false;
     auto it = m_args.begin();
     while (it != m_args.end())
       {
         auto next_it = it + 1;
-        if (*it == option && next_it != m_args.end())   /* --option 12345 */
+        if (*it == option && next_it != m_args.end())   /* --option foo */
           {
-            out = atoi (next_it->c_str());
+            out_s = *next_it;
             next_it = m_args.erase (it, it + 2);
             found_option = true;
           }
-        else if (starts_with (*it, (option + "=")))   /* --option=12345 */
+        else if (starts_with (*it, (option + "=")))   /* --option=foo */
           {
-            out = atoi (it->substr (option.size() + 1).c_str());
+            out_s = it->substr (option.size() + 1);
             next_it = m_args.erase (it);
             found_option = true;
           }
         it = next_it;
       }
     return found_option;
+  }
+  bool
+  parse_opt (const string& option, int& out_i)
+  {
+    string out_s;
+    if (parse_opt (option, out_s))
+      {
+        out_i = atoi (out_s.c_str());
+        return true;
+      }
+    return false;
+  }
+  bool
+  parse_opt (const string& option, float& out_f)
+  {
+    string out_s;
+    if (parse_opt (option, out_s))
+      {
+        out_f = atof (out_s.c_str());
+        return true;
+      }
+    return false;
+  }
+  bool
+  parse_opt (const string& option)
+  {
+    for (auto it = m_args.begin(); it != m_args.end(); it++)
+      {
+        if (*it == option) /* --option */
+          {
+            m_args.erase (it);
+            return true;
+          }
+      }
+    return false;
   }
   vector<string>
   args()
