@@ -163,38 +163,10 @@ parse_options (int   *argc_p,
   for (i = 1; i < argc; i++)
     {
       const char *opt_arg;
-      if (strcmp (argv[i], "--help") == 0 ||
-          strcmp (argv[i], "-h") == 0)
-	{
-	  print_usage();
-	  exit (0);
-	}
-      else if (strcmp (argv[i], "--version") == 0 || strcmp (argv[i], "-v") == 0)
-	{
-	  printf ("audiowmark %s\n", VERSION);
-	  exit (0);
-	}
-      else if (check_arg (argc, argv, &i, "--frames-per-bit", &opt_arg))
-	{
-          Params::frames_per_bit = atoi (opt_arg);
-	}
-      else if (check_arg (argc, argv, &i, "--linear"))
-	{
-          Params::mix = false;
-	}
-      else if (check_arg (argc, argv, &i, "--hard"))
+      if (check_arg (argc, argv, &i, "--hard"))
 	{
           Params::hard = true;
 	}
-      else if (check_arg (argc, argv, &i, "--snr"))
-        {
-          Params::snr = true;
-        }
-      else if (check_arg (argc, argv, &i, "--key", &opt_arg))
-        {
-          Params::have_key++;
-          Random::load_global_key (opt_arg);
-        }
       else if (check_arg (argc, argv, &i, "--test-cut", &opt_arg))
 	{
           Params::test_cut = atoi (opt_arg);
@@ -282,14 +254,6 @@ parse_options (int   *argc_p,
           int r = atoi (opt_arg);
           Params::raw_input_format.set_sample_rate (r);
           Params::raw_output_format.set_sample_rate (r);
-        }
-      else if (check_arg (argc, argv, &i, "--set-input-label", &opt_arg))
-        {
-          Params::input_label = opt_arg;
-        }
-      else if (check_arg (argc, argv, &i, "--set-output-label", &opt_arg))
-        {
-          Params::output_label = opt_arg;
         }
     }
 
@@ -618,9 +582,15 @@ parse_shared_options (ArgParser& ap)
 {
   int i;
   float f;
+  string s;
   if (ap.parse_opt ("--strength", f))
     {
       Params::water_delta = f / 1000;
+    }
+  if (ap.parse_opt  ("--key", s))
+    {
+      Params::have_key++;
+      Random::load_global_key (s);
     }
   if (ap.parse_opt ("--test-key", i))
     {
@@ -637,6 +607,11 @@ parse_shared_options (ArgParser& ap)
         }
       Params::payload_short = true;
     }
+  ap.parse_opt ("--frames-per-bit", Params::frames_per_bit);
+  if (ap.parse_opt ("--linear"))
+    {
+      Params::mix = false;
+    }
   if (ap.parse_opt ("--quiet") || ap.parse_opt ("-q"))
     {
       set_log_level (Log::WARNING);
@@ -649,6 +624,16 @@ main (int argc, char **argv)
   ArgParser ap (argc, argv);
   vector<string> args;
 
+  if (ap.parse_opt ("--help") || ap.parse_opt ("-h"))
+    {
+      print_usage();
+      return 0;
+    }
+  if (ap.parse_opt ("--version") || ap.parse_opt ("-v"))
+    {
+      printf ("audiowmark %s\n", VERSION);
+      return 0;
+    }
   if (ap.parse_cmd ("hls-add"))
     {
       parse_shared_options (ap);
@@ -661,6 +646,13 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("add"))
     {
       parse_shared_options (ap);
+
+      ap.parse_opt ("--set-input-label", Params::input_label);
+      ap.parse_opt ("--set-output-label", Params::output_label);
+      if (ap.parse_opt ("--snr"))
+        {
+          Params::snr = true;
+        }
 
       if (ap.parse_args (3, args))
         return add_watermark (args[0], args[1], args[2]);
@@ -678,6 +670,11 @@ main (int argc, char **argv)
 
       if (ap.parse_args (2, args))
         return get_watermark (args[0], args[1]);
+    }
+  else if (ap.parse_cmd ("gen-key"))
+    {
+      if (ap.parse_args (1, args))
+        return gen_key (args[0]);
     }
   for (int i = 0; i < argc; i++)
     {
@@ -714,10 +711,6 @@ main (int argc, char **argv)
   else if (op == "test-clip" && argc == 6)
     {
       test_clip (argv[2], argv[3], atoi (argv[4]), atoi (argv[5]));
-    }
-  else if (op == "gen-key" && argc == 3)
-    {
-      return gen_key (argv[2]);
     }
   else
     {
