@@ -53,6 +53,12 @@ HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth
 {
 }
 
+void
+HLSOutputStream::set_bit_rate (int bit_rate)
+{
+  m_bit_rate = bit_rate;
+}
+
 HLSOutputStream::~HLSOutputStream()
 {
   close();
@@ -81,7 +87,7 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
     return Error ("codec type must be audio");
 
   m_enc->sample_fmt  = (*codec)->sample_fmts ? (*codec)->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-  m_enc->bit_rate    = 128000;
+  m_enc->bit_rate    = m_bit_rate;
   m_enc->sample_rate = m_sample_rate;
   if ((*codec)->supported_samplerates)
     {

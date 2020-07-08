@@ -56,6 +56,7 @@ class HLSOutputStream : public AudioOutputStream {
   int               m_n_channels = 0;
   AudioBuffer       m_audio_buffer;
   size_t            m_delete_input_start = 0;
+  int               m_bit_rate = 0;
 
   enum class State {
     NEW,
@@ -81,6 +82,7 @@ public:
   HLSOutputStream (int n_channels, int sample_rate, int bit_depth);
   ~HLSOutputStream();
 
+  void set_bit_rate (int bit_rate);
   Error open (const std::string& output_filename, size_t cut_aac_frames, size_t keep_aac_frames, double pts_start, size_t delete_input_start);
   int bit_depth() const override;
   int sample_rate() const override;

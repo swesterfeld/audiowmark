@@ -9,7 +9,7 @@ COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc wavda
 	     audiobuffer.hh
 COMMON_LIBS = $(SNDFILE_LIBS) $(FFTW_LIBS) $(LIBGCRYPT_LIBS) $(LIBMPG123_LIBS) $(FFMPEG_LIBS)
 
-audiowmark_SOURCES = audiowmark.cc wmget.cc wmadd.cc $(COMMON_SRC)
+audiowmark_SOURCES = audiowmark.cc wmget.cc wmadd.cc hls.cc $(COMMON_SRC)
 audiowmark_LDFLAGS = $(COMMON_LIBS)
 
 noinst_PROGRAMS = testconvcode testrandom testmp3 teststream testlimiter testshortcode testmpegts testhls
@@ -35,5 +35,5 @@ testshortcode_LDFLAGS = $(COMMON_LIBS)
 testmpegts_SOURCES = testmpegts.cc $(COMMON_SRC)
 testmpegts_LDFLAGS = $(COMMON_LIBS)
 
-testhls_SOURCES = testhls.cc wmadd.cc $(COMMON_SRC)
+testhls_SOURCES = testhls.cc wmadd.cc hls.cc $(COMMON_SRC)
 testhls_LDFLAGS = $(COMMON_LIBS)

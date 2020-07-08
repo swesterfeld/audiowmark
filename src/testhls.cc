@@ -320,87 +320,6 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 }
 
 int
-hls_mark (const string& infile, const string& outfile, const string& bits)
-{
-  double start_time = get_time();
-
-  TSReader reader;
-
-  Error err = reader.load (infile);
-  if (err)
-    {
-      error ("hls_mark: %s\n", err.message());
-      return 1;
-    }
-  info ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
-  double start_time1 = get_time();
-
-  const TSReader::Entry *full_flac = reader.find ("full.flac");
-  if (!full_flac)
-    {
-      error ("hls_mark: no embedded context found in %s\n", infile.c_str());
-      return 1;
-    }
-
-  SFInputStream in_stream;
-  err = in_stream.open (&full_flac->data);
-  if (err)
-    {
-      error ("hls_mark: %s\n", err.message());
-      return 1;
-    }
-
-  for (auto entry : reader.entries())
-    info ("%s %zd\n", entry.filename.c_str(), entry.data.size());
-
-  map<string, string> vars = reader.parse_vars ("vars");
-  for (auto kv : vars)
-    info ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
-
-  size_t start_pos = atoi (vars["start_pos"].c_str());
-  size_t prev_size = atoi (vars["prev_size"].c_str());
-  size_t next_size = atoi (vars["next_size"].c_str());
-  size_t size      = atoi (vars["size"].c_str());
-  double pts_start = atof (vars["pts_start"].c_str());
-  size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
-
-  info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
-  start_time1 = get_time();
-
-  HLSOutputStream out_stream (in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
-
-  info ("n_frames = %zd\n", in_stream.n_frames() - prev_size - next_size);
-  const size_t shift = 1024;
-  const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
-  const size_t delete_input_start = prev_size - prev_ctx;
-  const size_t keep_aac_frames = size / 1024;
-
-  err = out_stream.open (outfile, cut_aac_frames, keep_aac_frames, pts_start, delete_input_start);
-  if (err)
-    {
-      error ("audiowmark: error opening HLS output stream %s: %s\n", outfile.c_str(), err.message());
-      return 1;
-    }
-
-  int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
-  if (zrc != 0)
-    {
-      info ("hls_time_abort_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
-
-      double end_time = get_time();
-      info ("hls_time_abort %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
-      return zrc;
-    }
-
-  info ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
-
-  double end_time = get_time();
-  info ("hls_time %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
-
-  return 0;
-}
-
-int
 test_seek (const string& in, const string& out, int pos, const string& bits)
 {
   vector<float> samples;
@@ -463,10 +382,6 @@ main (int argc, char **argv)
     {
       info ("hls-embed-context: in_dir=%s out_dir=%s m3u8=%s audio_master=%s\n", argv[2], argv[3], argv[4], argv[5]);
       return hls_embed_context (argv[2], argv[3], argv[4], argv[5]);
-    }
-  else if (argc == 5 && strcmp (argv[1], "hls-mark") == 0)
-    {
-      return hls_mark (argv[2], argv[3], argv[4]);
     }
   else if (argc == 6 && strcmp (argv[1], "test-seek") == 0)
     {

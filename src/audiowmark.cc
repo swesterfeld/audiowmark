@@ -27,6 +27,7 @@
 #include "random.hh"
 #include "wmcommon.hh"
 #include "shortcode.hh"
+#include "hls.hh"
 
 #include <assert.h>
 
@@ -531,9 +532,86 @@ gen_key (const string& outfile)
   return 0;
 }
 
+class ArgParser
+{
+  vector<string> m_args;
+  bool
+  starts_with (const string& s, const string& start)
+  {
+    return s.substr (0, start.size()) == start;
+  }
+public:
+  ArgParser (int argc, char **argv)
+  {
+    for (int i = 1; i < argc; i++)
+      m_args.push_back (argv[i]);
+  }
+  bool
+  parse_cmd (const string& cmd)
+  {
+    for (auto it = m_args.begin(); it != m_args.end(); it++)
+      {
+        if (!it->empty() && (*it)[0] != '-')
+          {
+            if (*it == cmd)
+              {
+                m_args.erase (it);
+                return true;
+              }
+            else /* first positional arg is not cmd */
+              {
+                return false;
+              }
+          }
+      }
+    return false;
+  }
+  bool
+  parse_opt (const string& option, int& out)
+  {
+    bool found_option = false;
+    auto it = m_args.begin();
+    while (it != m_args.end())
+      {
+        auto next_it = it + 1;
+        if (*it == option && next_it != m_args.end())   /* --option 12345 */
+          {
+            out = atoi (next_it->c_str());
+            next_it = m_args.erase (it, it + 2);
+            found_option = true;
+          }
+        else if (starts_with (*it, (option + "=")))   /* --option=12345 */
+          {
+            out = atoi (it->substr (option.size() + 1).c_str());
+            next_it = m_args.erase (it);
+            found_option = true;
+          }
+        it = next_it;
+      }
+    return found_option;
+  }
+  vector<string>
+  args()
+  {
+    return m_args;
+  }
+};
+
 int
 main (int argc, char **argv)
 {
+  ArgParser ap (argc, argv);
+  if (ap.parse_cmd ("hls-add"))
+    {
+      ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
+
+      auto args = ap.args();
+      if (args.size() == 3)
+        return hls_add (args[0], args[1], args[2]);
+      error ("ARG FAIL!\n");
+      return 1;
+    }
+
   parse_options (&argc, &argv);
 
   if (Params::have_key > 1)

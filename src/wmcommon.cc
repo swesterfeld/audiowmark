@@ -39,6 +39,8 @@ Format Params::output_format    = Format::AUTO;
 RawFormat Params::raw_input_format;
 RawFormat Params::raw_output_format;
 
+int    Params::hls_bit_rate = 0;
+
 std::string Params::input_label;
 std::string Params::output_label;
 

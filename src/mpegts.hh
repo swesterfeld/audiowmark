@@ -18,6 +18,8 @@
 #ifndef AUDIOWMARK_MPEGTS_HH
 #define AUDIOWMARK_MPEGTS_HH
 
+#include <map>
+
 class TSReader
 {
 public:
