@@ -183,78 +183,6 @@ parse_options (int   *argc_p,
 	{
           Params::test_truncate = atoi (opt_arg);
 	}
-      else if (check_arg (argc, argv, &i, "--input-format", &opt_arg))
-        {
-          Params::input_format = parse_format (opt_arg);
-        }
-      else if (check_arg (argc, argv, &i, "--output-format", &opt_arg))
-        {
-          Params::output_format = parse_format (opt_arg);
-        }
-      else if (check_arg (argc, argv, &i, "--format", &opt_arg))
-        {
-          Params::input_format = Params::output_format = parse_format (opt_arg);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-input-bits", &opt_arg))
-        {
-          int b = atoi (opt_arg);
-          Params::raw_input_format.set_bit_depth (b);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-output-bits", &opt_arg))
-        {
-          int b = atoi (opt_arg);
-          Params::raw_output_format.set_bit_depth (b);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-bits", &opt_arg))
-        {
-          int b = atoi (opt_arg);
-          Params::raw_input_format.set_bit_depth (b);
-          Params::raw_output_format.set_bit_depth (b);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-input-endian", &opt_arg))
-        {
-          auto e = parse_endian (opt_arg);
-          Params::raw_input_format.set_endian (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-output-endian", &opt_arg))
-        {
-          auto e = parse_endian (opt_arg);
-          Params::raw_output_format.set_endian (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-endian", &opt_arg))
-        {
-          auto e = parse_endian (opt_arg);
-          Params::raw_input_format.set_endian (e);
-          Params::raw_output_format.set_endian (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-input-encoding", &opt_arg))
-        {
-          auto e = parse_encoding (opt_arg);
-          Params::raw_input_format.set_encoding (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-output-encoding", &opt_arg))
-        {
-          auto e = parse_encoding (opt_arg);
-          Params::raw_output_format.set_encoding (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-encoding", &opt_arg))
-        {
-          auto e = parse_encoding (opt_arg);
-          Params::raw_input_format.set_encoding (e);
-          Params::raw_output_format.set_encoding (e);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-channels", &opt_arg))
-        {
-          int c = atoi (opt_arg);
-          Params::raw_input_format.set_channels (c);
-          Params::raw_output_format.set_channels (c);
-        }
-      else if (check_arg (argc, argv, &i, "--raw-rate", &opt_arg))
-        {
-          int r = atoi (opt_arg);
-          Params::raw_input_format.set_sample_rate (r);
-          Params::raw_output_format.set_sample_rate (r);
-        }
     }
 
   /* resort argc/argv */
@@ -618,6 +546,88 @@ parse_shared_options (ArgParser& ap)
     }
 }
 
+void
+parse_add_options (ArgParser& ap)
+{
+  string s;
+  int i;
+
+  ap.parse_opt ("--set-input-label", Params::input_label);
+  ap.parse_opt ("--set-output-label", Params::output_label);
+  if (ap.parse_opt ("--snr"))
+    {
+      Params::snr = true;
+    }
+  if (ap.parse_opt ("--input-format", s))
+    {
+      Params::input_format = parse_format (s);
+    }
+  if (ap.parse_opt ("--output-format", s))
+    {
+      Params::output_format = parse_format (s);
+    }
+  if (ap.parse_opt ("--format", s))
+    {
+      Params::input_format = Params::output_format = parse_format (s);
+    }
+  if (ap.parse_opt ("--raw-input-bits", i))
+    {
+      Params::raw_input_format.set_bit_depth (i);
+    }
+  if (ap.parse_opt ("--raw-output-bits", i))
+    {
+      Params::raw_output_format.set_bit_depth (i);
+    }
+  if (ap.parse_opt ("--raw-bits", i))
+    {
+      Params::raw_input_format.set_bit_depth (i);
+      Params::raw_output_format.set_bit_depth (i);
+    }
+  if (ap.parse_opt ( "--raw-input-endian", s))
+    {
+      auto e = parse_endian (s);
+      Params::raw_input_format.set_endian (e);
+    }
+  if (ap.parse_opt ("--raw-output-endian", s))
+    {
+      auto e = parse_endian (s);
+      Params::raw_output_format.set_endian (e);
+    }
+  if (ap.parse_opt ("--raw-endian", s))
+    {
+      auto e = parse_endian (s);
+      Params::raw_input_format.set_endian (e);
+      Params::raw_output_format.set_endian (e);
+    }
+  if (ap.parse_opt ("--raw-input-encoding", s))
+    {
+      auto e = parse_encoding (s);
+      Params::raw_input_format.set_encoding (e);
+    }
+  if (ap.parse_opt ("--raw-output-encoding", s))
+    {
+      auto e = parse_encoding (s);
+      Params::raw_output_format.set_encoding (e);
+    }
+  if (ap.parse_opt ("--raw-encoding", s))
+    {
+      auto e = parse_encoding (s);
+      Params::raw_input_format.set_encoding (e);
+      Params::raw_output_format.set_encoding (e);
+    }
+  if (ap.parse_opt ("--raw-channels", i))
+    {
+      Params::raw_input_format.set_channels (i);
+      Params::raw_output_format.set_channels (i);
+    }
+  if (ap.parse_opt ("--raw-rate", i))
+    {
+      Params::raw_input_format.set_sample_rate (i);
+      Params::raw_output_format.set_sample_rate (i);
+    }
+}
+
+
 int
 main (int argc, char **argv)
 {
@@ -646,13 +656,7 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("add"))
     {
       parse_shared_options (ap);
-
-      ap.parse_opt ("--set-input-label", Params::input_label);
-      ap.parse_opt ("--set-output-label", Params::output_label);
-      if (ap.parse_opt ("--snr"))
-        {
-          Params::snr = true;
-        }
+      parse_add_options (ap);
 
       if (ap.parse_args (3, args))
         return add_watermark (args[0], args[1], args[2]);
