@@ -178,24 +178,10 @@ parse_options (int   *argc_p,
 	{
           Params::frames_per_bit = atoi (opt_arg);
 	}
-      else if (check_arg (argc, argv, &i, "--strength", &opt_arg))
-	{
-          Params::water_delta = atof (opt_arg) / 1000;
-	}
       else if (check_arg (argc, argv, &i, "--linear"))
 	{
           Params::mix = false;
 	}
-      else if (check_arg (argc, argv, &i, "--short", &opt_arg))
-        {
-          Params::payload_size = atoi (opt_arg);
-          if (!short_code_init (Params::payload_size))
-            {
-              error ("audiowmark: unsupported short payload size %zd\n", Params::payload_size);
-              exit (1);
-            }
-          Params::payload_short = true;
-        }
       else if (check_arg (argc, argv, &i, "--hard"))
 	{
           Params::hard = true;
@@ -304,11 +290,6 @@ parse_options (int   *argc_p,
       else if (check_arg (argc, argv, &i, "--set-output-label", &opt_arg))
         {
           Params::output_label = opt_arg;
-        }
-      else if (check_arg (argc, argv, &i, "--quiet")
-            || check_arg (argc, argv, &i, "-q"))
-        {
-          set_log_level (Log::WARNING);
         }
     }
 
@@ -636,10 +617,29 @@ void
 parse_shared_options (ArgParser& ap)
 {
   int i;
+  float f;
+  if (ap.parse_opt ("--strength", f))
+    {
+      Params::water_delta = f / 1000;
+    }
   if (ap.parse_opt ("--test-key", i))
     {
       Params::have_key++;
       Random::set_global_test_key (i);
+    }
+  if (ap.parse_opt ("--short", i))
+    {
+      Params::payload_size = i;
+      if (!short_code_init (Params::payload_size))
+        {
+          error ("audiowmark: unsupported short payload size %zd\n", Params::payload_size);
+          exit (1);
+        }
+      Params::payload_short = true;
+    }
+  if (ap.parse_opt ("--quiet") || ap.parse_opt ("-q"))
+    {
+      set_log_level (Log::WARNING);
     }
 }
 
