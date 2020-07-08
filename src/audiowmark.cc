@@ -204,11 +204,6 @@ parse_options (int   *argc_p,
         {
           Params::snr = true;
         }
-      else if (check_arg (argc, argv, &i, "--test-key", &opt_arg))
-	{
-          Params::have_key++;
-          Random::set_global_test_key (atoi (opt_arg));
-	}
       else if (check_arg (argc, argv, &i, "--key", &opt_arg))
         {
           Params::have_key++;
@@ -625,28 +620,72 @@ public:
       }
     return false;
   }
-  vector<string>
-  args()
+  bool
+  parse_args (size_t expected_count, vector<string>& out_args)
   {
-    return m_args;
+    if (m_args.size() == expected_count)
+      {
+        out_args = m_args;
+        return true;
+      }
+    return false;
   }
 };
+
+void
+parse_shared_options (ArgParser& ap)
+{
+  int i;
+  if (ap.parse_opt ("--test-key", i))
+    {
+      Params::have_key++;
+      Random::set_global_test_key (i);
+    }
+}
 
 int
 main (int argc, char **argv)
 {
   ArgParser ap (argc, argv);
+  vector<string> args;
+
   if (ap.parse_cmd ("hls-add"))
     {
+      parse_shared_options (ap);
+
       ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
 
-      auto args = ap.args();
-      if (args.size() == 3)
+      if (ap.parse_args (3, args))
         return hls_add (args[0], args[1], args[2]);
-      error ("ARG FAIL!\n");
-      return 1;
     }
+  else if (ap.parse_cmd ("add"))
+    {
+      parse_shared_options (ap);
 
+      if (ap.parse_args (3, args))
+        return add_watermark (args[0], args[1], args[2]);
+    }
+  else if (ap.parse_cmd ("get"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (1, args))
+        return get_watermark (args[0], /* no ber */ "");
+    }
+  else if (ap.parse_cmd ("cmp"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (2, args))
+        return get_watermark (args[0], args[1]);
+    }
+  for (int i = 0; i < argc; i++)
+    {
+      error ("%d %s\n", i, argv[i]);
+    }
+  error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
+  return 1;
+#if 0
   parse_options (&argc, &argv);
 
   if (Params::have_key > 1)
@@ -656,18 +695,6 @@ main (int argc, char **argv)
     }
   string op = (argc >= 2) ? argv[1] : "";
 
-  if (op == "add" && argc == 5)
-    {
-      return add_watermark (argv[2], argv[3], argv[4]);
-    }
-  else if (op == "get" && argc == 3)
-    {
-      return get_watermark (argv[2], /* no ber */ "");
-    }
-  else if (op == "cmp" && argc == 4)
-    {
-      return get_watermark (argv[2], argv[3]);
-    }
   else if (op == "gentest" && argc == 4)
     {
       return gentest (argv[2], argv[3]);
@@ -697,4 +724,5 @@ main (int argc, char **argv)
       error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
       return 1;
     }
+#endif
 }
