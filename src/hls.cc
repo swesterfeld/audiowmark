@@ -18,6 +18,10 @@
 #include <string>
 #include <regex>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include "utils.hh"
 #include "mpegts.hh"
 #include "sfinputstream.hh"
@@ -161,9 +165,31 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   return 0;
 }
 
+Error
+bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
+{
+  FILE *tmp_file = tmpfile();
+  ScopedFile tmp_file_s (tmp_file);
+  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  Error err = xsystem (string_printf ("ffmpeg -y -i %s -c:a copy -f adts %s", m3u8.c_str(), tmp_file_name.c_str()));
+  if (err)
+    return err;
+
+  struct stat stat_buf;
+  if (stat (tmp_file_name.c_str(), &stat_buf) != 0)
+    {
+      return Error (string_printf ("failed to stat temporary aac file: %s", strerror (errno)));
+    }
+  double seconds = double (wav_data.n_frames()) / wav_data.sample_rate();
+  bit_rate = stat_buf.st_size / seconds * 8;
+  return Error::Code::NONE;
+}
+
 int
 hls_prepare (const string& in_dir, const string& out_dir, const string& filename, const string& audio_master)
 {
+
   string in_name = in_dir + "/" + filename;
   FILE *in_file = fopen (in_name.c_str(), "r");
   ScopedFile in_file_s (in_file);
@@ -191,9 +217,22 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       error ("audiowmark: failed to load audio master: %s\n", audio_master.c_str());
       return 1;
     }
-
-  const int bit_rate = Params::hls_bit_rate;
-  info ("AAC Bitrate:  %d\n", bit_rate);
+  int bit_rate = 0;
+  if (!Params::hls_bit_rate)
+    {
+      err = bit_rate_from_m3u8 (in_dir + "/" + filename, audio_master_data, bit_rate);
+      if (err)
+        {
+          error ("audiowmark: bit-rate detection failed: %s\n", err.message());
+          return 1;
+         }
+      info ("AAC Bitrate:  %d (detected)\n", bit_rate);
+    }
+  else
+    {
+      bit_rate = Params::hls_bit_rate;
+      info ("AAC Bitrate:  %d\n", bit_rate);
+    }
 
   struct Segment
   {
