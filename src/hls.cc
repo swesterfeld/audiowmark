@@ -117,15 +117,18 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   size_t next_size = atoi (vars["next_size"].c_str());
   size_t size      = atoi (vars["size"].c_str());
   double pts_start = atof (vars["pts_start"].c_str());
+  int    bit_rate = atoi (vars["bit_rate"].c_str());
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
   info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
   start_time1 = get_time();
 
+  if (Params::hls_bit_rate)  // command line option overrides vars bit-rate
+    bit_rate = Params::hls_bit_rate;
+
   HLSOutputStream out_stream (in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
 
-  int bit_rate = Params::hls_bit_rate ? Params::hls_bit_rate : 256000;
-  out_stream.set_bit_rate (Params::hls_bit_rate ? Params::hls_bit_rate : 256000);
+  out_stream.set_bit_rate (bit_rate);
   info ("n_frames = %zd\n", in_stream.n_frames() - prev_size - next_size);
   const size_t shift = 1024;
   const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
@@ -189,7 +192,8 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       return 1;
     }
 
-  info ("AAC Bitrate:  %d\n", Params::hls_bit_rate);
+  const int bit_rate = Params::hls_bit_rate;
+  info ("AAC Bitrate:  %d\n", bit_rate);
 
   struct Segment
   {
@@ -259,6 +263,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       segment.vars["size"] = string_printf ("%zd", segment.size);
       segment.vars["prev_size"] = string_printf ("%zd", prev_size);
       segment.vars["next_size"] = string_printf ("%zd", next_size);
+      segment.vars["bit_rate"] = string_printf ("%d", bit_rate);
 
       /* write audio segment with context */
       const size_t start_point = start_pos - prev_size;
