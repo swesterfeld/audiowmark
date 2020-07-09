@@ -15,11 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef AUDIOWMARK_MPEGTS_HH
-#define AUDIOWMARK_MPEGTS_HH
+#ifndef AUDIOWMARK_HLS_HH
+#define AUDIOWMARK_HLS_HH
 
 #include <string>
 
 int hls_add (const std::string& infile, const std::string& outfile, const std::string& bits);
+int hls_prepare (const std::string& in_dir, const std::string& out_dir, const std::string& filename, const std::string& audio_master);
+
+Error ff_decode (const std::string& filename, WavData& out_wav_data);
 
 #endif /* AUDIOWMARK_MPEGTS_HH */

@@ -446,10 +446,6 @@ parse_shared_options (ArgParser& ap)
     {
       Params::mix = false;
     }
-  if (ap.parse_opt ("--quiet") || ap.parse_opt ("-q"))
-    {
-      set_log_level (Log::WARNING);
-    }
   if (Params::have_key > 1)
     {
       error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
@@ -574,6 +570,10 @@ main (int argc, char **argv)
       printf ("audiowmark %s\n", VERSION);
       return 0;
     }
+  if (ap.parse_opt ("--quiet") || ap.parse_opt ("-q"))
+    {
+      set_log_level (Log::WARNING);
+    }
   if (ap.parse_cmd ("hls-add"))
     {
       parse_shared_options (ap);
@@ -582,6 +582,13 @@ main (int argc, char **argv)
 
       if (ap.parse_args (3, args))
         return hls_add (args[0], args[1], args[2]);
+    }
+  else if (ap.parse_cmd ("hls-prepare"))
+    {
+      ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
+
+      if (ap.parse_args (4, args))
+        return hls_prepare (args[0], args[1], args[2], args[3]);
     }
   else if (ap.parse_cmd ("add"))
     {
