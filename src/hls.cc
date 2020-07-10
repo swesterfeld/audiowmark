@@ -19,6 +19,7 @@
 #include <regex>
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -36,16 +37,87 @@ using std::regex;
 using std::map;
 using std::min;
 
-Error
-xsystem (const string& cmd)
+string
+args2string (const vector<string>& args)
 {
-  info ("+++ %s\n", cmd.c_str());
-  int rc = system (cmd.c_str());
-  int exit_status = WEXITSTATUS (rc);
-  if (exit_status != 0)
+  string result;
+  bool first = true;
+
+  for (auto a : args)
     {
-      error ("audiowmark: failed to execute command:\n%s\n", cmd.c_str());
-      return Error (string_printf ("system failed / exit status %d", exit_status));
+      if (!first)
+        result += " ";
+      first = false;
+      result += a;
+    }
+  return result;
+}
+
+Error
+run (const vector<string>& args, vector<string> *pipe_out = nullptr)
+{
+  char *argv[args.size() + 1];
+  for (size_t i = 0; i < args.size(); i++)
+    argv[i] = (char *) args[i].c_str();
+  argv[args.size()] = nullptr;
+
+  int pipe_fds[2];
+  if (pipe_out)
+    {
+      if (pipe (pipe_fds) == -1)
+        return Error ("pipe() failed");
+    }
+  pid_t pid = fork();
+  if (pid == 0) /* child process */
+    {
+      if (pipe_out)
+        {
+          // replace stdout with pipe
+          dup2 (pipe_fds[1], STDOUT_FILENO);
+
+          // close remaining pipe fds
+          close (pipe_fds[0]);
+          close (pipe_fds[1]);
+        }
+      execvp (argv[0], argv);
+
+      // should not be reached in normal operation, so exec failed
+      exit (127);
+    }
+
+  /* parent process */
+  if (pipe_out) /* capture child stdout */
+    {
+      close (pipe_fds[1]); // close pipe write fd
+
+      FILE *f = fdopen (pipe_fds[0], "r");
+      char buffer[1024];
+      while (fgets (buffer, 1024, f))
+        {
+          if (strlen (buffer) && buffer[strlen (buffer) - 1] == '\n')
+            buffer[strlen (buffer) - 1] = 0;
+          if (pipe_out)
+            pipe_out->push_back (buffer);
+        }
+      fclose (f);        // close pipe read fd
+    }
+  int status;
+  pid_t exited = waitpid (pid, &status, 0);
+  if (exited < 0)
+    return Error ("waitpid() failed");
+  if (WIFEXITED (status))
+    {
+      int exit_status = WEXITSTATUS (status);
+      if (exit_status != 0)
+        {
+          error ("audiowmark: failed to execute %s\n", args2string (args).c_str());
+          return Error (string_printf ("subprocess failed / exit status %d", exit_status));
+        }
+    }
+  else
+    {
+      error ("audiowmark: failed to execute %s\n", args2string (args).c_str());
+      return Error ("child didn't exit normally");
     }
   return Error::Code::NONE;
 }
@@ -57,20 +129,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
 
-  FILE *input_tmp_file = tmpfile();
-  ScopedFile input_tmp_file_s (input_tmp_file);
-  string input_tmp_file_name = string_printf ("/dev/fd/%d", fileno (input_tmp_file));
-
-  // write current ts
-  FILE *main = fopen (filename.c_str(), "r");
-  ScopedFile main_s (main);
-  int c;
-  while ((c = fgetc (main)) >= 0)
-    fputc (c, input_tmp_file);
-
-  fflush (input_tmp_file);
-  string cmd = string_printf ("ffmpeg -v error -y -f mpegts -i %s -f wav %s", input_tmp_file_name.c_str(), tmp_file_name.c_str());
-  Error err = xsystem (cmd.c_str());
+  Error err = run ({"ffmpeg", "-v", "error", "-y", "-f",  "mpegts", "-i", filename, "-f", "wav", tmp_file_name});
   if (err)
     return err;
 
@@ -172,7 +231,7 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
 
-  Error err = xsystem (string_printf ("ffmpeg -y -i %s -c:a copy -f adts %s", m3u8.c_str(), tmp_file_name.c_str()));
+  Error err = run ({"ffmpeg", "-v", "error", "-y", "-i", m3u8, "-c:a", "copy", "-f", "adts", tmp_file_name});
   if (err)
     return err;
 
@@ -278,20 +337,19 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
           error ("audiowmark: hls: ff_decode failed: %s\n", err.message());
           return 1;
         }
-      printf ("%d %zd\n", out.sample_rate(), out.n_values() / out.n_channels());
       segment.size = out.n_values() / out.n_channels();
 
       /* obtain pts for first frame */
-      string cmd = string_printf ("ffprobe -v 0 -show_entries packet=pts_time %s/%s -of compact=p=0:nk=1 | grep '^[0-9]'", in_dir.c_str(), segment.name.c_str());
-      FILE *pts = popen (cmd.c_str(), "r");
-      char buffer[1024];
-      if (fgets (buffer, 1024, pts))
+      vector<string> pts_out;
+      err = run ({"ffprobe", "-v", "0", "-show_entries", "packet=pts_time", in_dir + "/" + segment.name, "-of", "compact=p=0:nk=1"}, &pts_out);
+      for (auto o : pts_out)
         {
-          if (strlen (buffer) && buffer[strlen (buffer) - 1] == '\n')
-            buffer[strlen (buffer) - 1] = 0;
-          segment.vars["pts_start"] = buffer;
+          if (!o.empty())
+            {
+              segment.vars["pts_start"] = buffer;
+              break;
+            }
         }
-      fclose (pts);
 
       /* store 3 seconds of the context before this segment and after this segment (if available) */
       const size_t ctx_3sec = 3 * out.sample_rate();
