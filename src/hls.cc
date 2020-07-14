@@ -418,7 +418,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
         {
           if (!o.empty())
             {
-              segment.vars["pts_start"] = buffer;
+              segment.vars["pts_start"] = o;
               break;
             }
         }
