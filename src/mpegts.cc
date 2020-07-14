@@ -186,6 +186,8 @@ TSWriter::process (const string& inname, const string& outname)
       else
         {
           err = p.write (outfile);
+          if (err)
+            return err;
         }
     }
 
@@ -205,7 +207,10 @@ TSWriter::process (const string& inname, const string& outname)
           p_file[pos++] = data[data_pos];
           if (pos == 188)
             {
-              p_file.write (outfile);
+              Error err = p_file.write (outfile);
+              if (err)
+                return err;
+
               p_file.clear (TSPacket::ID::awmk_data);
               pos = 12;
             }
@@ -215,6 +220,8 @@ TSWriter::process (const string& inname, const string& outname)
       if (pos != 12)
         {
           Error err = p_file.write (outfile);
+          if (err)
+            return err;
         }
     }
 
