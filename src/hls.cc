@@ -245,10 +245,63 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
   return Error::Code::NONE;
 }
 
+Error
+validate_input_segment (const string& filename)
+{
+  vector<string> format_out;
+  Error err = run ({"ffprobe", "-v", "error", "-print_format", "compact", "-show_streams", filename}, &format_out);
+  if (err)
+    {
+      error ("audiowmark: hls: failed validating input");
+      return err;
+    }
+  for (auto o : format_out)
+    {
+      /* parse assignments stream|index=0|codec_name=aac|... */
+      map<string, string> params;
+
+      string key, value;
+      bool in_key = true;
+      for (char c : '|' + o + '|')
+        {
+          if (c == '=')
+            {
+              in_key = false;
+            }
+          else if (c == '|')
+            {
+              params[key] = value;
+              in_key = true;
+              key = "";
+              value = "";
+            }
+          else
+            {
+              if (in_key)
+                key += c;
+              else
+                value += c;
+            }
+        }
+
+      /* now the actual validation */
+      if (atoi (params["index"].c_str()) != 0)
+        {
+          error ("audiowmark: hls segment '%s' contains more than one stream\n", filename.c_str());
+          return Error ("failed to validate input segment");
+        }
+      if (params["codec_name"] != "aac")
+        {
+          error ("audiowmark hls segment '%s' is not encoded using AAC\n", filename.c_str());
+          return Error ("failed to validate input segment");
+        }
+    }
+  return Error::Code::NONE;
+}
+
 int
 hls_prepare (const string& in_dir, const string& out_dir, const string& filename, const string& audio_master)
 {
-
   string in_name = in_dir + "/" + filename;
   FILE *in_file = fopen (in_name.c_str(), "r");
   ScopedFile in_file_s (in_file);
@@ -275,22 +328,6 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
     {
       error ("audiowmark: failed to load audio master: %s\n", audio_master.c_str());
       return 1;
-    }
-  int bit_rate = 0;
-  if (!Params::hls_bit_rate)
-    {
-      err = bit_rate_from_m3u8 (in_dir + "/" + filename, audio_master_data, bit_rate);
-      if (err)
-        {
-          error ("audiowmark: bit-rate detection failed: %s\n", err.message());
-          return 1;
-         }
-      info ("AAC Bitrate:  %d (detected)\n", bit_rate);
-    }
-  else
-    {
-      bit_rate = Params::hls_bit_rate;
-      info ("AAC Bitrate:  %d\n", bit_rate);
     }
 
   struct Segment
@@ -327,6 +364,35 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
         }
       line++;
     }
+  for (auto& segment : segments)
+    {
+      Error err = validate_input_segment (in_dir + "/" + segment.name);
+      if (err)
+        {
+          error ("audiowmark: hls: %s\n", err.message());
+          return 1;
+        }
+    }
+
+  /* find bitrate for AAC encoder */
+  int bit_rate = 0;
+  if (!Params::hls_bit_rate)
+    {
+      err = bit_rate_from_m3u8 (in_dir + "/" + filename, audio_master_data, bit_rate);
+      if (err)
+        {
+          error ("audiowmark: bit-rate detection failed: %s\n", err.message());
+          return 1;
+         }
+      info ("AAC Bitrate:  %d (detected)\n", bit_rate);
+    }
+  else
+    {
+      bit_rate = Params::hls_bit_rate;
+      info ("AAC Bitrate:  %d\n", bit_rate);
+    }
+
+  info ("Segments:     %zd\n", segments.size());
   size_t start_pos = 0;
   for (auto& segment : segments)
     {
@@ -338,6 +404,12 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
           return 1;
         }
       segment.size = out.n_values() / out.n_channels();
+
+      if ((segment.size % 1024) != 0)
+        {
+          error ("audiowmark: hls input segments need 1024-sample alignment (due to AAC)\n");
+          return 1;
+        }
 
       /* obtain pts for first frame */
       vector<string> pts_out;
@@ -404,6 +476,8 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       /* start position for the next segment */
       start_pos += segment.size;
     }
+  int orig_seconds = start_pos / audio_master_data.sample_rate();
+  info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
   return 0;
 }
 
