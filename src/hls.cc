@@ -471,7 +471,13 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
 
       writer.append_data ("full.flac", full_flac_mem);
       writer.append_vars ("vars", segment.vars);
-      writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
+
+      err = writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
+      if (err)
+        {
+          error ("audiowmark: processing hls segment %s failed: %s\n", segment.name.c_str(), err.message());
+          return 1;
+        }
 
       /* start position for the next segment */
       start_pos += segment.size;
