@@ -112,44 +112,6 @@ public:
   {
     return m_data;
   }
-  bool
-  has_pcr()
-  {
-    unsigned char adapt = (m_data[3] >> 4) & 0x03;
-    if (adapt == 1)
-      return false;
-    unsigned char adapt_len = m_data[4];
-    return adapt_len && (m_data[5] & 0x10);
-  }
-  uint64_t
-  pcr()
-  {
-    uint64_t pcr = 0;
-    unsigned char *buff = &m_data[6];
-    pcr |= buff[0] << 25;
-    pcr |= buff[1] << 17;
-    pcr |= buff[2] << 9;
-    pcr |= buff[3] << 1;
-    pcr |= buff[4] >> 7;
-    pcr *= 300;
-
-    uint64_t ext = ((buff[4] & 1) << 8) | buff[5];
-    pcr += ext;
-    return pcr;
-  }
-  void
-  patch_pcr (uint64_t pcr)
-  {
-    unsigned char *buff = &m_data[6];
-    int64_t pcr_low = pcr % 300, pcr_high = pcr / 300;
-
-    *buff++ = pcr_high >> 25;
-    *buff++ = pcr_high >> 17;
-    *buff++ = pcr_high >>  9;
-    *buff++ = pcr_high >>  1;
-    *buff++ = pcr_high <<  7 | pcr_low >> 8 | 0x7e;
-    *buff++ = pcr_low;
-  }
 };
 
 Error
@@ -402,32 +364,4 @@ TSReader::parse_vars (const string& name)
         }
     }
   return vars;
-}
-
-int
-pcr (const string& filename, const string& outname, double d)
-{
-  FILE *infile = fopen (filename.c_str(), "r");
-  ScopedFile infile_s (infile);
-  FILE *outfile = fopen (outname.c_str(), "w");
-  ScopedFile outfile_s (outfile);
-
-  while (!feof (infile))
-    {
-      TSPacket p;
-      Error err;
-      bool read_ok = p.read (infile, err);
-      if (!read_ok)
-        {
-          if (err)
-            return err;
-        }
-      if (p.has_pcr())
-        {
-          printf ("%" PRIx64 " %f\n", p.pcr(), p.pcr() * 1e3/27e6);
-          p.patch_pcr ((p.pcr() * 1e3/27e6 + d) / (1e3/27e6));
-        }
-      p.write (outfile);
-    }
-  return 0;
 }
