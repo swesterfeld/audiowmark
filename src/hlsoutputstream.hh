@@ -88,7 +88,7 @@ public:
   int sample_rate() const override;
   int n_channels() const override;
   Error write_frames (const std::vector<float>& frames) override;
-  Error close();
+  Error close() override;
 };
 
 #endif /* AUDIOWMARK_HLS_OUTPUT_STREAM_HH */

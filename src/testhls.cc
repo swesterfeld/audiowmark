@@ -102,13 +102,13 @@ public:
     return wav_data->n_channels();
   }
   Error
-  write_frames (const std::vector<float>& frames)
+  write_frames (const std::vector<float>& frames) override
   {
     samples.insert (samples.end(), frames.begin(), frames.end());
     return Error::Code::NONE;
   }
   Error
-  close()
+  close() override
   {
     wav_data->set_samples (samples); // only do this once at end for performance reasons
     return Error::Code::NONE;
