@@ -508,12 +508,10 @@ class WatermarkResampler
   std::unique_ptr<ResamplerImpl> out_resampler;
   WatermarkGen                   wm_gen;
   const bool                     need_resampler = false;
-  const int                      n_channels = 0;
 public:
   WatermarkResampler (int n_channels, int input_rate, const vector<int>& bitvec) :
     wm_gen (n_channels, bitvec),
-    need_resampler (input_rate != Params::mark_sample_rate),
-    n_channels (n_channels)
+    need_resampler (input_rate != Params::mark_sample_rate)
   {
     if (need_resampler)
       {
