@@ -56,6 +56,8 @@ args2string (const vector<string>& args)
 Error
 run (const vector<string>& args, vector<string> *pipe_out = nullptr)
 {
+  auto report_error = [=] { error ("audiowmark: failed to execute %s\n", args2string (args).c_str()); };
+
   char *argv[args.size() + 1];
   for (size_t i = 0; i < args.size(); i++)
     argv[i] = (char *) args[i].c_str();
@@ -65,21 +67,39 @@ run (const vector<string>& args, vector<string> *pipe_out = nullptr)
   if (pipe_out)
     {
       if (pipe (pipe_fds) == -1)
-        return Error ("pipe() failed");
+        {
+          report_error();
+          return Error ("pipe() failed");
+        }
     }
   pid_t pid = fork();
+  if (pid < 0)
+    {
+      if (pipe_out)
+        {
+          close (pipe_fds[0]);
+          close (pipe_fds[1]);
+        }
+      report_error();
+      return Error ("fork() failed");
+    }
   if (pid == 0) /* child process */
     {
       if (pipe_out)
         {
           // replace stdout with pipe
-          dup2 (pipe_fds[1], STDOUT_FILENO);
+          if (dup2 (pipe_fds[1], STDOUT_FILENO) == -1)
+            {
+              perror ("audiowmark: dup2() failed");
+              exit (127);
+            }
 
           // close remaining pipe fds
           close (pipe_fds[0]);
           close (pipe_fds[1]);
         }
       execvp (argv[0], argv);
+      perror ("audiowmark: execvp() failed");
 
       // should not be reached in normal operation, so exec failed
       exit (127);
@@ -91,6 +111,12 @@ run (const vector<string>& args, vector<string> *pipe_out = nullptr)
       close (pipe_fds[1]); // close pipe write fd
 
       FILE *f = fdopen (pipe_fds[0], "r");
+      if (!f)
+        {
+          close (pipe_fds[0]);
+          report_error();
+          return Error ("fdopen() pipe failed");
+        }
       char buffer[1024];
       while (fgets (buffer, 1024, f))
         {
@@ -104,19 +130,22 @@ run (const vector<string>& args, vector<string> *pipe_out = nullptr)
   int status;
   pid_t exited = waitpid (pid, &status, 0);
   if (exited < 0)
-    return Error ("waitpid() failed");
+    {
+      report_error();
+      return Error ("waitpid() failed");
+    }
   if (WIFEXITED (status))
     {
       int exit_status = WEXITSTATUS (status);
       if (exit_status != 0)
         {
-          error ("audiowmark: failed to execute %s\n", args2string (args).c_str());
+          report_error();
           return Error (string_printf ("subprocess failed / exit status %d", exit_status));
         }
     }
   else
     {
-      error ("audiowmark: failed to execute %s\n", args2string (args).c_str());
+      report_error();
       return Error ("child didn't exit normally");
     }
   return Error::Code::NONE;
@@ -252,7 +281,7 @@ validate_input_segment (const string& filename)
   Error err = run ({"ffprobe", "-v", "error", "-print_format", "compact", "-show_streams", filename}, &format_out);
   if (err)
     {
-      error ("audiowmark: hls: failed validating input");
+      error ("audiowmark: hls: failed to validate input file: %s\n", filename.c_str());
       return err;
     }
   for (auto o : format_out)
