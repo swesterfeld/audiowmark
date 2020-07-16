@@ -329,6 +329,13 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       return 1;
     }
 
+  int mkret = mkdir (out_dir.c_str(), 0755);
+  if (mkret == -1 && errno != EEXIST)
+    {
+      error ("audiowmark: unable to create directory %s: %s\n", out_dir.c_str(), strerror (errno));
+      return 1;
+    }
+
   string out_name = out_dir + "/" + filename;
   FILE *out_file = fopen (out_name.c_str(), "w");
   ScopedFile out_file_s (out_file);
