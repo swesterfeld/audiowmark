@@ -172,8 +172,6 @@ ff_decode (const string& filename, WavData& out_wav_data)
 int
 hls_add (const string& infile, const string& outfile, const string& bits)
 {
-  double start_time = get_time();
-
   TSReader reader;
 
   Error err = reader.load (infile);
@@ -182,8 +180,6 @@ hls_add (const string& infile, const string& outfile, const string& bits)
       error ("hls_mark: %s\n", err.message());
       return 1;
     }
-  info ("hls_elapsed_load %f\n", (get_time() - start_time) * 1000 /* ms */);
-  double start_time1 = get_time();
 
   const TSReader::Entry *full_flac = reader.find ("full.flac");
   if (!full_flac)
@@ -215,9 +211,6 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   int    bit_rate = atoi (vars["bit_rate"].c_str());
   size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
 
-  info ("hls_time_elapsed_decode %f\n", (get_time() - start_time1) * 1000 /* ms */);
-  start_time1 = get_time();
-
   if (Params::hls_bit_rate)  // command line option overrides vars bit-rate
     bit_rate = Params::hls_bit_rate;
 
@@ -237,22 +230,11 @@ hls_add (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
 
-  int zrc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
-  if (zrc != 0)
-    {
-      info ("hls_time_abort_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
+  int wm_rc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
+  if (wm_rc != 0)
+    return wm_rc;
 
-      double end_time = get_time();
-      info ("hls_time_abort %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
-      return zrc;
-    }
   info ("AAC Bitrate:  %d\n", bit_rate);
-
-  info ("hls_time_elapsed_aac_enc %f\n", (get_time() - start_time1) * 1000 /* ms */);
-
-  double end_time = get_time();
-  info ("hls_time %f %f\n", start_pos / double (out_stream.sample_rate()), (end_time - start_time) * 1000 /* ms */);
-
   return 0;
 }
 
