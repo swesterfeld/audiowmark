@@ -17,6 +17,9 @@
 
 #include "hlsoutputstream.hh"
 
+#undef av_err2str
+#define av_err2str(errnum) av_make_error_string((char*)__builtin_alloca(AV_ERROR_MAX_STRING_SIZE), AV_ERROR_MAX_STRING_SIZE, errnum)
+
 /* HLSOutputStream is based on code from ffmpeg: doc/examples/muxing.c */
 
 /*
@@ -208,8 +211,7 @@ HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
   return Error::Code::NONE;
 }
 
-/* Prepare a 16 bit dummy audio frame of 'frame_size' samples and
- * 'nb_channels' channels. */
+/* fill audio frame with samples from AudioBuffer */
 AVFrame *
 HLSOutputStream::get_audio_frame()
 {

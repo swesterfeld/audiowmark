@@ -29,8 +29,6 @@ extern "C" {
 #include <libswresample/swresample.h>
 #include <libavutil/avassert.h>
 #include <libavutil/timestamp.h>
-#undef av_err2str
-#define av_err2str(errnum) av_make_error_string((char*)__builtin_alloca(AV_ERROR_MAX_STRING_SIZE), AV_ERROR_MAX_STRING_SIZE, errnum)
 }
 
 class HLSOutputStream : public AudioOutputStream {
