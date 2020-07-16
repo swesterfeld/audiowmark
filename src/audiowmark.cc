@@ -69,6 +69,30 @@ print_usage()
   printf ("\n");
   printf ("The options to set the raw stream parameters (such as --raw-rate\n");
   printf ("or --raw-channels) are documented in the README file.\n");
+  printf ("\n");
+  printf ("HLS command help can be displayed using --help-hls\n");
+}
+
+void
+print_usage_hls()
+{
+  printf ("usage: audiowmark <command> [ <args>... ]\n");
+  printf ("\n");
+  printf ("Commands:\n");
+  printf ("  * prepare HLS segments for streaming:\n");
+  printf ("    audiowmark hls-prepare <input_dir> <output_dir> <playlist_name> <master_wav>\n");
+  printf ("\n");
+  printf ("  * watermark one HLS segment:\n");
+  printf ("    audiowmark hls-add <input_ts> <output_ts> <message_hex>\n");
+  printf ("\n");
+  printf ("Global options:\n");
+  printf ("  -q, --quiet           disable information messages\n");
+  printf ("  --bit-rate            set AAC bitrate\n");
+  printf ("\n");
+  printf ("Watermarking options:\n");
+  printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
+  printf ("  --short <bits>        enable short payload mode\n");
+  printf ("  --key <file>          load watermarking key from file\n");
 }
 
 Format
@@ -563,6 +587,11 @@ main (int argc, char **argv)
   if (ap.parse_opt ("--help") || ap.parse_opt ("-h"))
     {
       print_usage();
+      return 0;
+    }
+  if (ap.parse_opt ("--help-hls"))
+    {
+      print_usage_hls();
       return 0;
     }
   if (ap.parse_opt ("--version") || ap.parse_opt ("-v"))
