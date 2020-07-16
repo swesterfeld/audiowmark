@@ -158,6 +158,9 @@ ff_decode (const string& filename, WavData& out_wav_data)
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
 
+  if (!tmp_file)
+    return Error ("failed to create temp file");
+
   Error err = run ({"ffmpeg", "-v", "error", "-y", "-f",  "mpegts", "-i", filename, "-f", "wav", tmp_file_name});
   if (err)
     return err;
@@ -259,6 +262,9 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
   FILE *tmp_file = tmpfile();
   ScopedFile tmp_file_s (tmp_file);
   string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  if (!tmp_file)
+    return Error ("failed to create temp file");
 
   Error err = run ({"ffmpeg", "-v", "error", "-y", "-i", m3u8, "-c:a", "copy", "-f", "adts", tmp_file_name});
   if (err)
@@ -443,6 +449,11 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       /* obtain pts for first frame */
       vector<string> pts_out;
       err = run ({"ffprobe", "-v", "0", "-show_entries", "packet=pts_time", in_dir + "/" + segment.name, "-of", "compact=p=0:nk=1"}, &pts_out);
+      if (err)
+        {
+          error ("audiowmark: hls: initial pts detection failed: %s\n", err.message());
+          return 1;
+        }
       for (auto o : pts_out)
         {
           if (!o.empty())
