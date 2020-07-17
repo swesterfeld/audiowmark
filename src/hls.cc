@@ -37,7 +37,19 @@ using std::regex;
 using std::map;
 using std::min;
 
-string
+static bool
+file_exists (const string& filename)
+{
+  struct stat st;
+
+  if (stat (filename.c_str(), &st) == 0)
+    {
+      return S_ISREG (st.st_mode);
+    }
+  return false;
+}
+
+static string
 args2string (const vector<string>& args)
 {
   string result;
@@ -53,7 +65,7 @@ args2string (const vector<string>& args)
   return result;
 }
 
-Error
+static Error
 run (const vector<string>& args, vector<string> *pipe_out = nullptr)
 {
   auto report_error = [=] { error ("audiowmark: failed to execute %s\n", args2string (args).c_str()); };
@@ -337,6 +349,11 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
     }
 
   string out_name = out_dir + "/" + filename;
+  if (file_exists (out_name))
+    {
+      error ("audiowmark: output file already exists: %s\n", out_name.c_str());
+      return 1;
+    }
   FILE *out_file = fopen (out_name.c_str(), "w");
   ScopedFile out_file_s (out_file);
 
@@ -501,7 +518,13 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       writer.append_data ("full.flac", full_flac_mem);
       writer.append_vars ("vars", segment.vars);
 
-      err = writer.process (in_dir + "/" + segment.name, out_dir + "/" + segment.name);
+      string out_segment = out_dir + "/" + segment.name;
+      if (file_exists (out_segment))
+        {
+          error ("audiowmark: output file already exists: %s\n", out_segment.c_str());
+          return 1;
+        }
+      err = writer.process (in_dir + "/" + segment.name, out_segment);
       if (err)
         {
           error ("audiowmark: processing hls segment %s failed: %s\n", segment.name.c_str(), err.message());
