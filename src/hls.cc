@@ -189,14 +189,14 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   Error err = reader.load (infile);
   if (err)
     {
-      error ("hls_mark: %s\n", err.message());
+      error ("hls: %s\n", err.message());
       return 1;
     }
 
   const TSReader::Entry *full_flac = reader.find ("full.flac");
   if (!full_flac)
     {
-      error ("hls_mark: no embedded context found in %s\n", infile.c_str());
+      error ("hls: no embedded context found in %s\n", infile.c_str());
       return 1;
     }
 
@@ -204,7 +204,7 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   err = in_stream.open (&full_flac->data);
   if (err)
     {
-      error ("hls_mark: %s\n", err.message());
+      error ("hls: %s\n", err.message());
       return 1;
     }
 
@@ -277,8 +277,23 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
 Error
 validate_input_segment (const string& filename)
 {
+  TSReader reader;
+
+  Error err = reader.load (filename);
+  if (err)
+    {
+      error ("audiowmark: hls: failed to read mpegts input file: %s\n", filename.c_str());
+      return err;
+    }
+
+  if (reader.entries().size())
+    {
+      error ("audiowmark: hls: file appears to be already prepared: %s\n", filename.c_str());
+      return Error ("input for hls-prepare must not contain context");
+    }
+
   vector<string> format_out;
-  Error err = run ({"ffprobe", "-v", "error", "-print_format", "compact", "-show_streams", filename}, &format_out);
+  err = run ({"ffprobe", "-v", "error", "-print_format", "compact", "-show_streams", filename}, &format_out);
   if (err)
     {
       error ("audiowmark: hls: failed to validate input file: %s\n", filename.c_str());
