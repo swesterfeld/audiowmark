@@ -355,11 +355,21 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
   if (!m_fmt_ctx)
     return Error ("failed to alloc avformat output context");
 
+  /*
+   * Since each segment is generated individually, the continuity counter fields of each
+   * mpegts segment start at 0, so we expect discontinuities whenever a new segment starts.
+   *
+   * Players are requested to ignore this by setting this flag.
+   */
+  int ret = av_opt_set (m_fmt_ctx->priv_data, "mpegts_flags", "+initial_discontinuity", 0);
+  if (ret < 0)
+    return Error (av_err2str (ret));
+
   string filename = out_filename;
   if (filename == "-")
     filename = "pipe:1";
 
-  int ret = avio_open (&m_fmt_ctx->pb, filename.c_str(), AVIO_FLAG_WRITE);
+  ret = avio_open (&m_fmt_ctx->pb, filename.c_str(), AVIO_FLAG_WRITE);
   if (ret < 0)
     return Error (av_err2str (ret));
 
