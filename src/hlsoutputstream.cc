@@ -54,6 +54,7 @@ HLSOutputStream::HLSOutputStream (int n_channels, int sample_rate, int bit_depth
   m_n_channels (n_channels),
   m_audio_buffer (n_channels)
 {
+  av_log_set_level (AV_LOG_ERROR);
 }
 
 void
@@ -390,7 +391,6 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
       error ("Error occurred when writing output file: %s\n",  av_err2str(ret));
       return Error ("avformat_write_header failed\n");
     }
-  av_dump_format (m_fmt_ctx, 0, filename.c_str(), 1);
 
   m_delete_input_start = delete_input_start;
   m_cut_aac_frames = cut_aac_frames;

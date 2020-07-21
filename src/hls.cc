@@ -208,12 +208,7 @@ hls_add (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
 
-  for (auto entry : reader.entries())
-    info ("%s %zd\n", entry.filename.c_str(), entry.data.size());
-
   map<string, string> vars = reader.parse_vars ("vars");
-  for (auto kv : vars)
-    info ("|| %s=%s\n", kv.first.c_str(), kv.second.c_str());
 
   size_t start_pos = atoi (vars["start_pos"].c_str());
   size_t prev_size = atoi (vars["prev_size"].c_str());
@@ -229,7 +224,7 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   HLSOutputStream out_stream (in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
 
   out_stream.set_bit_rate (bit_rate);
-  info ("n_frames = %zd\n", in_stream.n_frames() - prev_size - next_size);
+
   const size_t shift = 1024;
   const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
   const size_t delete_input_start = prev_size - prev_ctx;
