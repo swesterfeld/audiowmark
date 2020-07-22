@@ -26,16 +26,35 @@
 #include "utils.hh"
 #include "mpegts.hh"
 #include "sfinputstream.hh"
-#include "hlsoutputstream.hh"
 #include "sfoutputstream.hh"
 #include "wmcommon.hh"
 #include "wavdata.hh"
+
+#include "config.h"
 
 using std::string;
 using std::vector;
 using std::regex;
 using std::map;
 using std::min;
+
+#if !HAVE_FFMPEG
+int
+hls_prepare (const string& in_dir, const string& out_dir, const string& filename, const string& audio_master)
+{
+  error ("audiowmark: hls support is not available in this build of audiowmark\n");
+  return 1;
+}
+
+int
+hls_add (const string& infile, const string& outfile, const string& bits)
+{
+  error ("audiowmark: hls support is not available in this build of audiowmark\n");
+  return 1;
+}
+#else
+
+#include "hlsoutputstream.hh"
 
 static bool
 file_exists (const string& filename)
@@ -548,5 +567,4 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
   info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
   return 0;
 }
-
-
+#endif
