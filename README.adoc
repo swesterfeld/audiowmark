@@ -342,6 +342,141 @@ same. The watermarker has been designed and tested for stereo files,
 so the number of channels should really be `2`. This is also the
 default.
 
+== HTTP Live Streaming
+
+=== Introduction for HLS
+
+HTTP Live Streaming (HLS) is a protocol to deliver audio or video streams via
+HTTP.  One example for using HLS in practice would be: a user watches a video
+in a web browser with a player like `hls.js`. The user is free to
+play/pause/seek the video as he wants. `audiowmark` can watermark the audio
+content while it is being transmitted to the user.
+
+HLS splits the contents of each stream into small segments. For the watermarker
+this means that if the user seeks to a position far ahead in the stream, the
+server needs to start sending segments from where the new play position is, but
+everything in between can be ignored.
+
+Another important property of HLS is that it allows separate segments for the
+video and audio stream of a video. Since we watermark only the audio track of a
+video, the video segments can be sent as they are (and different users can get
+the same video segments). What is watermarked are the audio segments only, so
+here instead of sending the original audio segments to the user, the audio
+segments are watermarked individually for each user, and then transmitted.
+
+Everything necessary to watermark HLS audio segments is available within
+`audiowmark`. The server side support which is necessary to send the right
+watermarked segment to the right user is not included.
+
+=== Building with HLS enabled
+
+HLS support requires some headers/libraries from ffmpeg:
+
+* libavcodec
+* libavformat
+* libavutil
+* libswresample
+
+To enable these as dependencies and build `audiowmark` with HLS support, use the
+`--with-ffmpeg` configure option:
+
+[subs=+quotes]
+....
+*$ ./configure --with-ffmpeg*
+....
+
+=== Preparing HLS segments
+
+The first step for preparing content for streaming with HLS would be splitting
+a video into segments. For this documentation, we use a very simple example
+using ffmpeg. Here we assume that the video already has an AAC audio stream, so
+we don't need to change the audio codec:
+
+[subs=+quotes]
+....
+*$ ffmpeg -i video.mp4 -f hls -master_pl_name replay.m3u8 -c:a copy \
+  -var_stream_map "a:0,agroup:aud v:0,agroup:aud" \
+  -hls_playlist_type vod -hls_list_size 0 -hls_time 10 vs%v/out.m3u8*
+....
+
+This splits the `video.mp4` file into an audio stream of segments in the `vs0`
+directory and a video stream of segments in the `vs1` directory. Each segment
+is approximately 10 seconds long, and a master playlist is written to
+`replay.m3u8`.
+
+Now we can add the relevant audio context to each audio ts segment. This is
+necessary so that when the segment is watermarked in order to be transmitted to
+the user, `audiowmark` will have enough context available before and after the
+segment to create a watermark which sounds correct over segment boundaries.
+
+[subs=+quotes]
+....
+*$ audiowmark hls-prepare vs0 vs0prep out.m3u8 video.mp4*
+AAC Bitrate:  131118 (detected)
+Segments:     18
+Time:         2:53
+....
+
+This steps reads the audio playlist `vs0/out.m3u8` and writes all segments
+contained in this audio playlist to a new directory `vs0prep` which
+contains the audio segments prepared for watermarking.
+
+The last argument in this command line is `video.mp4` again. All audio
+that is watermarked is taken from this audio master. It could also be
+supplied in `wav` format. This makes a difference if you use lossy
+compression as target format (for instance AAC), but your original
+video has an audio stream with higher quality (i.e. lossless).
+
+=== Watermarking HLS segments
+
+So with all preparations made, what would the server have to do to send a
+watermarked version of the 6th audio segment `vs0prep/out5.ts`?
+
+[subs=+quotes]
+....
+*$ audiowmark hls-add vs0prep/out5.ts send5.ts 0123456789abcdef0011223344556677*
+Message:      0123456789abcdef0011223344556677
+Strength:     10
+
+Time:         0:15
+Sample Rate:  44100
+Channels:     2
+Data Blocks:  0
+AAC Bitrate:  131118
+....
+
+So instead of sending out5.ts (which has no watermark) to the user, we would
+send send5.ts, which has the 128-bit watermark
+`0123456789abcdef0011223344556677`.
+
+In a real-world use case, it is likely that the server would supply the input
+segment on stdin and send the output segment as written to stdout, like this
+
+[subs=+quotes]
+....
+*$ [...] | audiowmark hls-add - - 0123456789abcdef0011223344556677 | [...]*
+[...]
+....
+
+The usual parameters are supported in `audiowmark hls-add`, like
+
+--key <filename>::
+Use watermarking key from file <filename> (see <<key>>).
+
+--strength <s>::
+Set the watermarking strength (see <<strength>>).
+
+The AAC bitrate for the output segment can be set using:
+
+--bit-rate <bit_rate>::
+Set the AAC bit-rate for the generated watermarked segment.
+
+The rules for the AAC bit-rate of the newly encoded watermarked segment are:
+
+* if the --bit-rate option is used during `hls-add`, this bit-rate will be used
+* otherwise, if the `--bit-rate` option is used during `hls-prepare`, this bit-rate will be used
+* otherwise, the bit-rate of the input material is detected during `hls-prepare`
+
 == Dependencies
 
 If you compile from source, `audiowmark` needs the following libraries:
