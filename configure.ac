@@ -74,10 +74,21 @@ AC_DEFUN([AC_FFTW_CHECK],
 
 AC_SNDFILE_REQUIREMENTS
 AC_LIBMPG123_REQUIREMENTS
-AC_FFMPEG_REQUIREMENTS
 AC_ZITA_REQUIREMENTS
 AC_FFTW_CHECK
 AM_PATH_LIBGCRYPT
+
+dnl -------------------- ffmpeg is optional ----------------------------
+AC_ARG_WITH([ffmpeg], [AS_HELP_STRING([--with-ffmpeg], [build against ffmpeg libraries])], [], [with_ffmpeg=no])
+if test "x$with_ffmpeg" != "xno"; then
+  AC_FFMPEG_REQUIREMENTS
+  HAVE_FFMPEG=1
+else
+  HAVE_FFMPEG=0
+fi
+AC_DEFINE_UNQUOTED(HAVE_FFMPEG, $HAVE_FFMPEG, [whether ffmpeg libs are available])
+AM_CONDITIONAL([COND_WITH_FFMPEG], [test "x$with_ffmpeg" != "xno"])
+dnl -------------------------------------------------------------------------
 
 # need c++14 mode
 AX_CXX_COMPILE_STDCXX_14(ext)
@@ -89,3 +100,11 @@ AC_LANG_POP([C++])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
+
+# Output summary message
+
+echo
+echo "---------------------------------------------------------------------------"
+echo "$PACKAGE_NAME $PACKAGE_VERSION"
+echo "---------------------------------------------------------------------------"
+echo " * use ffmpeg libs: $with_ffmpeg (required for HLS)"
