@@ -289,6 +289,28 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
 }
 
 Error
+load_audio_master (const string& filename, WavData& audio_master_data)
+{
+  FILE *tmp_file = tmpfile();
+  ScopedFile tmp_file_s (tmp_file);
+  string tmp_file_name = string_printf ("/dev/fd/%d", fileno (tmp_file));
+
+  if (!tmp_file)
+    return Error ("failed to create temp file");
+
+  /* extract wav */
+  Error err = run ({"ffmpeg", "-v", "error", "-y", "-i", filename, "-f", "wav", tmp_file_name});
+  if (err)
+    return err;
+
+  err = audio_master_data.load (tmp_file_name);
+  if (err)
+    return err;
+
+  return Error::Code::NONE;
+}
+
+Error
 validate_input_segment (const string& filename)
 {
   TSReader reader;
@@ -393,7 +415,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
     }
 
   WavData audio_master_data;
-  Error err = audio_master_data.load (audio_master);
+  Error err = load_audio_master (audio_master, audio_master_data);
   if (err)
     {
       error ("audiowmark: failed to load audio master: %s\n", audio_master.c_str());

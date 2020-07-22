@@ -80,7 +80,7 @@ print_usage_hls()
   printf ("\n");
   printf ("Commands:\n");
   printf ("  * prepare HLS segments for streaming:\n");
-  printf ("    audiowmark hls-prepare <input_dir> <output_dir> <playlist_name> <master_wav>\n");
+  printf ("    audiowmark hls-prepare <input_dir> <output_dir> <playlist_name> <audio_master>\n");
   printf ("\n");
   printf ("  * watermark one HLS segment:\n");
   printf ("    audiowmark hls-add <input_ts> <output_ts> <message_hex>\n");
