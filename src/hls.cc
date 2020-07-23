@@ -228,14 +228,29 @@ hls_add (const string& infile, const string& outfile, const string& bits)
     }
 
   map<string, string> vars = reader.parse_vars ("vars");
+  bool missing_vars = false;
 
-  size_t start_pos = atoi (vars["start_pos"].c_str());
-  size_t prev_size = atoi (vars["prev_size"].c_str());
-  size_t next_size = atoi (vars["next_size"].c_str());
-  size_t size      = atoi (vars["size"].c_str());
-  double pts_start = atof (vars["pts_start"].c_str());
-  int    bit_rate = atoi (vars["bit_rate"].c_str());
-  size_t prev_ctx = min<size_t> (1024 * 3, prev_size);
+  auto get_var = [&] (const std::string& var) {
+    auto it = vars.find (var);
+    if (it == vars.end())
+      {
+        error ("audiowmark: hls segment is missing value for required variable '%s'\n", var.c_str());
+        missing_vars = true;
+        return "";
+      }
+    else
+      return it->second.c_str();
+  };
+  size_t start_pos = atoi (get_var ("start_pos"));
+  size_t prev_size = atoi (get_var ("prev_size"));
+  size_t next_size = atoi (get_var ("next_size"));
+  size_t size      = atoi (get_var ("size"));
+  double pts_start = atof (get_var ("pts_start"));
+  int    bit_rate  = atoi (get_var ("bit_rate"));
+  size_t prev_ctx  = min<size_t> (1024 * 3, prev_size);
+
+  if (missing_vars)
+    return 1;
 
   if (Params::hls_bit_rate)  // command line option overrides vars bit-rate
     bit_rate = Params::hls_bit_rate;
