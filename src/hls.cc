@@ -249,6 +249,8 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   int    bit_rate  = atoi (get_var ("bit_rate"));
   size_t prev_ctx  = min<size_t> (1024 * 3, prev_size);
 
+  string channel_layout = get_var ("channel_layout");
+
   if (missing_vars)
     return 1;
 
@@ -258,6 +260,7 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   HLSOutputStream out_stream (in_stream.n_channels(), in_stream.sample_rate(), in_stream.bit_depth());
 
   out_stream.set_bit_rate (bit_rate);
+  out_stream.set_channel_layout (channel_layout);
 
   const size_t shift = 1024;
   const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
@@ -326,7 +329,7 @@ load_audio_master (const string& filename, WavData& audio_master_data)
 }
 
 Error
-validate_input_segment (const string& filename)
+probe_input_segment (const string& filename, map<string, string>& params)
 {
   TSReader reader;
 
@@ -353,8 +356,6 @@ validate_input_segment (const string& filename)
   for (auto o : format_out)
     {
       /* parse assignments stream|index=0|codec_name=aac|... */
-      map<string, string> params;
-
       string key, value;
       bool in_key = true;
       for (char c : '|' + o + '|')
@@ -377,18 +378,6 @@ validate_input_segment (const string& filename)
               else
                 value += c;
             }
-        }
-
-      /* now the actual validation */
-      if (atoi (params["index"].c_str()) != 0)
-        {
-          error ("audiowmark: hls segment '%s' contains more than one stream\n", filename.c_str());
-          return Error ("failed to validate input segment");
-        }
-      if (params["codec_name"] != "aac")
-        {
-          error ("audiowmark hls segment '%s' is not encoded using AAC\n", filename.c_str());
-          return Error ("failed to validate input segment");
         }
     }
   return Error::Code::NONE;
@@ -473,12 +462,34 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
     }
   for (auto& segment : segments)
     {
-      Error err = validate_input_segment (in_dir + "/" + segment.name);
+      map<string, string> params;
+      string segname = in_dir + "/" + segment.name;
+
+      Error err = probe_input_segment (segname, params);
       if (err)
         {
           error ("audiowmark: hls: %s\n", err.message());
           return 1;
         }
+      /* validate input segment */
+      if (atoi (params["index"].c_str()) != 0)
+        {
+          error ("audiowmark: hls segment '%s' contains more than one stream\n", segname.c_str());
+          return 1;
+        }
+      if (params["codec_name"] != "aac")
+        {
+          error ("audiowmark hls segment '%s' is not encoded using AAC\n", segname.c_str());
+          return 1;
+        }
+
+      /* get segment parameters */
+      if (params["channel_layout"].empty())
+        {
+          error ("audiowmark hls segment '%s' has no channel_layout entry\n", segname.c_str());
+          return 1;
+        }
+      segment.vars["channel_layout"] = params["channel_layout"];
     }
 
   /* find bitrate for AAC encoder */

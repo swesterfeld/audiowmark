@@ -63,6 +63,12 @@ HLSOutputStream::set_bit_rate (int bit_rate)
   m_bit_rate = bit_rate;
 }
 
+void
+HLSOutputStream::set_channel_layout (const string& channel_layout)
+{
+  m_channel_layout = channel_layout;
+}
+
 HLSOutputStream::~HLSOutputStream()
 {
   close();
@@ -107,18 +113,22 @@ HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
       if (!match)
         return Error (string_printf ("no codec support for sample rate %d", m_sample_rate));
     }
-  m_enc->channels       = av_get_channel_layout_nb_channels (m_enc->channel_layout);
-  m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
+  uint64_t want_layout = av_get_channel_layout (m_channel_layout.c_str());
+  if (!want_layout)
+    return Error (string_printf ("bad channel layout '%s'", m_channel_layout.c_str()));
+  m_enc->channel_layout = want_layout;
   if ((*codec)->channel_layouts)
     {
       m_enc->channel_layout = (*codec)->channel_layouts[0];
       for (int i = 0; (*codec)->channel_layouts[i]; i++)
         {
-          if ((*codec)->channel_layouts[i] == AV_CH_LAYOUT_STEREO)
-              m_enc->channel_layout = AV_CH_LAYOUT_STEREO;
+          if ((*codec)->channel_layouts[i] == want_layout)
+              m_enc->channel_layout = want_layout;
         }
     }
-  m_enc->channels     = av_get_channel_layout_nb_channels (m_enc->channel_layout);
+  if (want_layout != m_enc->channel_layout)
+    return Error (string_printf ("codec: unsupported channel layout '%s'", m_channel_layout.c_str()));
+  m_enc->channels = av_get_channel_layout_nb_channels (m_enc->channel_layout);
   m_st->time_base = (AVRational){ 1, m_enc->sample_rate };
 
   /* Some formats want stream headers to be separate. */
