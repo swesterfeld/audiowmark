@@ -26,6 +26,7 @@
 
 using std::string;
 using std::vector;
+using std::map;
 using std::regex;
 
 int
@@ -60,6 +61,15 @@ main (int argc, char **argv)
       for (auto entry : reader.entries())
         if (entry.filename == argv[3])
           fwrite (&entry.data[0], 1, entry.data.size(), stdout);
+    }
+  else if (argc == 3 && strcmp (argv[1], "vars") == 0)
+    {
+      TSReader reader;
+
+      Error err = reader.load (argv[2]);
+      map<string, string> vars = reader.parse_vars ("vars");
+      for (auto v : vars)
+        printf ("%s=%s\n", v.first.c_str(), v.second.c_str());
     }
   else if (argc == 3 && strcmp (argv[1], "perf") == 0)
     {
