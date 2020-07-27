@@ -479,17 +479,25 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
         }
       if (params["codec_name"] != "aac")
         {
-          error ("audiowmark hls segment '%s' is not encoded using AAC\n", segname.c_str());
+          error ("audiowmark: hls segment '%s' is not encoded using AAC\n", segname.c_str());
           return 1;
         }
 
       /* get segment parameters */
       if (params["channel_layout"].empty())
         {
-          error ("audiowmark hls segment '%s' has no channel_layout entry\n", segname.c_str());
+          error ("audiowmark: hls segment '%s' has no channel_layout entry\n", segname.c_str());
           return 1;
         }
       segment.vars["channel_layout"] = params["channel_layout"];
+
+      /* get start pts */
+      if (params["start_time"].empty())
+        {
+          error ("audiowmark: hls segment '%s' has no start_time entry\n", segname.c_str());
+          return 1;
+        }
+      segment.vars["pts_start"] = params["start_time"];
     }
 
   /* find bitrate for AAC encoder */
@@ -527,23 +535,6 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
         {
           error ("audiowmark: hls input segments need 1024-sample alignment (due to AAC)\n");
           return 1;
-        }
-
-      /* obtain pts for first frame */
-      vector<string> pts_out;
-      err = run ({"ffprobe", "-v", "0", "-show_entries", "packet=pts_time", in_dir + "/" + segment.name, "-of", "compact=p=0:nk=1"}, &pts_out);
-      if (err)
-        {
-          error ("audiowmark: hls: initial pts detection failed: %s\n", err.message());
-          return 1;
-        }
-      for (auto o : pts_out)
-        {
-          if (!o.empty())
-            {
-              segment.vars["pts_start"] = o;
-              break;
-            }
         }
 
       /* store 3 seconds of the context before this segment and after this segment (if available) */
