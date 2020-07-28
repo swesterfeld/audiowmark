@@ -404,6 +404,10 @@ directory and a video stream of segments in the `vs1` directory. Each segment
 is approximately 10 seconds long, and a master playlist is written to
 `replay.m3u8`.
 
+If your video does not have an AAC audio stream, you need to change the
+*-c:a copy* to *-c:a aac* to transcode the audio stream to AAC. In this case
+you also should explicitely set the bitrate (see below).
+
 Now we can add the relevant audio context to each audio ts segment. This is
 necessary so that when the segment is watermarked in order to be transmitted to
 the user, `audiowmark` will have enough context available before and after the
