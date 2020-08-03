@@ -1,3 +1,10 @@
+Overview of Changes in audiowmark-0.5.0:
+
+* support HTTP Live Streaming for audio/video streaming
+* fix floating point wav input
+* improve command line option handling (ArgParser)
+* support seeking on internal watermark state
+
 Overview of Changes in audiowmark-0.4.2:
 
 * compile fixes for g++-9 and clang++-10

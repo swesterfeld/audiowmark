@@ -31,10 +31,12 @@
 #include "rawoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
 #include "shortcode.hh"
+#include "audiobuffer.hh"
 
 using std::string;
 using std::vector;
 using std::complex;
+using std::min;
 using std::max;
 
 enum class FrameMod : uint8_t {
@@ -241,6 +243,19 @@ public:
         return out_samples;
       }
   }
+  size_t
+  skip (size_t zeros)
+  {
+    assert (zeros % Params::frame_size == 0);
+
+    if (first_frame && zeros > 0)
+      {
+        first_frame = false;
+        return zeros - Params::frame_size;
+      }
+    else
+      return zeros;
+  }
 };
 
 /* generates a watermark signal
@@ -251,8 +266,8 @@ public:
 class WatermarkGen
 {
   const int                 n_channels = 0;
+  const size_t              frames_per_block = 0;
   size_t                    frame_number = 0;
-  int                       ab = 0;
   int                       m_data_blocks = 0;
 
   FFTAnalyzer               fft_analyzer;
@@ -264,16 +279,15 @@ class WatermarkGen
 public:
   WatermarkGen (int n_channels, const vector<int>& bitvec) :
     n_channels (n_channels),
+    frames_per_block (mark_sync_frame_count() + mark_data_frame_count()),
     fft_analyzer (n_channels),
     wm_synth (n_channels),
     bitvec (bitvec)
   {
-    /* start writing a partial B-block as padding */
-    init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
 
-    assert (frame_mod_vec_b.size() > Params::frames_pad_start);
-    frame_number = frame_mod_vec_b.size() - Params::frames_pad_start;
-    ab = 1;
+    /* start writing a partial B-block as padding */
+    assert (frames_per_block > Params::frames_pad_start);
+    frame_number = 2 * frames_per_block - Params::frames_pad_start;
   }
   vector<float>
   run (const vector<float>& samples)
@@ -286,61 +300,48 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
 
-    const vector<vector<FrameMod>>& frame_mod_vec = ab ? frame_mod_vec_b : frame_mod_vec_a;
+    const vector<FrameMod>& frame_mod = get_frame_mod();
     for (int ch = 0; ch < n_channels; ch++)
-      apply_frame_mod (frame_mod_vec[frame_number], fft_out[ch], fft_delta_spect[ch]);
+      apply_frame_mod (frame_mod, fft_out[ch], fft_delta_spect[ch]);
 
     frame_number++;
-    if (frame_number == frame_mod_vec.size())
+    if (frame_number % frames_per_block == 0)
+      m_data_blocks++;
+
+    return wm_synth.run (fft_delta_spect);
+  }
+  size_t
+  skip (size_t zeros)
+  {
+    assert (zeros % Params::frame_size == 0);
+
+    frame_number += zeros / Params::frame_size;
+    return wm_synth.skip (zeros);
+  }
+  const vector<FrameMod>&
+  get_frame_mod()
+  {
+    const size_t f = frame_number % (frames_per_block * 2);
+    if (f >= frames_per_block) /* B block */
       {
-        frame_number = 0;
+        if (frame_mod_vec_b.empty())
+          init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
 
-        ab = (ab + 1) & 1; // write A|B|A|B|...
-        m_data_blocks++;
-
-        // initialize A-block frame mod vector here to minimize startup latency
+        return frame_mod_vec_b[f - frames_per_block];
+      }
+    else /* A block */
+      {
         if (frame_mod_vec_a.empty())
           init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
+
+        return frame_mod_vec_a[f];
       }
-    return wm_synth.run (fft_delta_spect);
   }
   int
   data_blocks() const
   {
     // first block is padding - a partial B block
     return max (m_data_blocks - 1, 0);
-  }
-};
-
-class AudioBuffer
-{
-  const int     n_channels = 0;
-  vector<float> buffer;
-
-public:
-  AudioBuffer (int n_channels) :
-    n_channels (n_channels)
-  {
-  }
-  void
-  write_frames (const vector<float>& samples)
-  {
-    buffer.insert (buffer.end(), samples.begin(), samples.end());
-  }
-  vector<float>
-  read_frames (size_t frames)
-  {
-    assert (frames * n_channels <= buffer.size());
-    const auto begin = buffer.begin();
-    const auto end   = begin + frames * n_channels;
-    vector<float> result (begin, end);
-    buffer.erase (begin, end);
-    return result;
-  }
-  size_t
-  can_read_frames() const
-  {
-    return buffer.size() / n_channels;
   }
 };
 
@@ -352,6 +353,7 @@ public:
   {
   }
 
+  virtual size_t        skip (size_t zeros) = 0;
   virtual void          write_frames (const vector<float>& frames) = 0;
   virtual vector<float> read_frames (size_t frames) = 0;
   virtual size_t        can_read_frames() const = 0;
@@ -361,19 +363,41 @@ template<class Resampler>
 class BufferedResamplerImpl : public ResamplerImpl
 {
   const int     n_channels = 0;
+  const int     old_rate = 0;
+  const int     new_rate = 0;
   bool          first_write = true;
   Resampler     m_resampler;
 
   vector<float> buffer;
 public:
-  BufferedResamplerImpl (int n_channels) :
-    n_channels (n_channels)
+  BufferedResamplerImpl (int n_channels, int old_rate, int new_rate) :
+    n_channels (n_channels),
+    old_rate (old_rate),
+    new_rate (new_rate)
   {
   }
   Resampler&
   resampler()
   {
     return m_resampler;
+  }
+  size_t
+  skip (size_t zeros)
+  {
+    /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
+    size_t seconds = 0;
+    if (zeros >= Params::frame_size)
+      seconds = (zeros - Params::frame_size) / old_rate;
+
+    const size_t extra = new_rate * seconds;
+    zeros -= old_rate * seconds;
+
+    write_frames (vector<float> (zeros * n_channels));
+
+    size_t out = can_read_frames() + extra;
+    out -= out % Params::frame_size; /* always skip whole frames */
+    read_frames (out - extra);
+    return out;
   }
   void
   write_frames (const vector<float>& frames)
@@ -407,7 +431,7 @@ public:
         size_t count = out_count - m_resampler.out_count;
         buffer.insert (buffer.end(), out, out + count * n_channels);
 
-        start += frames.size() / n_channels - start - m_resampler.inp_count;
+        start = frames.size() / n_channels - m_resampler.inp_count;
       }
     while (start != frames.size() / n_channels);
   }
@@ -450,7 +474,7 @@ create_resampler (int n_channels, int old_rate, int new_rate)
        */
       const int hlen = 16;
 
-      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels);
+      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels, old_rate, new_rate);
       if (resampler->resampler().setup (old_rate, new_rate, n_channels, hlen) == 0)
         {
           return resampler;
@@ -458,7 +482,7 @@ create_resampler (int n_channels, int old_rate, int new_rate)
       else
         delete resampler;
 
-      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels);
+      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels, old_rate, new_rate);
       const double ratio = double (new_rate) / old_rate;
       if (vresampler->resampler().setup (ratio, n_channels, hlen) == 0)
         {
@@ -483,13 +507,12 @@ class WatermarkResampler
   std::unique_ptr<ResamplerImpl> in_resampler;
   std::unique_ptr<ResamplerImpl> out_resampler;
   WatermarkGen                   wm_gen;
-  bool                           need_resampler = false;
+  const bool                     need_resampler = false;
 public:
   WatermarkResampler (int n_channels, int input_rate, const vector<int>& bitvec) :
-    wm_gen (n_channels, bitvec)
+    wm_gen (n_channels, bitvec),
+    need_resampler (input_rate != Params::mark_sample_rate)
   {
-    need_resampler = (input_rate != Params::mark_sample_rate);
-
     if (need_resampler)
       {
         in_resampler.reset (create_resampler (n_channels, input_rate, Params::mark_sample_rate));
@@ -529,6 +552,24 @@ public:
     size_t to_read = out_resampler->can_read_frames();
     return out_resampler->read_frames (to_read);
   }
+  size_t
+  skip (size_t zeros)
+  {
+    assert (zeros % Params::frame_size == 0);
+    if (!need_resampler)
+      {
+        return wm_gen.skip (zeros); /* cheap case */
+      }
+    else
+      {
+        /* resample to the watermark sample rate */
+        size_t out = in_resampler->skip (zeros);
+
+        out = wm_gen.skip (out);
+
+        return out_resampler->skip (out);
+      }
+  }
   int
   data_blocks() const
   {
@@ -546,7 +587,7 @@ info_format (const string& label, const RawFormat& format)
 }
 
 int
-add_watermark (const string& infile, const string& outfile, const string& bits)
+add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits, size_t zero_frames)
 {
   auto bitvec = bit_str_to_vec (bits);
   if (bitvec.empty())
@@ -573,25 +614,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       bitvec = expanded_bitvec;
     }
 
-  /* open input stream */
-  Error err;
-  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
-  if (err)
-    {
-      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
-      return 1;
-    }
-
-  /* open output stream */
-  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
-  std::unique_ptr<AudioOutputStream> out_stream;
-  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
-  if (err)
-    {
-      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
-      return 1;
-    }
-
   /* sanity checks */
   if (in_stream->sample_rate() != out_stream->sample_rate())
     {
@@ -605,12 +627,6 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
 
   /* write some informational messages */
-  info ("Input:        %s\n", Params::input_label.size() ? Params::input_label.c_str() : infile.c_str());
-  if (Params::input_format == Format::RAW)
-    info_format ("Raw Input", Params::raw_input_format);
-  info ("Output:       %s\n", Params::output_label.size() ? Params::output_label.c_str() : outfile.c_str());
-  if (Params::output_format == Format::RAW)
-    info_format ("Raw Output", Params::raw_output_format);
   info ("Message:      %s\n", bit_vec_to_str (bitvec).c_str());
   info ("Strength:     %.6g\n\n", Params::water_delta * 1000);
 
@@ -644,9 +660,37 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
 
   size_t total_input_frames = 0;
   size_t total_output_frames = 0;
+  size_t zero_frames_in  = zero_frames;
+  size_t zero_frames_out = zero_frames;
+  Error err;
+  if (zero_frames_in >= Params::frame_size)
+    {
+      const size_t skip_frames = zero_frames_in - zero_frames_in % Params::frame_size;
+
+      total_input_frames += skip_frames;
+      size_t out = wm_resampler.skip (skip_frames);
+
+      audio_buffer.write_frames (std::vector<float> ((skip_frames - out) * n_channels));
+
+      out = limiter.skip (out);
+      assert (out < zero_frames_out);
+
+      zero_frames_out -= out;
+      total_output_frames += out;
+      zero_frames_in -= skip_frames;
+    }
   while (true)
     {
-      err = in_stream->read_frames (samples, Params::frame_size);
+      if (zero_frames_in > 0)
+        {
+          err = in_stream->read_frames (samples, Params::frame_size - zero_frames_in);
+          samples.insert (samples.begin(), zero_frames_in * n_channels, 0);
+          zero_frames_in = 0;
+        }
+      else
+        {
+          err = in_stream->read_frames (samples, Params::frame_size);
+        }
       if (err)
         {
           error ("audiowmark: input stream read failed: %s\n", err.message());
@@ -689,6 +733,14 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
       if (samples.size() > max_write_frames * n_channels)
         samples.resize (max_write_frames * n_channels);
 
+      const size_t cut_frames = min (samples.size() / n_channels, zero_frames_out);
+      if (cut_frames > 0)
+        {
+          samples.erase (samples.begin(), samples.begin() + cut_frames * n_channels);
+          total_output_frames += cut_frames;
+          zero_frames_out -= cut_frames;
+        }
+
       err = out_stream->write_frames (samples);
       if (err)
         {
@@ -699,22 +751,59 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
     }
   if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
-      if (total_output_frames != in_stream->n_frames())
+      const size_t expect_frames = in_stream->n_frames() + zero_frames;
+      if (total_output_frames != expect_frames)
         {
-          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", in_stream->n_frames(), total_output_frames);
+          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", expect_frames, total_output_frames);
           return 1;
         }
     }
 
   err = out_stream->close();
   if (err)
-    error ("audiowmark: closing output stream failed: %s\n", err.message());
+    {
+      error ("audiowmark: closing output stream failed: %s\n", err.message());
+      return 1;
+    }
 
   if (Params::snr)
     info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
 
   info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
   return 0;
+}
+
+int
+add_watermark (const string& infile, const string& outfile, const string& bits)
+{
+  /* open input stream */
+  Error err;
+  std::unique_ptr<AudioInputStream> in_stream = AudioInputStream::create (infile, err);
+  if (err)
+    {
+      error ("audiowmark: error opening %s: %s\n", infile.c_str(), err.message());
+      return 1;
+    }
+
+  /* open output stream */
+  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
+  std::unique_ptr<AudioOutputStream> out_stream;
+  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
+  if (err)
+    {
+      error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());
+      return 1;
+    }
+
+  /* write input/output stream details */
+  info ("Input:        %s\n", Params::input_label.size() ? Params::input_label.c_str() : infile.c_str());
+  if (Params::input_format == Format::RAW)
+    info_format ("Raw Input", Params::raw_input_format);
+  info ("Output:       %s\n", Params::output_label.size() ? Params::output_label.c_str() : outfile.c_str());
+  if (Params::output_format == Format::RAW)
+    info_format ("Raw Output", Params::raw_output_format);
+
+  return add_stream_watermark (in_stream.get(), out_stream.get(), bits, 0);
 }
 
 

@@ -37,7 +37,7 @@ public:
 
   Error load (AudioInputStream *in_stream);
   Error load (const std::string& filename);
-  Error save (const std::string& filename);
+  Error save (const std::string& filename) const;
 
   int                         sample_rate() const;
   int                         bit_depth() const;
@@ -51,6 +51,11 @@ public:
   n_values() const
   {
     return m_samples.size();
+  }
+  size_t
+  n_frames() const
+  {
+    return m_samples.size() / m_n_channels;
   }
   const std::vector<float>&
   samples() const

@@ -15,31 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "utils.hh"
-#include "random.hh"
+#ifndef AUDIOWMARK_HLS_HH
+#define AUDIOWMARK_HLS_HH
 
-using std::vector;
-using std::string;
+#include <string>
 
-int
-main (int argc, char **argv)
-{
-  Random rng (0xf00f1234b00b5678U, Random::Stream::bit_order);
-  for (size_t i = 0; i < 20; i++)
-    {
-      uint64_t x = rng();
-      printf ("%016lx\n", x);
-    }
+int hls_add (const std::string& infile, const std::string& outfile, const std::string& bits);
+int hls_prepare (const std::string& in_dir, const std::string& out_dir, const std::string& filename, const std::string& audio_master);
 
-  uint64_t s = 0;
-  double t_start = get_time();
-  size_t runs = 25000000;
-  for (size_t i = 0; i < runs; i++)
-    {
-      s += rng();
-    }
-  double t_end = get_time();
-  printf ("s=%016lx\n\n", s);
+Error ff_decode (const std::string& filename, WavData& out_wav_data);
 
-  printf ("%f Mvalues/sec\n", runs / (t_end - t_start) / 1000000);
-}
+#endif /* AUDIOWMARK_MPEGTS_HH */

@@ -66,6 +66,27 @@ Limiter::process (const vector<float>& samples)
   return out;
 }
 
+size_t
+Limiter::skip (size_t zeros)
+{
+  assert (block_size >= 1);
+
+  size_t buffer_size = buffer.size();
+  buffer_size += zeros * n_channels;
+
+  /* need at least two complete blocks in buffer to produce output */
+  const size_t buffered_blocks = buffer_size / n_channels / block_size;
+  if (buffered_blocks < 2)
+    {
+      buffer.resize (buffer_size);
+      return 0;
+    }
+
+  const size_t blocks_todo = buffered_blocks - 1;
+  buffer.resize (buffer_size - blocks_todo * block_size * n_channels);
+  return blocks_todo * block_size;
+}
+
 float
 Limiter::block_max (const float *in)
 {

@@ -27,6 +27,8 @@ std::string      bit_vec_to_str (const std::vector<int>& bit_vec);
 std::vector<unsigned char> hex_str_to_vec (const std::string& str);
 std::string                vec_to_hex_str (const std::vector<unsigned char>& vec);
 
+double get_time();
+
 template<typename T>
 inline const T&
 bound (const T& min_value, const T& value, const T& max_value)
@@ -57,6 +59,8 @@ void debug (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 enum class Log { ERROR = 3, WARNING = 2, INFO = 1, DEBUG = 0 };
 
 void set_log_level (Log level);
+
+std::string string_printf (const char *fmt, ...) AUDIOWMARK_PRINTF (1, 2);
 
 class Error
 {
@@ -101,6 +105,21 @@ public:
 private:
   Code        m_code;
   std::string m_message;
+};
+
+class ScopedFile
+{
+  FILE *m_file;
+public:
+  ScopedFile (FILE *f) :
+    m_file (f)
+  {
+  }
+  ~ScopedFile()
+  {
+    if (m_file)
+      fclose (m_file);
+  }
 };
 
 #endif /* AUDIOWMARK_UTILS_HH */

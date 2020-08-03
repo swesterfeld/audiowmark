@@ -55,6 +55,8 @@ WavData::load (const string& filename)
 Error
 WavData::load (AudioInputStream *in_stream)
 {
+  m_samples.clear(); // get rid of old contents
+
   vector<float> m_buffer;
   while (true)
     {
@@ -77,7 +79,7 @@ WavData::load (AudioInputStream *in_stream)
 }
 
 Error
-WavData::save (const string& filename)
+WavData::save (const string& filename) const
 {
   std::unique_ptr<AudioOutputStream> out_stream;
   Error err;

@@ -1,4 +1,4 @@
-AC_INIT([audiowmark], [0.4.2])
+AC_INIT([audiowmark], [0.5.0])
 AC_CONFIG_SRCDIR([src/audiowmark.cc])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
@@ -39,6 +39,12 @@ AC_DEFUN([AC_ZITA_REQUIREMENTS],
     )
 ])
 
+dnl ffmpeg stuff
+AC_DEFUN([AC_FFMPEG_REQUIREMENTS],
+[
+  PKG_CHECK_MODULES(FFMPEG, libavcodec libavformat libavutil libswresample)
+])
+
 dnl FFTW3
 AC_DEFUN([AC_FFTW_CHECK],
 [
@@ -72,6 +78,18 @@ AC_ZITA_REQUIREMENTS
 AC_FFTW_CHECK
 AM_PATH_LIBGCRYPT
 
+dnl -------------------- ffmpeg is optional ----------------------------
+AC_ARG_WITH([ffmpeg], [AS_HELP_STRING([--with-ffmpeg], [build against ffmpeg libraries])], [], [with_ffmpeg=no])
+if test "x$with_ffmpeg" != "xno"; then
+  AC_FFMPEG_REQUIREMENTS
+  HAVE_FFMPEG=1
+else
+  HAVE_FFMPEG=0
+fi
+AC_DEFINE_UNQUOTED(HAVE_FFMPEG, $HAVE_FFMPEG, [whether ffmpeg libs are available])
+AM_CONDITIONAL([COND_WITH_FFMPEG], [test "x$with_ffmpeg" != "xno"])
+dnl -------------------------------------------------------------------------
+
 # need c++14 mode
 AX_CXX_COMPILE_STDCXX_14(ext)
 
@@ -82,3 +100,11 @@ AC_LANG_POP([C++])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
+
+# Output summary message
+
+echo
+echo "---------------------------------------------------------------------------"
+echo "$PACKAGE_NAME $PACKAGE_VERSION"
+echo "---------------------------------------------------------------------------"
+echo " * use ffmpeg libs: $with_ffmpeg (required for HLS)"

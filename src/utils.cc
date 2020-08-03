@@ -18,8 +18,20 @@
 #include "utils.hh"
 #include "stdarg.h"
 
+#include <sys/time.h>
+
 using std::vector;
 using std::string;
+
+double
+get_time()
+{
+  /* return timestamp in seconds as double */
+  timeval tv;
+  gettimeofday (&tv, 0);
+
+  return tv.tv_sec + tv.tv_usec / 1000000.0;
+}
 
 static unsigned char
 from_hex_nibble (char c)
@@ -108,6 +120,35 @@ vec_to_hex_str (const vector<unsigned char>& vec)
   return s;
 }
 
+static string
+string_vprintf (const char *format, va_list vargs)
+{
+  string s;
+
+  char *str = NULL;
+  if (vasprintf (&str, format, vargs) >= 0 && str)
+    {
+      s = str;
+      free (str);
+    }
+  else
+    s = format;
+
+  return s;
+}
+
+string
+string_printf (const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  string s = string_vprintf (format, ap);
+  va_end (ap);
+
+  return s;
+}
+
 static Log log_level = Log::INFO;
 
 void
@@ -121,12 +162,10 @@ logv (Log log, const char *format, va_list vargs)
 {
   if (log >= log_level)
     {
-      char buffer[1024];
-
-      vsnprintf (buffer, sizeof (buffer), format, vargs);
+      string s = string_vprintf (format, vargs);
 
       /* could support custom log function here */
-      fprintf (stderr, "%s", buffer);
+      fprintf (stderr, "%s", s.c_str());
       fflush (stderr);
     }
 }

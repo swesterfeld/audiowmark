@@ -89,7 +89,7 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
     {
       SFOutputStream *sfostream = new SFOutputStream();
       out_stream.reset (sfostream);
-      err = sfostream->open (filename, n_channels, sample_rate, bit_depth, n_frames);
+      err = sfostream->open (filename, n_channels, sample_rate, bit_depth);
       if (err)
         return nullptr;
     }

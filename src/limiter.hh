@@ -42,6 +42,7 @@ public:
   void set_ceiling (float ceiling);
 
   std::vector<float> process (const std::vector<float>& samples);
+  size_t             skip (size_t zeros);
   std::vector<float> flush();
 };
 

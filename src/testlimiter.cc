@@ -21,7 +21,6 @@
 #include <assert.h>
 #include <math.h>
 #include <string.h>
-#include <sys/time.h>
 
 #include "sfinputstream.hh"
 #include "sfoutputstream.hh"
@@ -33,15 +32,6 @@ using std::vector;
 using std::max;
 using std::min;
 
-static double
-gettime()
-{
-  timeval tv;
-  gettimeofday (&tv, 0);
-
-  return tv.tv_sec + tv.tv_usec / 1000000.0;
-}
-
 int
 perf()
 {
@@ -52,13 +42,13 @@ perf()
   vector<float> samples (2 * 1024);
 
   int n_frames = 0;
-  double start = gettime();
+  double start = get_time();
   for (int i = 0; i < 100000; i++)
     {
       n_frames += samples.size() / 2;
       vector<float> out_samples = limiter.process (samples);
     }
-  double end = gettime();
+  double end = get_time();
   printf ("%f ns/frame\n", (end - start) * 1000 * 1000 * 1000 / n_frames);
   return 0;
 }
@@ -114,7 +104,7 @@ main (int argc, char **argv)
       fprintf (stderr, "testlimiter: open input failed: %s\n", err.message());
       return 1;
     }
-  err = out.open (argv[2], in.n_channels(), in.sample_rate(), 16, in.n_frames());
+  err = out.open (argv[2], in.n_channels(), in.sample_rate(), 16);
   if (err)
     {
       fprintf (stderr, "testlimiter: open output failed: %s\n", err.message());
