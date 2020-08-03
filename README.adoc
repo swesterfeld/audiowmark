@@ -235,6 +235,8 @@ Use watermarking key from file <filename> (see <<key>>).
 --strength <s>::
 Set the watermarking strength (see <<strength>>).
 
+Videos can be watermarked on-the-fly using <<hls>>.
+
 == Output as Stream
 
 Usually, an input file is read, watermarked and an output file is written.
@@ -342,6 +344,7 @@ same. The watermarker has been designed and tested for stereo files,
 so the number of channels should really be `2`. This is also the
 default.
 
+[[hls]]
 == HTTP Live Streaming
 
 === Introduction for HLS
@@ -368,6 +371,7 @@ Everything necessary to watermark HLS audio segments is available within
 `audiowmark`. The server side support which is necessary to send the right
 watermarked segment to the right user is not included.
 
+[[hls-requirements]]
 === HLS Requirements
 
 HLS support requires some headers/libraries from ffmpeg:
@@ -492,6 +496,9 @@ If you compile from source, `audiowmark` needs the following libraries:
 * libgcrypt
 * libzita-resampler
 * libmpg123
+
+If you want to build with HTTP Live Streaming support, see also
+<<hls-requirements>>.
 
 == Building fftw
 
