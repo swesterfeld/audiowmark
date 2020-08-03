@@ -243,7 +243,6 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   };
   size_t start_pos = atoi (get_var ("start_pos"));
   size_t prev_size = atoi (get_var ("prev_size"));
-  size_t next_size = atoi (get_var ("next_size"));
   size_t size      = atoi (get_var ("size"));
   double pts_start = atof (get_var ("pts_start"));
   int    bit_rate  = atoi (get_var ("bit_rate"));
@@ -548,7 +547,6 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
       segment.vars["prev_size"] = string_printf ("%zd", prev_size);
-      segment.vars["next_size"] = string_printf ("%zd", next_size);
       segment.vars["bit_rate"] = string_printf ("%d", bit_rate);
 
       /* write audio segment with context */
