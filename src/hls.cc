@@ -262,7 +262,10 @@ hls_add (const string& infile, const string& outfile, const string& bits)
   out_stream.set_bit_rate (bit_rate);
   out_stream.set_channel_layout (channel_layout);
 
-  const size_t shift = 1024;
+  /* ffmpeg aac encode adds one frame of latency - it would be possible to compensate for this
+   * by setting shift = 1024, but it can also be done by adjusting the presentation timestamp
+   */
+  const size_t shift = 0;
   const size_t cut_aac_frames = (prev_ctx + shift) / 1024;
   const size_t delete_input_start = prev_size - prev_ctx;
   const size_t keep_aac_frames = size / 1024;
