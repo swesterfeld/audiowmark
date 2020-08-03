@@ -368,7 +368,7 @@ Everything necessary to watermark HLS audio segments is available within
 `audiowmark`. The server side support which is necessary to send the right
 watermarked segment to the right user is not included.
 
-=== Building with HLS enabled
+=== HLS Requirements
 
 HLS support requires some headers/libraries from ffmpeg:
 
@@ -385,16 +385,23 @@ To enable these as dependencies and build `audiowmark` with HLS support, use the
 *$ ./configure --with-ffmpeg*
 ....
 
+In addition to the libraries, `audiowmark` also uses the two command line
+programs from ffmpeg, so they need to be installed:
+
+* ffmpeg
+* ffprobe
+
 === Preparing HLS segments
 
 The first step for preparing content for streaming with HLS would be splitting
 a video into segments. For this documentation, we use a very simple example
-using ffmpeg. Here we assume that the video already has an AAC audio stream, so
-we don't need to change the audio codec:
+using ffmpeg. No matter what the original codec was, at this point we force
+transcoding to AAC with our target bit rate, because during delivery the stream
+will be in AAC format.
 
 [subs=+quotes]
 ....
-*$ ffmpeg -i video.mp4 -f hls -master_pl_name replay.m3u8 -c:a copy \
+*$ ffmpeg -i video.mp4 -f hls -master_pl_name replay.m3u8 -c:a aac -ab 192k \
   -var_stream_map "a:0,agroup:aud v:0,agroup:aud" \
   -hls_playlist_type vod -hls_list_size 0 -hls_time 10 vs%v/out.m3u8*
 ....
@@ -404,10 +411,6 @@ directory and a video stream of segments in the `vs1` directory. Each segment
 is approximately 10 seconds long, and a master playlist is written to
 `replay.m3u8`.
 
-If your video does not have an AAC audio stream, you need to change the
-*-c:a copy* to *-c:a aac* to transcode the audio stream to AAC. In this case
-you also should explicitely set the bitrate (see below).
-
 Now we can add the relevant audio context to each audio ts segment. This is
 necessary so that when the segment is watermarked in order to be transmitted to
 the user, `audiowmark` will have enough context available before and after the
@@ -416,7 +419,7 @@ segment to create a watermark which sounds correct over segment boundaries.
 [subs=+quotes]
 ....
 *$ audiowmark hls-prepare vs0 vs0prep out.m3u8 video.mp4*
-AAC Bitrate:  131118 (detected)
+AAC Bitrate:  195641 (detected)
 Segments:     18
 Time:         2:53
 ....
@@ -446,12 +449,11 @@ Time:         0:15
 Sample Rate:  44100
 Channels:     2
 Data Blocks:  0
-AAC Bitrate:  131118
+AAC Bitrate:  195641
 ....
 
 So instead of sending out5.ts (which has no watermark) to the user, we would
-send send5.ts, which has the 128-bit watermark
-`0123456789abcdef0011223344556677`.
+send send5.ts, which is watermarked.
 
 In a real-world use case, it is likely that the server would supply the input
 segment on stdin and send the output segment as written to stdout, like this
