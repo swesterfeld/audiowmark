@@ -1031,28 +1031,43 @@ public:
   }
 };
 
+static WavData
+truncate (const WavData& in_data, int seconds)
+{
+  WavData out_data = in_data;
+  vector<float> short_samples = in_data.samples();
+
+  const size_t want_n_samples = in_data.sample_rate() * in_data.n_channels() * seconds;
+  if (short_samples.size() > want_n_samples)
+    {
+      short_samples.resize (want_n_samples);
+      out_data.set_samples (short_samples);
+    }
+  return out_data;
+}
+
 static float
 detect_speed (const WavData& wav_data)
 {
-  for (int p = -200; p <= 200; p++)
+  for (int p = -20; p <= 20; p++)
     {
       double speed = pow (1.001, p);
-      WavData wd_resampled = wav_data;
+
+      WavData wd_resampled = truncate (wav_data, 20);
       if (p != 0)
-        wd_resampled = resample (wav_data, Params::mark_sample_rate * speed);
+        wd_resampled = resample (wd_resampled, Params::mark_sample_rate * speed);
 
-      vector<float> short_samples  = wd_resampled.samples();
+      wd_resampled = truncate (wd_resampled, 15);
 
-      const size_t want_n_samples = wd_resampled.sample_rate() * wd_resampled.n_channels() * 15;
-      if (short_samples.size() > want_n_samples)
-        {
-          short_samples.resize (want_n_samples);
-          wd_resampled.set_samples (short_samples);
-        }
       ResultSet result_set;
       ClipDecoder clip_decoder;
       clip_decoder.run (wd_resampled, result_set);
-      printf ("%f %f\n", speed, result_set.best_quality());
+      printf ("%f %f         ", speed, result_set.best_quality());
+      if (result_set.best_quality() > 0)
+        printf ("\n");
+      else
+        printf ("\r");
+      fflush (stdout);
     }
   return 1.0;
 }
