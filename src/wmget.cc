@@ -1046,9 +1046,11 @@ truncate (const WavData& in_data, int seconds)
   return out_data;
 }
 
-static float
+static double
 detect_speed (const WavData& wav_data)
 {
+  double best_speed = 1.0;
+  double best_quality = 0;
   for (int p = -20; p <= 20; p++)
     {
       double speed = pow (1.001, p);
@@ -1064,21 +1066,38 @@ detect_speed (const WavData& wav_data)
       clip_decoder.run (wd_resampled, result_set);
       printf ("%f %f         ", speed, result_set.best_quality());
       if (result_set.best_quality() > 0)
-        printf ("\n");
+        {
+          printf ("\n");
+          if (result_set.best_quality() > best_quality)
+            {
+              best_quality = result_set.best_quality();
+              best_speed = speed;
+            }
+        }
       else
         printf ("\r");
       fflush (stdout);
     }
-  return 1.0;
+  return best_speed;
 }
 
 static int
-decode_and_report (const WavData& wav_data, const string& orig_pattern)
+decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
+  WavData wav_data;
   if (Params::detect_speed)
     {
-      detect_speed (wav_data);
-      return 1;
+      double speed = detect_speed (in_data);
+
+      int r = Params::mark_sample_rate * speed;
+      if (r != Params::mark_sample_rate)
+        wav_data = resample (in_data, Params::mark_sample_rate * speed);
+      else
+        wav_data = in_data;
+    }
+  else
+    {
+      wav_data = in_data;
     }
   ResultSet result_set;
 
