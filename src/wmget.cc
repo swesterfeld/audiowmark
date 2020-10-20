@@ -728,6 +728,15 @@ public:
       }
     printf ("match_count %d %zd\n", match_count, patterns.size());
   }
+  double
+  best_quality() const
+  {
+    double q = -1;
+    for (const auto& pattern : patterns)
+      if (pattern.sync_score.quality > q)
+        q = pattern.sync_score.quality;
+    return q;
+  }
 };
 
 /*
@@ -1022,9 +1031,40 @@ public:
   }
 };
 
+static float
+detect_speed (const WavData& wav_data)
+{
+  for (int p = -200; p <= 200; p++)
+    {
+      double speed = pow (1.001, p);
+      WavData wd_resampled = wav_data;
+      if (p != 0)
+        wd_resampled = resample (wav_data, Params::mark_sample_rate * speed);
+
+      vector<float> short_samples  = wd_resampled.samples();
+
+      const size_t want_n_samples = wd_resampled.sample_rate() * wd_resampled.n_channels() * 15;
+      if (short_samples.size() > want_n_samples)
+        {
+          short_samples.resize (want_n_samples);
+          wd_resampled.set_samples (short_samples);
+        }
+      ResultSet result_set;
+      ClipDecoder clip_decoder;
+      clip_decoder.run (wd_resampled, result_set);
+      printf ("%f %f\n", speed, result_set.best_quality());
+    }
+  return 1.0;
+}
+
 static int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
+  if (Params::detect_speed)
+    {
+      detect_speed (wav_data);
+      return 1;
+    }
   ResultSet result_set;
 
   BlockDecoder block_decoder;
