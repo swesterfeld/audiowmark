@@ -42,6 +42,7 @@ public:
   static           bool hard;                      // hard decode bits? (soft decoding is better)
   static           bool snr;                       // compute/show snr while adding watermark
   static           int  have_key;
+  static           bool detect_speed;
 
   static           size_t payload_size;            // number of payload bits for the watermark
   static           bool   payload_short;

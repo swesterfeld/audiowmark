@@ -576,6 +576,10 @@ parse_get_options (ArgParser& ap)
     {
       Params::test_no_sync = true;
     }
+  if (ap.parse_opt ("--detect-speed"))
+    {
+      Params::detect_speed = true;
+    }
 }
 
 int
