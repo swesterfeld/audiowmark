@@ -1047,19 +1047,20 @@ truncate (const WavData& in_data, int seconds)
 }
 
 static double
-detect_speed (const WavData& wav_data)
+detect_speed (const WavData& wav_data, double center, double step, int n_steps, int seconds)
 {
   double best_speed = 1.0;
   double best_quality = 0;
-  for (int p = -20; p <= 20; p++)
+  printf ("## range [%f..%f], n_steps=%d\n", center * pow (step, -n_steps), center * pow (step, n_steps), n_steps);
+  for (int p = -n_steps; p <= n_steps; p++)
     {
-      double speed = pow (1.001, p);
+      double speed = center * pow (step, p);
 
-      WavData wd_resampled = truncate (wav_data, 20);
+      WavData wd_resampled = truncate (wav_data, seconds * 1.5);
       if (p != 0)
         wd_resampled = resample (wd_resampled, Params::mark_sample_rate * speed);
 
-      wd_resampled = truncate (wd_resampled, 15);
+      wd_resampled = truncate (wd_resampled, seconds);
 
       ResultSet result_set;
       ClipDecoder clip_decoder;
@@ -1087,7 +1088,12 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
   WavData wav_data;
   if (Params::detect_speed)
     {
-      double speed = detect_speed (in_data);
+      double speed;
+      /* first pass:  find approximation for speed */
+      speed = detect_speed (in_data, 1.0, 1.001,     /* steps */ 200, /* seconds */ 15);
+
+      /* second pass: refine */
+      speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50);
 
       int r = Params::mark_sample_rate * speed;
       if (r != Params::mark_sample_rate)
