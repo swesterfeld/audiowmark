@@ -1052,9 +1052,28 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
   WavData wd_truncated = truncate (wav_data, seconds * 1.5);
   double best_speed = 1.0;
   double best_quality = 0;
+
+  int best_hint_step = 0;
+  if (Params::detect_speed_hint > 0)
+    {
+      double best_dist = 1000;
+      for (int p = -n_steps; p <= n_steps; p++)
+        {
+          double dist = fabs (center * pow (step, p) - Params::detect_speed_hint);
+          if (dist < best_dist)
+            {
+              best_hint_step = p;
+              best_dist      = dist;
+            }
+        }
+    }
   printf ("## range [%f..%f], n_steps=%d\n", center * pow (step, -n_steps), center * pow (step, n_steps), n_steps);
   for (int p = -n_steps; p <= n_steps; p++)
     {
+      if (Params::detect_speed_hint > 0)
+        if (abs (p - best_hint_step) > 2)
+          continue;
+
       double speed = center * pow (step, p);
 
       WavData wd_resampled = wd_truncated;

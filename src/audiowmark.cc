@@ -565,6 +565,8 @@ parse_add_options (ArgParser& ap)
 void
 parse_get_options (ArgParser& ap)
 {
+  float f;
+
   ap.parse_opt ("--test-cut", Params::test_cut);
   ap.parse_opt ("--test-truncate", Params::test_truncate);
 
@@ -579,6 +581,10 @@ parse_get_options (ArgParser& ap)
   if (ap.parse_opt ("--detect-speed"))
     {
       Params::detect_speed = true;
+    }
+  if (ap.parse_opt ("--detect-speed-hint", f))
+    {
+      Params::detect_speed_hint = f;
     }
 }
 
