@@ -25,6 +25,7 @@
 #include "wmcommon.hh"
 #include "convcode.hh"
 #include "shortcode.hh"
+#include "fft.hh"
 
 using std::string;
 using std::vector;
@@ -250,7 +251,7 @@ public:
     double        quality;
     ConvBlockType block_type;
   };
-private:
+public:
   struct FrameBit
   {
     int frame;
@@ -1102,9 +1103,13 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
   return best_speed;
 }
 
+static int new_sync (const WavData& wav_data);
+
 static int
 decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
+  return new_sync (in_data);
+
   WavData wav_data;
   if (Params::detect_speed)
     {
@@ -1173,4 +1178,146 @@ get_watermark (const string& infile, const string& orig_pattern)
     {
       return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
     }
+}
+
+/* FIXME: is this the best choice */
+inline double
+window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
+{
+  if (fabs (x) > 1)
+    return 0;
+
+  return 0.54 + 0.46 * cos (M_PI * x);
+}
+
+int
+new_sync (const WavData& in_data)
+{
+  WavData in_data_trc (truncate (in_data, 100));
+  WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2));
+
+  // we downsample the audio by factor 2 to improve performance
+  const int sub_frame_size = Params::frame_size / 2;
+  const int sub_sync_search_step = Params::sync_search_step / 2;
+  const size_t n_bands = Params::max_band - Params::min_band + 1;
+
+  double window_weight = 0;
+  float window[sub_frame_size];
+  for (size_t i = 0; i < sub_frame_size; i++)
+    {
+      const double fsize_2 = sub_frame_size / 2.0;
+      // const double win =  window_cos ((i - fsize_2) / fsize_2);
+      const double win = window_hamming ((i - fsize_2) / fsize_2);
+      //const double win = 1;
+      window[i] = win;
+      window_weight += win;
+    }
+
+  /* normalize window using window weight */
+  for (size_t i = 0; i < sub_frame_size; i++)
+    {
+      window[i] *= 2.0 / window_weight;
+    }
+
+  SyncFinder sync_finder;
+  sync_finder.init_up_down (in_data, SyncFinder::Mode::BLOCK);
+
+  float *in = new_array_float (sub_frame_size);
+  float *out = new_array_float (sub_frame_size);
+
+  struct Mags {
+    float umag = 0;
+    float dmag = 0;
+  };
+  vector<vector<Mags>> fft_sync_bits;
+  size_t pos = 0;
+  while (pos + sub_frame_size < in_data_sub.n_frames())
+    {
+      const std::vector<float>& samples = in_data_sub.samples();
+      vector<float> fft_out_db;
+
+      for (int ch = 0; ch < in_data_sub.n_channels(); ch++)
+        {
+          for (int i = 0; i < sub_frame_size; i++)
+            {
+              in[i] = samples[ch + (pos + i) * in_data_sub.n_channels()] * window[i];
+            }
+          fftar_float (sub_frame_size, in, out);
+
+          for (int i = Params::min_band; i <= Params::max_band; i++)
+            {
+              const float min_db = -96;
+              float re = out[i * 2];
+              float im = out[i * 2 + 1];
+              float abs = sqrt (re * re + im * im); // FIXME: could avoid sqrt here
+              fft_out_db.push_back (db_from_factor (abs, min_db));
+            }
+        }
+      vector<Mags> mags;
+      for (size_t bit = 0; bit < sync_finder.sync_bits.size(); bit++)
+        {
+          const vector<SyncFinder::FrameBit>& frame_bits = sync_finder.sync_bits[bit];
+          for (const auto& frame_bit : frame_bits)
+            {
+              float umag = 0, dmag = 0;
+
+              for (size_t i = 0; i < frame_bit.up.size(); i++)
+                {
+                  umag += fft_out_db[frame_bit.up[i]];
+                  dmag += fft_out_db[frame_bit.down[i]];
+                }
+              mags.push_back (Mags {umag, dmag});
+            }
+        }
+      fft_sync_bits.push_back (mags);
+      pos += sub_sync_search_step;
+    }
+  for (size_t offset = 0; offset < fft_sync_bits.size(); offset++)
+    {
+      double sync_quality = 0;
+      int mi = 0;
+      for (size_t sync_bit = 0; sync_bit < Params::sync_bits; sync_bit++)
+        {
+          const vector<SyncFinder::FrameBit>& frame_bits = sync_finder.sync_bits[sync_bit];
+
+          float umag = 0;
+          float dmag = 0;
+          for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
+            {
+              const int index = offset + frame_bits[f].frame * /* HACK */ 4;
+              if (index >= fft_sync_bits.size())
+                goto end;
+              umag += fft_sync_bits[index][mi].umag;
+              dmag += fft_sync_bits[index][mi].dmag;
+              mi++;
+            }
+          /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
+          double raw_bit;
+          if (umag == 0 || dmag == 0)
+            {
+              raw_bit = 0;
+            }
+          else if (umag < dmag)
+            {
+              raw_bit = 1 - umag / dmag;
+            }
+          else
+            {
+              raw_bit = dmag / umag - 1;
+            }
+          const int expect_data_bit = sync_bit & 1; /* expect 010101 */
+          const double q = expect_data_bit ? raw_bit : -raw_bit;
+          //sync_quality += q * frame_bit_count;
+          sync_quality += q;
+        }
+      sync_quality /= Params::sync_bits;
+      sync_quality = sync_finder.normalize_sync_quality (sync_quality);
+      printf ("%f\n", sync_quality);
+    }
+end:
+
+  free_array_float (in);
+  free_array_float (out);
+
+  return 42;
 }
