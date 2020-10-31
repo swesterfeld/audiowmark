@@ -681,7 +681,7 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("test-clip"))
     {
       if (ap.parse_args (4, args))
-        test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+        return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;
