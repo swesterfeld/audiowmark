@@ -1193,13 +1193,12 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
 int
 new_sync (const WavData& in_data)
 {
-  WavData in_data_trc (truncate (in_data, 100));
+  WavData in_data_trc (truncate (in_data, 15));
   WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2));
 
   // we downsample the audio by factor 2 to improve performance
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;
-  const size_t n_bands = Params::max_band - Params::min_band + 1;
 
   double window_weight = 0;
   float window[sub_frame_size];
@@ -1272,10 +1271,14 @@ new_sync (const WavData& in_data)
       fft_sync_bits.push_back (mags);
       pos += sub_sync_search_step;
     }
-  for (size_t offset = 0; offset < fft_sync_bits.size(); offset++)
+  const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
+  const int pad_start = frames_per_block * /* HACK */ 4;
+  for (int offset = -pad_start; offset < 0; offset++)
     {
       double sync_quality = 0;
       int mi = 0;
+      int frame_bit_count = 0;
+      int bit_count = 0;
       for (size_t sync_bit = 0; sync_bit < Params::sync_bits; sync_bit++)
         {
           const vector<SyncFinder::FrameBit>& frame_bits = sync_finder.sync_bits[sync_bit];
@@ -1284,11 +1287,20 @@ new_sync (const WavData& in_data)
           float dmag = 0;
           for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
             {
-              const int index = offset + frame_bits[f].frame * /* HACK */ 4;
-              if (index >= fft_sync_bits.size())
-                goto end;
-              umag += fft_sync_bits[index][mi].umag;
-              dmag += fft_sync_bits[index][mi].dmag;
+              const int index1 = offset + frame_bits[f].frame * /* HACK */ 4;
+              if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
+                {
+                  umag += fft_sync_bits[index1][mi].umag;
+                  dmag += fft_sync_bits[index1][mi].dmag;
+                  frame_bit_count++;
+                }
+              const int index2 = index1 + frames_per_block * /* HACK */ 4;
+              if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
+                {
+                  umag += fft_sync_bits[index2][mi].dmag;
+                  dmag += fft_sync_bits[index2][mi].umag;
+                  frame_bit_count++;
+                }
               mi++;
             }
           /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
@@ -1307,14 +1319,16 @@ new_sync (const WavData& in_data)
             }
           const int expect_data_bit = sync_bit & 1; /* expect 010101 */
           const double q = expect_data_bit ? raw_bit : -raw_bit;
-          //sync_quality += q * frame_bit_count;
-          sync_quality += q;
+          sync_quality += q * frame_bit_count;
+          bit_count += frame_bit_count;
         }
-      sync_quality /= Params::sync_bits;
-      sync_quality = sync_finder.normalize_sync_quality (sync_quality);
-      printf ("%f\n", sync_quality);
+      if (bit_count)
+        {
+          sync_quality /= bit_count;
+          sync_quality = sync_finder.normalize_sync_quality (sync_quality);
+          printf ("%d %f\n", offset, fabs (sync_quality));
+        }
     }
-end:
 
   free_array_float (in);
   free_array_float (out);
