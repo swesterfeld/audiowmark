@@ -1103,12 +1103,47 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
   return best_speed;
 }
 
-static int new_sync (const WavData& wav_data);
+class SpeedSync
+{
+public:
+  struct Score
+  {
+    double speed = 0;;
+    double quality = 0;
+  };
+private:
+  struct Mags {
+    float umag = 0;
+    float dmag = 0;
+  };
+  SyncFinder sync_finder;
+  vector<vector<Mags>> fft_sync_bits;
+  void  prepare_mags (const WavData& in_data, double center);
+  Score compare (double speed);
+public:
+  Score
+  search (const WavData& in_data, double center, double step, int n_steps)
+  {
+    prepare_mags (in_data, center);
+    Score best_s;
+    for (int p = -n_steps; p <= n_steps; p++)
+      {
+        double speed = center * pow (step, p);
+        Score s = compare (speed);
+        if (s.quality > best_s.quality)
+          best_s = s;
+      }
+    return best_s;
+  }
+};
 
 static int
 decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
-  return new_sync (in_data);
+  SpeedSync speed_sync;
+  SpeedSync::Score s = speed_sync.search (in_data, 1.0, 1.001, 20);
+  printf ("## %f %f\n", s.speed, s.quality);
+  return 0;
 
   WavData wav_data;
   if (Params::detect_speed)
@@ -1190,8 +1225,8 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
   return 0.54 + 0.46 * cos (M_PI * x);
 }
 
-int
-new_sync (const WavData& in_data)
+void
+SpeedSync::prepare_mags (const WavData& in_data, double center)
 {
   WavData in_data_trc (truncate (in_data, 15));
   WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2));
@@ -1218,17 +1253,12 @@ new_sync (const WavData& in_data)
       window[i] *= 2.0 / window_weight;
     }
 
-  SyncFinder sync_finder;
   sync_finder.init_up_down (in_data, SyncFinder::Mode::BLOCK);
 
   float *in = new_array_float (sub_frame_size);
   float *out = new_array_float (sub_frame_size);
 
-  struct Mags {
-    float umag = 0;
-    float dmag = 0;
-  };
-  vector<vector<Mags>> fft_sync_bits;
+  fft_sync_bits.clear();
   size_t pos = 0;
   while (pos + sub_frame_size < in_data_sub.n_frames())
     {
@@ -1271,8 +1301,18 @@ new_sync (const WavData& in_data)
       fft_sync_bits.push_back (mags);
       pos += sub_sync_search_step;
     }
+
+  free_array_float (in);
+  free_array_float (out);
+}
+
+SpeedSync::Score
+SpeedSync::compare (double speed)
+{
   const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
   const int pad_start = frames_per_block * /* HACK */ 4;
+  Score best_score;
+  // FIXME: pad_start must be scaled with speed
   for (int offset = -pad_start; offset < 0; offset++)
     {
       double sync_quality = 0;
@@ -1287,14 +1327,15 @@ new_sync (const WavData& in_data)
           float dmag = 0;
           for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
             {
-              const int index1 = offset + frame_bits[f].frame * /* HACK */ 4;
+              const int index1 = (offset + frame_bits[f].frame * /* HACK */ 4) / speed;
               if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index1][mi].umag;
                   dmag += fft_sync_bits[index1][mi].dmag;
                   frame_bit_count++;
                 }
-              const int index2 = index1 + frames_per_block * /* HACK */ 4;
+              // FIXME: probably better compute double index
+              const int index2 = index1 + (frames_per_block * /* HACK */ 4) / speed;
               if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index2][mi].dmag;
@@ -1325,13 +1366,15 @@ new_sync (const WavData& in_data)
       if (bit_count)
         {
           sync_quality /= bit_count;
-          sync_quality = sync_finder.normalize_sync_quality (sync_quality);
-          printf ("%d %f\n", offset, fabs (sync_quality));
+          sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
+          //printf ("%d %f\n", offset, fabs (sync_quality));
+          if (sync_quality > best_score.quality)
+            {
+              best_score.quality = sync_quality;
+              best_score.speed = speed;
+            }
         }
     }
-
-  free_array_float (in);
-  free_array_float (out);
-
-  return 42;
+  //printf ("%f %f\n", best_score.speed, best_score.quality);
+  return best_score;
 }
