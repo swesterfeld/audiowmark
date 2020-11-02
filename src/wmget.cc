@@ -1137,12 +1137,30 @@ public:
   }
 };
 
+static void
+speed_scan (const WavData& in_data)
+{
+  SpeedSync::Score best_s;
+
+  const int n_center_steps = 2;
+  const int n_steps = 10;
+  const double step = 1.001;
+  for (int c = -n_center_steps; c <= n_center_steps; c++)
+    {
+      double c_speed = pow (step, c * (n_steps * 2 + 1));
+
+      SpeedSync speed_sync;
+      SpeedSync::Score s = speed_sync.search (in_data, c_speed, step, n_steps);
+      if (s.quality > best_s.quality)
+        best_s = s;
+    }
+  printf ("## %f %f\n", best_s.speed, best_s.quality);
+}
+
 static int
 decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
-  SpeedSync speed_sync;
-  SpeedSync::Score s = speed_sync.search (in_data, 1.0, 1.001, 20);
-  printf ("## %f %f\n", s.speed, s.quality);
+  speed_scan (in_data);
   return 0;
 
   WavData wav_data;
@@ -1229,6 +1247,7 @@ void
 SpeedSync::prepare_mags (const WavData& in_data, double center)
 {
   WavData in_data_trc (truncate (in_data, 15));
+  // FIXME: can crash if SR=22050
   WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2));
 
   // we downsample the audio by factor 2 to improve performance
