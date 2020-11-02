@@ -1119,17 +1119,19 @@ private:
   SyncFinder sync_finder;
   vector<vector<Mags>> fft_sync_bits;
   void  prepare_mags (const WavData& in_data, double center);
-  Score compare (double speed);
+  Score compare (double relative_speed, double center);
 public:
   Score
   search (const WavData& in_data, double center, double step, int n_steps)
   {
     prepare_mags (in_data, center);
+
     Score best_s;
     for (int p = -n_steps; p <= n_steps; p++)
       {
-        double speed = center * pow (step, p);
-        Score s = compare (speed);
+        const double relative_speed = pow (step, p);
+
+        Score s = compare (relative_speed, center);
         if (s.quality > best_s.quality)
           best_s = s;
       }
@@ -1248,7 +1250,7 @@ SpeedSync::prepare_mags (const WavData& in_data, double center)
 {
   WavData in_data_trc (truncate (in_data, 15));
   // FIXME: can crash if SR=22050
-  WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2));
+  WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2 * center));
 
   // we downsample the audio by factor 2 to improve performance
   const int sub_frame_size = Params::frame_size / 2;
@@ -1326,7 +1328,7 @@ SpeedSync::prepare_mags (const WavData& in_data, double center)
 }
 
 SpeedSync::Score
-SpeedSync::compare (double speed)
+SpeedSync::compare (double relative_speed, double center)
 {
   const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
   const int pad_start = frames_per_block * /* HACK */ 4;
@@ -1346,7 +1348,7 @@ SpeedSync::compare (double speed)
           float dmag = 0;
           for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
             {
-              const int index1 = (offset + frame_bits[f].frame * /* HACK */ 4) / speed;
+              const int index1 = (offset + frame_bits[f].frame * /* HACK */ 4) / relative_speed;
               if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index1][mi].umag;
@@ -1354,7 +1356,7 @@ SpeedSync::compare (double speed)
                   frame_bit_count++;
                 }
               // FIXME: probably better compute double index
-              const int index2 = index1 + (frames_per_block * /* HACK */ 4) / speed;
+              const int index2 = index1 + (frames_per_block * /* HACK */ 4) / relative_speed;
               if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index2][mi].dmag;
@@ -1390,7 +1392,7 @@ SpeedSync::compare (double speed)
           if (sync_quality > best_score.quality)
             {
               best_score.quality = sync_quality;
-              best_score.speed = speed;
+              best_score.speed = relative_speed * center;
             }
         }
     }
