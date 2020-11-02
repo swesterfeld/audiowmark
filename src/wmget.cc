@@ -1139,12 +1139,13 @@ public:
   }
 };
 
-static void
+static double
 speed_scan (const WavData& in_data)
 {
   SpeedSync::Score best_s;
 
-  const int n_center_steps = 2;
+  /* n_center_steps / n_steps settings: speed approximately 0.8..1.25 */
+  const int n_center_steps = 10;
   const int n_steps = 10;
   const double step = 1.001;
   for (int c = -n_center_steps; c <= n_center_steps; c++)
@@ -1157,20 +1158,22 @@ speed_scan (const WavData& in_data)
         best_s = s;
     }
   printf ("## %f %f\n", best_s.speed, best_s.quality);
+  return best_s.speed;
 }
 
 static int
 decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
-  speed_scan (in_data);
-  return 0;
 
   WavData wav_data;
   if (Params::detect_speed)
     {
       double speed;
       /* first pass:  find approximation for speed */
-      speed = detect_speed (in_data, 1.0, 1.001,     /* steps */ 200, /* seconds */ 15);
+      speed = speed_scan (in_data);
+
+      /* SLOW */
+      // speed = detect_speed (in_data, 1.0, 1.001,     /* steps */ 200, /* seconds */ 15);
 
       /* second pass: refine */
       speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50);
