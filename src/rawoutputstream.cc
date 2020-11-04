@@ -19,6 +19,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <errno.h>
 
 using std::string;
 using std::vector;
