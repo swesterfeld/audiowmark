@@ -18,6 +18,8 @@
 #include "utils.hh"
 #include "random.hh"
 
+#include <inttypes.h>
+
 using std::vector;
 using std::string;
 
@@ -28,7 +30,7 @@ main (int argc, char **argv)
   for (size_t i = 0; i < 20; i++)
     {
       uint64_t x = rng();
-      printf ("%016lx\n", x);
+      printf ("%016" PRIx64 "\n", x);
     }
 
   uint64_t s = 0;
@@ -39,7 +41,7 @@ main (int argc, char **argv)
       s += rng();
     }
   double t_end = get_time();
-  printf ("s=%016lx\n\n", s);
+  printf ("s=%016" PRIx64 "\n\n", s);
 
   printf ("%f Mvalues/sec\n", runs / (t_end - t_start) / 1000000);
 }

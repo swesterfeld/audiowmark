@@ -17,6 +17,8 @@
 
 #include "rawconverter.hh"
 
+#include <array>
+
 #include <math.h>
 
 using std::vector;
