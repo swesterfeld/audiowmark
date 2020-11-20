@@ -1118,13 +1118,13 @@ private:
   };
   SyncFinder sync_finder;
   vector<vector<Mags>> fft_sync_bits;
-  void  prepare_mags (const WavData& in_data, double center);
+  void  prepare_mags (const WavData& in_data, double center, double seconds);
   Score compare (double relative_speed, double center);
 public:
   Score
-  search (const WavData& in_data, double center, double step, int n_steps)
+  search (const WavData& in_data, double center, double step, int n_steps, double seconds)
   {
-    prepare_mags (in_data, center);
+    prepare_mags (in_data, center, seconds);
 
     Score best_s;
     for (int p = -n_steps; p <= n_steps; p++)
@@ -1153,7 +1153,7 @@ speed_scan (const WavData& in_data)
       double c_speed = pow (step, c * (n_steps * 2 + 1));
 
       SpeedSync speed_sync;
-      SpeedSync::Score s = speed_sync.search (in_data, c_speed, step, n_steps);
+      SpeedSync::Score s = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 15);
       if (s.quality > best_s.quality)
         best_s = s;
     }
@@ -1175,8 +1175,15 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
       /* SLOW */
       // speed = detect_speed (in_data, 1.0, 1.001,     /* steps */ 200, /* seconds */ 15);
 
-      /* second pass: refine */
-      speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50);
+      /* second pass: fast refine (not always perfect) */
+      SpeedSync speed_sync;
+      SpeedSync::Score score = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
+      speed = score.speed;
+      printf ("## speed refined %f\n", speed);
+      printf ("## delta %.5f %%\n", 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
+
+      /* SLOW */
+      // speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50);
 
       int r = Params::mark_sample_rate * speed;
       if (r != Params::mark_sample_rate)
@@ -1249,9 +1256,9 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
 }
 
 void
-SpeedSync::prepare_mags (const WavData& in_data, double center)
+SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
 {
-  WavData in_data_trc (truncate (in_data, 15));
+  WavData in_data_trc (truncate (in_data, seconds));
   // FIXME: can crash if SR=22050
   WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2 * center));
 
