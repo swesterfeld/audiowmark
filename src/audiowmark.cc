@@ -317,6 +317,16 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
 }
 
 int
+test_speed (int seed)
+{
+  Random rng (seed, /* there is no stream for this test */ Random::Stream::data_up_down);
+  double low = 0.85;
+  double high = 1.15;
+  printf ("%.6f\n", low + (rng() / double (UINT64_MAX)) * (high - low));
+  return 0;
+}
+
+int
 gen_key (const string& outfile)
 {
   FILE *f = fopen (outfile.c_str(), "w");
@@ -682,6 +692,13 @@ main (int argc, char **argv)
     {
       if (ap.parse_args (4, args))
         return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+    }
+  else if (ap.parse_cmd ("test-speed"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (1, args))
+        return test_speed (atoi (args[0].c_str()));
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;
