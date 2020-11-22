@@ -1048,7 +1048,7 @@ truncate (const WavData& in_data, int seconds)
 }
 
 static double
-detect_speed (const WavData& wav_data, double center, double step, int n_steps, int seconds)
+detect_speed (const WavData& wav_data, double center, double step, int n_steps, int seconds, double *quality_p)
 {
   WavData wd_truncated = truncate (wav_data, seconds * 1.5);
   double best_speed = 1.0;
@@ -1078,8 +1078,9 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
       double speed = center * pow (step, p);
 
       WavData wd_resampled = wd_truncated;
-      if (p != 0)
-        wd_resampled = resample (wd_resampled, Params::mark_sample_rate * speed);
+      const int dest_rate = lrint (Params::mark_sample_rate * speed);
+      if (wd_resampled.sample_rate() != dest_rate)
+        wd_resampled = resample (wd_resampled, dest_rate);
 
       wd_resampled = truncate (wd_resampled, seconds);
 
@@ -1100,6 +1101,8 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
         printf ("\r");
       fflush (stdout);
     }
+  if (quality_p)
+    *quality_p = best_quality;
   return best_speed;
 }
 
@@ -1121,28 +1124,26 @@ private:
   void  prepare_mags (const WavData& in_data, double center, double seconds);
   Score compare (double relative_speed, double center);
 public:
-  Score
+  vector<Score>
   search (const WavData& in_data, double center, double step, int n_steps, double seconds)
   {
     prepare_mags (in_data, center, seconds);
 
-    Score best_s;
+    vector<Score> scores;
     for (int p = -n_steps; p <= n_steps; p++)
       {
         const double relative_speed = pow (step, p);
 
-        Score s = compare (relative_speed, center);
-        if (s.quality > best_s.quality)
-          best_s = s;
+        scores.push_back (compare (relative_speed, center));
       }
-    return best_s;
+    return scores;
   }
 };
 
 static double
 speed_scan (const WavData& in_data)
 {
-  SpeedSync::Score best_s;
+  vector<SpeedSync::Score> scores;
 
   /* n_center_steps / n_steps settings: speed approximately 0.8..1.25 */
   const int n_center_steps = 10;
@@ -1153,10 +1154,29 @@ speed_scan (const WavData& in_data)
       double c_speed = pow (step, c * (n_steps * 2 + 1));
 
       SpeedSync speed_sync;
-      SpeedSync::Score s = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 15);
-      if (s.quality > best_s.quality)
-        best_s = s;
+      vector<SpeedSync::Score> step_scores = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 15);
+      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
+
+  sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
+  if (scores.size() > 5)
+    scores.resize (5);
+
+  double best_refined_quality = 0.001; // HACK
+  SpeedSync::Score best_s;
+  best_s.speed = scores[0].speed;
+  best_s.quality = scores[0].quality;
+  for (auto s : scores)
+    {
+      double refined_quality = 0;
+      detect_speed (in_data, s.speed, /* no step */ 1, /* n_steps */ 0, /* seconds */ 15, &refined_quality);
+      if (refined_quality > best_refined_quality)
+        {
+          best_s = s;
+          best_refined_quality = refined_quality;
+        }
+    }
+
   printf ("## %f %f\n", best_s.speed, best_s.quality);
   return best_s.speed;
 }
@@ -1177,8 +1197,10 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
 
       /* second pass: fast refine (not always perfect) */
       SpeedSync speed_sync;
-      SpeedSync::Score score = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
-      speed = score.speed;
+      auto scores = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
+      sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
+      if (!scores.empty())
+        speed = scores[0].speed;
       printf ("## speed refined %f\n", speed);
       printf ("## delta %.5f %%\n", 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
 
