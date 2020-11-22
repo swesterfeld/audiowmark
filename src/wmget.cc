@@ -711,7 +711,7 @@ public:
           }
       }
   }
-  void
+  int
   print_match_count (const string& orig_pattern)
   {
     int match_count = 0;
@@ -728,6 +728,7 @@ public:
           match_count++;
       }
     printf ("match_count %d %zd\n", match_count, patterns.size());
+    return match_count;
   }
   double
   best_quality() const
@@ -1228,9 +1229,12 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
 
   if (!orig_pattern.empty())
     {
-      result_set.print_match_count (orig_pattern);
+      int match_count = result_set.print_match_count (orig_pattern);
 
       block_decoder.print_debug_sync();
+
+      if (!match_count)
+        return 1;
     }
   return 0;
 }
