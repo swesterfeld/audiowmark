@@ -1033,12 +1033,12 @@ public:
 };
 
 static WavData
-truncate (const WavData& in_data, int seconds)
+truncate (const WavData& in_data, double seconds)
 {
   WavData out_data = in_data;
   vector<float> short_samples = in_data.samples();
 
-  const size_t want_n_samples = in_data.sample_rate() * in_data.n_channels() * seconds;
+  const size_t want_n_samples = lrint (in_data.sample_rate() * seconds) * in_data.n_channels();
   if (short_samples.size() > want_n_samples)
     {
       short_samples.resize (want_n_samples);
@@ -1280,7 +1280,7 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
 void
 SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
 {
-  WavData in_data_trc (truncate (in_data, seconds));
+  WavData in_data_trc (truncate (in_data, seconds / center));
   // FIXME: can crash if SR=22050
   WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2 * center));
 
