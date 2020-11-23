@@ -98,7 +98,7 @@ resample (const WavData& wav_data, int rate)
 }
 
 static WavData
-resample_ratio (const WavData& wav_data, double ratio)
+resample_ratio (const WavData& wav_data, double ratio, int new_rate)
 {
   const int hlen = 16;
   const vector<float>& in = wav_data.samples();
@@ -112,7 +112,7 @@ resample_ratio (const WavData& wav_data, double ratio)
     }
 
   process_resampler (vresampler, in, out);
-  return WavData (out, wav_data.n_channels(), wav_data.sample_rate() * ratio, wav_data.bit_depth());
+  return WavData (out, wav_data.n_channels(), new_rate, wav_data.bit_depth());
 }
 
 static int
@@ -1096,7 +1096,7 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
 
       double speed = center * pow (step, p);
 
-      WavData wd_resampled = resample_ratio (wd_truncated, speed);
+      WavData wd_resampled = resample_ratio (wd_truncated, speed, Params::mark_sample_rate);
       wd_resampled = truncate (wd_resampled, seconds);
 
       ResultSet result_set;
@@ -1306,7 +1306,7 @@ SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
   WavData in_data_trc (truncate (in_data, seconds / center));
 
   // we downsample the audio by factor 2 to improve performance
-  WavData in_data_sub (resample_ratio (in_data_trc, center / 2));
+  WavData in_data_sub (resample_ratio (in_data_trc, center / 2, Params::mark_sample_rate / 2));
 
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;
