@@ -1201,26 +1201,31 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
 
   WavData wav_data;
-  if (Params::detect_speed)
+  if (Params::detect_speed || Params::detect_speed_slow)
     {
       double speed;
-      /* first pass:  find approximation for speed */
-      speed = speed_scan (in_data);
+      if (Params::detect_speed_slow) /* SLOW */
+        {
+          /* first pass:  find approximation for speed */
+          speed = detect_speed (in_data, 1.0, 1.001, /* steps */ 200, /* seconds */ 15, nullptr);
 
-      /* SLOW */
-      // speed = detect_speed (in_data, 1.0, 1.001,     /* steps */ 200, /* seconds */ 15);
+          /* second pass: refine speed */
+          speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50, nullptr);
+        }
+      else /* better performance, less accurate */
+        {
+          /* first pass:  find approximation for speed */
+          speed = speed_scan (in_data);
 
-      /* second pass: fast refine (not always perfect) */
-      SpeedSync speed_sync;
-      auto scores = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
-      sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
-      if (!scores.empty())
-        speed = scores[0].speed;
-      printf ("## speed refined %f\n", speed);
+          /* second pass: fast refine (not always perfect) */
+          SpeedSync speed_sync;
+          auto scores = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
+          sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
+          if (!scores.empty())
+            speed = scores[0].speed;
+        }
       printf ("## delta %.5f %%\n", 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
-
-      /* SLOW */
-      // speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50);
+      printf ("## speed refined %f\n", speed);
 
       int r = Params::mark_sample_rate * speed;
       if (r != Params::mark_sample_rate)
