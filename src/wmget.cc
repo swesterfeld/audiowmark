@@ -97,6 +97,24 @@ resample (const WavData& wav_data, int rate)
   exit (1);
 }
 
+static WavData
+resample_ratio (const WavData& wav_data, double ratio)
+{
+  const int hlen = 16;
+  const vector<float>& in = wav_data.samples();
+  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+
+  VResampler vresampler;
+  if (vresampler.setup (ratio, wav_data.n_channels(), hlen) != 0)
+    {
+      error ("audiowmark: failed to setup vresampler with ratio=%f\n", ratio);
+      exit (1);
+    }
+
+  process_resampler (vresampler, in, out);
+  return WavData (out, wav_data.n_channels(), wav_data.sample_rate() * ratio, wav_data.bit_depth());
+}
+
 static int
 frame_count (const WavData& wav_data)
 {
@@ -1078,11 +1096,7 @@ detect_speed (const WavData& wav_data, double center, double step, int n_steps, 
 
       double speed = center * pow (step, p);
 
-      WavData wd_resampled = wd_truncated;
-      const int dest_rate = lrint (Params::mark_sample_rate * speed);
-      if (wd_resampled.sample_rate() != dest_rate)
-        wd_resampled = resample (wd_resampled, dest_rate);
-
+      WavData wd_resampled = resample_ratio (wd_truncated, speed);
       wd_resampled = truncate (wd_resampled, seconds);
 
       ResultSet result_set;
@@ -1285,10 +1299,10 @@ void
 SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
 {
   WavData in_data_trc (truncate (in_data, seconds / center));
-  // FIXME: can crash if SR=22050
-  WavData in_data_sub (resample (in_data_trc, Params::mark_sample_rate / 2 * center));
 
   // we downsample the audio by factor 2 to improve performance
+  WavData in_data_sub (resample_ratio (in_data_trc, center / 2));
+
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;
 
