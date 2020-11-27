@@ -658,5 +658,3 @@ get_watermark (const string& infile, const string& orig_pattern)
       return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
     }
 }
-
-
