@@ -1161,36 +1161,22 @@ speed_scan (const WavData& in_data)
   vector<SpeedSync::Score> scores;
 
   /* n_center_steps / n_steps settings: speed approximately 0.8..1.25 */
-  const int n_center_steps = 10;
-  const int n_steps = 10;
-  const double step = 1.001;
+  const int n_center_steps = 28;
+  const int n_steps = 5;
+  const double step = 1.0007;
   for (int c = -n_center_steps; c <= n_center_steps; c++)
     {
       double c_speed = pow (step, c * (n_steps * 2 + 1));
 
       SpeedSync speed_sync;
-      vector<SpeedSync::Score> step_scores = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 15);
+      vector<SpeedSync::Score> step_scores = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 21);
       scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
 
   sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
-  if (scores.size() > 5)
-    scores.resize (5);
 
-  double best_refined_quality = 0.001; // HACK
-  SpeedSync::Score best_s;
-  best_s.speed = scores[0].speed;
-  best_s.quality = scores[0].quality;
-  for (auto s : scores)
-    {
-      double refined_quality = 0;
-      detect_speed (in_data, s.speed, /* no step */ 1, /* n_steps */ 0, /* seconds */ 15, &refined_quality);
-      if (refined_quality > best_refined_quality)
-        {
-          best_s = s;
-          best_refined_quality = refined_quality;
-        }
-    }
+  // we could search the N best matches, but using the best result works well in practice
+  SpeedSync::Score best_s = scores[0];
 
   printf ("## %f %f\n", best_s.speed, best_s.quality);
   return best_s.speed;
