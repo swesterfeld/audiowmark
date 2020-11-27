@@ -269,13 +269,13 @@ public:
     double        quality;
     ConvBlockType block_type;
   };
-public:
   struct FrameBit
   {
     int frame;
     vector<int> up;
     vector<int> down;
   };
+private:
   vector<vector<FrameBit>> sync_bits;
 
   void
@@ -595,6 +595,12 @@ public:
     search_refine (wav_data, mode, sync_scores);
 
     return sync_scores;
+  }
+  vector<vector<FrameBit>>
+  get_sync_bits (const WavData& wav_data, Mode mode)
+  {
+    init_up_down (wav_data, mode);
+    return sync_bits;
   }
 private:
   void
@@ -1134,7 +1140,7 @@ private:
     float umag = 0;
     float dmag = 0;
   };
-  SyncFinder sync_finder;
+  vector<vector<SyncFinder::FrameBit>> sync_bits;
   vector<vector<Mags>> fft_sync_bits;
   void  prepare_mags (const WavData& in_data, double center, double seconds);
   Score compare (double relative_speed, double center);
@@ -1315,7 +1321,8 @@ SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
       window[i] *= 2.0 / window_weight;
     }
 
-  sync_finder.init_up_down (in_data, SyncFinder::Mode::BLOCK);
+  SyncFinder sync_finder;
+  sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
 
   float *in = new_array_float (sub_frame_size);
   float *out = new_array_float (sub_frame_size);
@@ -1345,9 +1352,9 @@ SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
             }
         }
       vector<Mags> mags;
-      for (size_t bit = 0; bit < sync_finder.sync_bits.size(); bit++)
+      for (size_t bit = 0; bit < sync_bits.size(); bit++)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_finder.sync_bits[bit];
+          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[bit];
           for (const auto& frame_bit : frame_bits)
             {
               float umag = 0, dmag = 0;
@@ -1383,7 +1390,7 @@ SpeedSync::compare (double relative_speed, double center)
       int bit_count = 0;
       for (size_t sync_bit = 0; sync_bit < Params::sync_bits; sync_bit++)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_finder.sync_bits[sync_bit];
+          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[sync_bit];
 
           float umag = 0;
           float dmag = 0;
@@ -1428,7 +1435,7 @@ SpeedSync::compare (double relative_speed, double center)
       if (bit_count)
         {
           sync_quality /= bit_count;
-          sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
+          //sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
           //printf ("%d %f\n", offset, fabs (sync_quality));
           if (sync_quality > best_score.quality)
             {
