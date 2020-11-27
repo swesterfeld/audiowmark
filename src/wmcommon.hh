@@ -23,6 +23,7 @@
 
 #include "random.hh"
 #include "rawinputstream.hh"
+#include "wavdata.hh"
 
 #include <assert.h>
 
@@ -141,6 +142,8 @@ double db_from_factor (double factor, double min_dB);
 
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
+
+int frame_count (const WavData& wav_data);
 
 int sync_frame_pos (int f);
 int data_frame_pos (int f);

@@ -250,4 +250,8 @@ gen_mix_entries()
   return mix_entries;
 }
 
-
+int
+frame_count (const WavData& wav_data)
+{
+  return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
+}
