@@ -366,8 +366,8 @@ SpeedSync::compare (double relative_speed, double center)
   return best_score;
 }
 
-WavData
-get_speed_clip (const WavData& in_data, double clip_seconds)
+static double
+get_clip_location (const WavData& in_data)
 {
   Random rng (0, Random::Stream::speed_clip);
 
@@ -379,8 +379,14 @@ get_speed_clip (const WavData& in_data, double clip_seconds)
 
   rng.seed (Random::seed_from_hash (xsamples), Random::Stream::speed_clip);
 
+  return rng.random_double();
+}
+
+static WavData
+get_speed_clip (double location, const WavData& in_data, double clip_seconds)
+{
   double end_sec = double (in_data.n_frames()) / in_data.sample_rate();
-  double start_sec = (double (rng()) / UINT64_MAX) * (end_sec - clip_seconds);
+  double start_sec = location * (end_sec - clip_seconds);
   if (start_sec < 0)
     start_sec = 0;
 
@@ -413,15 +419,18 @@ detect_speed (const WavData& in_data)
     }
   else /* better performance, less accurate */
     {
+      double clip_location = get_clip_location (in_data);
+
       /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-      WavData in_clip = get_speed_clip (in_data, 21 * 1.3);
+      WavData in_clip_short = get_speed_clip (clip_location, in_data, 21 * 1.3);
+      WavData in_clip_long  = get_speed_clip (clip_location, in_data, 50 * 1.3);
 
       /* first pass:  find approximation for speed */
-      speed = speed_scan (in_clip);
+      speed = speed_scan (in_clip_short);
 
       /* second pass: fast refine (not always perfect) */
       SpeedSync speed_sync;
-      auto scores = speed_sync.search (in_data, speed, 1.00005, 20, /* seconds */ 50);
+      auto scores = speed_sync.search (in_clip_long, speed, 1.00005, 20, /* seconds */ 50);
       sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
       if (!scores.empty())
         speed = scores[0].speed;
