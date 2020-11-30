@@ -23,6 +23,7 @@
 
 #include <vector>
 #include <string>
+#include <random>
 
 class Random
 {
@@ -41,6 +42,8 @@ private:
   std::vector<uint64_t>      buffer;
   size_t                     buffer_pos = 0;
 
+  std::uniform_real_distribution<double> double_dist;
+
   void die_on_error (const char *func, gcry_error_t error);
 public:
   Random (uint64_t seed, Stream stream);
@@ -53,6 +56,21 @@ public:
       refill_buffer();
 
     return buffer[buffer_pos++];
+  }
+  uint64_t
+  min() const
+  {
+    return 0;
+  }
+  uint64_t
+  max() const
+  {
+    return UINT64_MAX;
+  }
+  double
+  random_double() /* range [0,1) */
+  {
+    return double_dist (*this);
   }
   void refill_buffer();
   void seed (uint64_t seed, Stream stream);

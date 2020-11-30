@@ -32,6 +32,8 @@ main (int argc, char **argv)
       uint64_t x = rng();
       printf ("%016" PRIx64 "\n", x);
     }
+  for (size_t i = 0; i < 20; i++)
+    printf ("%f\n", rng.random_double());
 
   uint64_t s = 0;
   double t_start = get_time();
