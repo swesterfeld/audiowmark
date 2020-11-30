@@ -245,3 +245,11 @@ Random::gen_key()
   gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
   return vec_to_hex_str (key);
 }
+
+uint64_t
+Random::seed_from_hash (const vector<float>& floats)
+{
+  unsigned char hash[20];
+  gcry_md_hash_buffer (GCRY_MD_SHA1, hash, &floats[0], floats.size() * sizeof (float));
+  return uint64_from_buffer (hash);
+}

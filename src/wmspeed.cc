@@ -366,6 +366,36 @@ SpeedSync::compare (double relative_speed, double center)
   return best_score;
 }
 
+WavData
+get_speed_clip (const WavData& in_data, double clip_seconds)
+{
+  Random rng (0, Random::Stream::speed_clip);
+
+  /* to improve performance, we don't hash all samples but just a few */
+  const vector<float>& samples = in_data.samples();
+  vector<float> xsamples;
+  for (size_t p = 0; p < samples.size(); p += rng() % 1000)
+    xsamples.push_back (samples[p]);
+
+  rng.seed (Random::seed_from_hash (xsamples), Random::Stream::speed_clip);
+
+  double end_sec = double (in_data.n_frames()) / in_data.sample_rate();
+  double start_sec = (double (rng()) / UINT64_MAX) * (end_sec - clip_seconds);
+  if (start_sec < 0)
+    start_sec = 0;
+
+  size_t start_point = start_sec * in_data.sample_rate();
+  size_t end_point = std::min<size_t> (start_point + clip_seconds * in_data.sample_rate(), in_data.n_frames());
+#if 0
+  printf ("[%f %f] l%f\n", double (start_point) / in_data.sample_rate(), double (end_point) / in_data.sample_rate(),
+                           double (end_point - start_point) / in_data.sample_rate());
+#endif
+  vector<float> out_signal (in_data.samples().begin() + start_point * in_data.n_channels(),
+                            in_data.samples().begin() + end_point * in_data.n_channels());
+  WavData clip_data (out_signal, in_data.n_channels(), in_data.sample_rate(), in_data.bit_depth());
+  return clip_data;
+}
+
 double
 detect_speed (const WavData& in_data)
 {
@@ -383,8 +413,11 @@ detect_speed (const WavData& in_data)
     }
   else /* better performance, less accurate */
     {
+      /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+      WavData in_clip = get_speed_clip (in_data, 21 * 1.3);
+
       /* first pass:  find approximation for speed */
-      speed = speed_scan (in_data);
+      speed = speed_scan (in_clip);
 
       /* second pass: fast refine (not always perfect) */
       SpeedSync speed_sync;

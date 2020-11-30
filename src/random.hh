@@ -30,7 +30,7 @@ public:
   enum class Stream {
     data_up_down = 1,
     sync_up_down = 2,
-    pad_up_down = 3,   /* unused */
+    speed_clip = 3,
     mix = 4,
     bit_order = 5,
     frame_position = 6
@@ -73,6 +73,7 @@ public:
   static void        set_global_test_key (uint64_t seed);
   static void        load_global_key (const std::string& key_file);
   static std::string gen_key();
+  static uint64_t    seed_from_hash (const std::vector<float>& floats);
 };
 
 #endif /* AUDIOWMARK_RANDOM_HH */
