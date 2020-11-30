@@ -399,7 +399,7 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
 }
 
 const char*
-find_closest_sync (size_t index)
+SyncFinder::find_closest_sync (size_t index)
 {
   int best_error = 0xffff;
   int best = 0;
