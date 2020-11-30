@@ -294,7 +294,7 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
     {
       // this is unbiased only if 2 * block_size + time_seconds is smaller than overall file length
       const size_t values_per_block = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size * in_data.n_channels();
-      start_point = 2 * values_per_block * (double(rng()) / UINT64_MAX);
+      start_point = 2 * values_per_block * rng.random_double();
       start_point /= in_data.n_channels();
 
       end_point = start_point + time_seconds * in_data.sample_rate();
