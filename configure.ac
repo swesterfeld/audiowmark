@@ -93,9 +93,10 @@ dnl -------------------------------------------------------------------------
 # need c++14 mode
 AX_CXX_COMPILE_STDCXX_14(ext)
 
-# use -Wall
+# use -Wall / -pthread if available
 AC_LANG_PUSH([C++])
-AX_CHECK_COMPILE_FLAG([-Wall],                                 [CXXFLAGS="$CXXFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-Wall],    [CXXFLAGS="$CXXFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-pthread], [CXXFLAGS="$CXXFLAGS -pthread"])
 AC_LANG_POP([C++])
 
 # Less cluttered build output
