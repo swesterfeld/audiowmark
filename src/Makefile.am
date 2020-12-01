@@ -6,7 +6,7 @@ COMMON_SRC = utils.hh utils.cc convcode.hh convcode.cc random.hh random.cc wavda
 	     sfoutputstream.cc sfoutputstream.hh rawinputstream.cc rawinputstream.hh rawoutputstream.cc rawoutputstream.hh \
 	     rawconverter.cc rawconverter.hh mp3inputstream.cc mp3inputstream.hh wmcommon.cc wmcommon.hh fft.cc fft.hh \
 	     limiter.cc limiter.hh shortcode.cc shortcode.hh mpegts.cc mpegts.hh hls.cc hls.hh audiobuffer.hh \
-	     wmget.cc wmadd.cc syncfinder.cc syncfinder.hh wmspeed.cc wmspeed.hh
+	     wmget.cc wmadd.cc syncfinder.cc syncfinder.hh wmspeed.cc wmspeed.hh threadpool.cc threadpool.hh
 COMMON_LIBS = $(SNDFILE_LIBS) $(FFTW_LIBS) $(LIBGCRYPT_LIBS) $(LIBMPG123_LIBS) $(FFMPEG_LIBS)
 
 AM_CXXFLAGS = $(SNDFILE_CFLAGS) $(FFTW_CFLAGS) $(LIBGCRYPT_CFLAGS) $(LIBMPG123_CFLAGS) $(FFMPEG_CFLAGS)
@@ -14,7 +14,7 @@ AM_CXXFLAGS = $(SNDFILE_CFLAGS) $(FFTW_CFLAGS) $(LIBGCRYPT_CFLAGS) $(LIBMPG123_C
 audiowmark_SOURCES = audiowmark.cc $(COMMON_SRC)
 audiowmark_LDFLAGS = $(COMMON_LIBS)
 
-noinst_PROGRAMS = testconvcode testrandom testmp3 teststream testlimiter testshortcode testmpegts
+noinst_PROGRAMS = testconvcode testrandom testmp3 teststream testlimiter testshortcode testmpegts testthreadpool
 
 testconvcode_SOURCES = testconvcode.cc $(COMMON_SRC)
 testconvcode_LDFLAGS = $(COMMON_LIBS)
@@ -36,6 +36,9 @@ testshortcode_LDFLAGS = $(COMMON_LIBS)
 
 testmpegts_SOURCES = testmpegts.cc $(COMMON_SRC)
 testmpegts_LDFLAGS = $(COMMON_LIBS)
+
+testthreadpool_SOURCES = testthreadpool.cc $(COMMON_SRC)
+testthreadpool_LDFLAGS = $(COMMON_LIBS)
 
 if COND_WITH_FFMPEG
 COMMON_SRC += hlsoutputstream.cc hlsoutputstream.hh
