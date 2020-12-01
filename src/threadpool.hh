@@ -32,16 +32,15 @@ class ThreadPool
   struct Job
   {
     std::function<void()> fun;
-    int                   id;
   };
 
   std::mutex                mutex;
   std::condition_variable   cond;
   std::condition_variable   main_cond;
   std::vector<Job>          jobs;
-  std::set<int>             jobs_done;
+  size_t                    jobs_added = 0;
+  size_t                    jobs_done = 0;
   bool                      stop_workers = false;
-  int                       next_job_id = 1;
 
   bool worker_next_job (Job& job);
   void worker_run();
@@ -50,8 +49,8 @@ public:
   ThreadPool();
   ~ThreadPool();
 
-  int   add_job (std::function<void()> fun);
-  void  wait_jobs (std::vector<int>& ids);
+  void add_job (std::function<void()> fun);
+  void wait_all();
 };
 
 #endif /* AUDIOWMARK_THREAD_POOL_HH */

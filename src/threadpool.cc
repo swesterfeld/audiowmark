@@ -45,7 +45,7 @@ ThreadPool::worker_run()
           job.fun();
 
           std::lock_guard<std::mutex> lg (mutex);
-          jobs_done.insert (job.id);
+          jobs_done++;
 
           main_cond.notify_one();
         }
@@ -60,39 +60,27 @@ ThreadPool::ThreadPool()
     }
 }
 
-int
+void
 ThreadPool::add_job (std::function<void()> fun)
 {
   std::lock_guard<std::mutex> lg (mutex);
   Job job;
   job.fun = fun;
-  job.id  = next_job_id++;
   jobs.push_back (job);
+  jobs_added++;
 
   cond.notify_one();
-
-  return job.id;
 }
 
 void
-ThreadPool::wait_jobs (std::vector<int>& ids)
+ThreadPool::wait_all()
 {
   for (;;)
     {
       std::unique_lock<std::mutex> lck (mutex);
 
-      /* check if at least one of the jobs is still running */
-      bool done = true;
-      for (auto id : ids)
-        if (jobs_done.count (id) == 0)
-          done = false;
-
-      if (done)
-        {
-          for (auto id : ids)
-            jobs_done.erase (id);
-          return;
-        }
+      if (jobs_added == jobs_done)
+        return;
 
       main_cond.wait (lck);
     }
@@ -109,9 +97,9 @@ ThreadPool::~ThreadPool()
   for (auto& t : threads)
     t.join();
 
-  if (jobs_done.size())
+  if (jobs_added != jobs_done)
     {
-      // user must wait for each job before deleting the ThreadPool
-      error ("audiowmark: %zd open jobs in ThreadPool::~ThreadPool() - this should not happen\n", jobs_done.size());
+      // user must wait before deleting the ThreadPool
+      error ("audiowmark: open jobs in ThreadPool::~ThreadPool() [added=%zd, done=%zd] - this should not happen\n", jobs_added, jobs_done);
     }
 }

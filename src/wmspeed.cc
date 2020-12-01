@@ -18,6 +18,7 @@
 #include "wmspeed.hh"
 #include "wmcommon.hh"
 #include "syncfinder.hh"
+#include "threadpool.hh"
 #include "fft.hh"
 
 #include <algorithm>
@@ -143,7 +144,7 @@ class SpeedSync
 public:
   struct Score
   {
-    double speed = 0;;
+    double speed = 0;
     double quality = 0;
   };
 private:
@@ -153,22 +154,52 @@ private:
   };
   vector<vector<SyncFinder::FrameBit>> sync_bits;
   vector<vector<Mags>> fft_sync_bits;
-  void  prepare_mags (const WavData& in_data, double center, double seconds);
-  Score compare (double relative_speed, double center);
-public:
-  vector<Score>
-  search (const WavData& in_data, double center, double step, int n_steps, double seconds)
-  {
-    prepare_mags (in_data, center, seconds);
+  void  prepare_mags();
+  Score compare (double relative_speed);
 
-    vector<Score> scores;
+  std::mutex mutex;
+  vector<Score> result_scores;
+  const WavData& in_data;
+  const double center;
+  const double step;
+  const int    n_steps;
+  const double seconds;
+public:
+  SpeedSync (const WavData& in_data, double center, double step, int n_steps, double seconds) :
+    in_data (in_data),
+    center (center),
+    step (step),
+    n_steps (n_steps),
+    seconds (seconds)
+  {
+  }
+  void
+  prepare_job (ThreadPool& thread_pool)
+  {
+    thread_pool.add_job ([this]() { prepare_mags(); });
+  }
+
+  void
+  search (ThreadPool& thread_pool)
+  {
     for (int p = -n_steps; p <= n_steps; p++)
       {
         const double relative_speed = pow (step, p);
 
-        scores.push_back (compare (relative_speed, center));
+        thread_pool.add_job ([relative_speed, this]()
+          {
+            Score score = compare (relative_speed);
+
+            std::lock_guard<std::mutex> lg (mutex);
+            result_scores.push_back (score);
+          });
       }
-    return scores;
+  }
+
+  vector<Score>
+  get_scores()
+  {
+    return result_scores;
   }
 };
 
@@ -181,16 +212,43 @@ speed_scan (const WavData& in_data)
   const int n_center_steps = 28;
   const int n_steps = 5;
   const double step = 1.0007;
+
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
+
+  auto t = get_time();
+  ThreadPool thread_pool;
   for (int c = -n_center_steps; c <= n_center_steps; c++)
     {
       double c_speed = pow (step, c * (n_steps * 2 + 1));
 
-      SpeedSync speed_sync;
-      vector<SpeedSync::Score> step_scores = speed_sync.search (in_data, c_speed, step, n_steps, /* seconds */ 21);
-      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
+      speed_sync.push_back (std::make_unique<SpeedSync> (in_data, c_speed, step, n_steps, /* seconds */ 21));
     }
 
-  sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
+  for (auto& s : speed_sync)
+    s->prepare_job (thread_pool);
+
+  thread_pool.wait_all();
+  printf ("## wait prepare jobs: %f\n", get_time() - t);
+  t=get_time();
+
+  for (auto& s : speed_sync)
+    s->search (thread_pool);
+
+  thread_pool.wait_all();
+  printf ("## wait search jobs: %f\n", get_time() - t);
+  t=get_time();
+
+  for (auto& s : speed_sync)
+    {
+      vector<SpeedSync::Score> step_scores = s->get_scores();
+      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
+    }
+  sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b)
+    {
+      if (s_a.quality == s_b.quality)
+        return s_a.speed > s_b.speed;
+       return s_a.quality > s_b.quality;
+    });
 
   // we could search the N best matches, but using the best result works well in practice
   SpeedSync::Score best_s = scores[0];
@@ -210,7 +268,7 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
 }
 
 void
-SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
+SpeedSync::prepare_mags()
 {
   WavData in_data_trc (truncate (in_data, seconds / center));
 
@@ -293,7 +351,7 @@ SpeedSync::prepare_mags (const WavData& in_data, double center, double seconds)
 }
 
 SpeedSync::Score
-SpeedSync::compare (double relative_speed, double center)
+SpeedSync::compare (double relative_speed)
 {
   const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
   const int pad_start = frames_per_block * /* HACK */ 4;
@@ -429,11 +487,24 @@ detect_speed (const WavData& in_data)
       speed = speed_scan (in_clip_short);
 
       /* second pass: fast refine (not always perfect) */
-      SpeedSync speed_sync;
-      auto scores = speed_sync.search (in_clip_long, speed, 1.00005, 20, /* seconds */ 50);
-      sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b) { return s_a.quality > s_b.quality; });
+      double t = get_time();
+      SpeedSync speed_sync (in_clip_long, speed, 1.00005, 20, /* seconds */ 50);
+      ThreadPool tp;
+      speed_sync.prepare_job (tp);
+      tp.wait_all();
+
+      speed_sync.search (tp);
+      tp.wait_all();
+      auto scores = speed_sync.get_scores();
+      sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b)
+        {
+          if (s_a.quality == s_b.quality)
+            return s_a.speed > s_b.speed;
+           return s_a.quality > s_b.quality;
+        });
       if (!scores.empty())
         speed = scores[0].speed;
+      printf ("## time for 2nd pass: %f\n", get_time() - t);
     }
   return speed;
 }

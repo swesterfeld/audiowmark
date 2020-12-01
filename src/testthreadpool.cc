@@ -32,13 +32,12 @@ main()
 {
   ThreadPool tp;
 
-  std::vector<int> ids;
   int result1 = 0;
   int result2 = 0;
-  ids.push_back (tp.add_job ([&result1](){printf ("A\n"); sleep (2); printf ("A done\n"); result1 = 123;}));
-  ids.push_back (tp.add_job ([&result2](){printf ("B\n"); sleep (3); printf ("B done\n"); result2 = 456;}));
+  tp.add_job ([&result1](){printf ("A\n"); sleep (2); printf ("A done\n"); result1 = 123;});
+  tp.add_job ([&result2](){printf ("B\n"); sleep (3); printf ("B done\n"); result2 = 456;});
 
-  tp.wait_jobs (ids);
+  tp.wait_all();
   printf ("===\n");
   printf ("results: %d, %d\n", result1, result2);
 }
