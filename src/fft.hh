@@ -20,13 +20,24 @@
 
 #include <complex>
 #include <vector>
+#include <fftw3.h>
 
-/* high level api */
-std::vector<std::complex<float>> fft (const std::vector<float>& in);
-std::vector<float>               ifft (const std::vector<std::complex<float>>& in);
+class FFTProcessor
+{
+  fftwf_plan plan_fft;
+  fftwf_plan plan_ifft;
+public:
+  FFTProcessor (size_t N);
 
-/* more efficient: low level api */
-void   fftar_float (size_t N, float *in, float *out);
+  /* low level (fast) */
+  void fft (float *in, float *out);
+  void ifft (float *in, float *out);
+
+  /* high level (convenient) */
+  std::vector<std::complex<float>> fft (const std::vector<float>& in);
+  std::vector<float>               ifft (const std::vector<std::complex<float>>& in);
+};
+
 float *new_array_float (size_t N);
 void   free_array_float (float *f);
 

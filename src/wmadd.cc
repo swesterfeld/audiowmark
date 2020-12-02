@@ -169,6 +169,7 @@ class WatermarkSynth
   vector<float> window;
   vector<float> synth_samples;
   bool          first_frame = true;
+  FFTProcessor  fft_processor;
 
   void
   generate_window()
@@ -202,7 +203,8 @@ class WatermarkSynth
   }
 public:
   WatermarkSynth (int n_channels) :
-    n_channels (n_channels)
+    n_channels (n_channels),
+    fft_processor (Params::frame_size)
   {
     generate_window();
     synth_samples.resize (window.size() * n_channels);
@@ -218,7 +220,7 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       {
         /* mix watermark signal to output frame */
-        vector<float> fft_delta_out = ifft (fft_delta_spect[ch]);
+        vector<float> fft_delta_out = fft_processor.ifft (fft_delta_spect[ch]);
 
         for (int dframe = 0; dframe <= 2; dframe++)
           {

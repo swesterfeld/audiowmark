@@ -24,6 +24,7 @@
 #include "random.hh"
 #include "rawinputstream.hh"
 #include "wavdata.hh"
+#include "fft.hh"
 
 #include <assert.h>
 
@@ -121,6 +122,7 @@ class FFTAnalyzer
   std::vector<float> m_window;
   float        *m_frame = nullptr;
   float        *m_frame_fft = nullptr;
+  FFTProcessor  m_fft_processor;
 public:
   FFTAnalyzer (int n_channels);
   ~FFTAnalyzer();

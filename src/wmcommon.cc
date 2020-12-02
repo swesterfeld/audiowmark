@@ -92,7 +92,8 @@ db_from_factor (double factor, double min_dB)
 }
 
 FFTAnalyzer::FFTAnalyzer (int n_channels) :
-  m_n_channels (n_channels)
+  m_n_channels (n_channels),
+  m_fft_processor (Params::frame_size)
 {
   /* generate analysis window */
   m_window.resize (Params::frame_size);
@@ -143,7 +144,7 @@ FFTAnalyzer::run_fft (const vector<float>& samples, size_t start_index)
           pos += m_n_channels;
         }
       /* FFT transform */
-      fftar_float (Params::frame_size, m_frame, m_frame_fft);
+      m_fft_processor.fft (m_frame, m_frame_fft);
 
       /* complex<float> and frame_fft have the same layout in memory */
       const complex<float> *first = (complex<float> *) m_frame_fft;

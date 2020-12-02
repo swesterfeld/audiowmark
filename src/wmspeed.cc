@@ -293,6 +293,8 @@ SpeedSync::prepare_mags()
   SyncFinder sync_finder;
   sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
 
+  FFTProcessor fft_processor (sub_frame_size);
+
   float *in = new_array_float (sub_frame_size);
   float *out = new_array_float (sub_frame_size);
 
@@ -309,7 +311,7 @@ SpeedSync::prepare_mags()
             {
               in[i] = samples[ch + (pos + i) * in_data_sub.n_channels()] * window[i];
             }
-          fftar_float (sub_frame_size, in, out);
+          fft_processor.fft (in, out);
 
           for (int i = Params::min_band; i <= Params::max_band; i++)
             {
