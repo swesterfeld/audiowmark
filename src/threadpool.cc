@@ -23,6 +23,9 @@ ThreadPool::worker_next_job (Job& job)
 {
   std::unique_lock<std::mutex> lck (mutex);
 
+  if (stop_workers)
+    return false;
+
   if (jobs.empty())
     cond.wait (lck);
 
