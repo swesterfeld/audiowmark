@@ -295,8 +295,8 @@ SpeedSync::prepare_mags()
 
   FFTProcessor fft_processor (sub_frame_size);
 
-  float *in = new_array_float (sub_frame_size);
-  float *out = new_array_float (sub_frame_size);
+  float *in = fft_processor.in();
+  float *out = fft_processor.out();
 
   fft_sync_bits.clear();
   size_t pos = 0;
@@ -311,7 +311,7 @@ SpeedSync::prepare_mags()
             {
               in[i] = samples[ch + (pos + i) * in_data_sub.n_channels()] * window[i];
             }
-          fft_processor.fft (in, out);
+          fft_processor.fft();
 
           for (int i = Params::min_band; i <= Params::max_band; i++)
             {
@@ -341,9 +341,6 @@ SpeedSync::prepare_mags()
       fft_sync_bits.push_back (mags);
       pos += sub_sync_search_step;
     }
-
-  free_array_float (in);
-  free_array_float (out);
 }
 
 void

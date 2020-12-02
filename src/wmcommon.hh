@@ -120,12 +120,9 @@ class FFTAnalyzer
 {
   int           m_n_channels = 0;
   std::vector<float> m_window;
-  float        *m_frame = nullptr;
-  float        *m_frame_fft = nullptr;
   FFTProcessor  m_fft_processor;
 public:
   FFTAnalyzer (int n_channels);
-  ~FFTAnalyzer();
 
   std::vector<std::vector<std::complex<float>>> run_fft (const std::vector<float>& samples, size_t start_index);
   std::vector<std::vector<std::complex<float>>> fft_range (const std::vector<float>& samples, size_t start_index, size_t frame_count);

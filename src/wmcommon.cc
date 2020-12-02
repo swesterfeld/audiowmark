@@ -115,21 +115,15 @@ FFTAnalyzer::FFTAnalyzer (int n_channels) :
       m_window[i] *= 2.0 / window_weight;
     }
 
-  /* allocate properly aligned buffers for SIMD */
-  m_frame  = new_array_float (Params::frame_size);
-  m_frame_fft = new_array_float (Params::frame_size);
-}
-
-FFTAnalyzer::~FFTAnalyzer()
-{
-  free_array_float (m_frame);
-  free_array_float (m_frame_fft);
 }
 
 vector<vector<complex<float>>>
 FFTAnalyzer::run_fft (const vector<float>& samples, size_t start_index)
 {
   assert (samples.size() >= (Params::frame_size + start_index) * m_n_channels);
+
+  float *frame     = m_fft_processor.in();
+  float *frame_fft = m_fft_processor.out();
 
   vector<vector<complex<float>>> fft_out;
   for (int ch = 0; ch < m_n_channels; ch++)
@@ -140,14 +134,14 @@ FFTAnalyzer::run_fft (const vector<float>& samples, size_t start_index)
       /* deinterleave frame data and apply window */
       for (size_t x = 0; x < Params::frame_size; x++)
         {
-          m_frame[x] = samples[pos] * m_window[x];
+          frame[x] = samples[pos] * m_window[x];
           pos += m_n_channels;
         }
       /* FFT transform */
-      m_fft_processor.fft (m_frame, m_frame_fft);
+      m_fft_processor.fft();
 
       /* complex<float> and frame_fft have the same layout in memory */
-      const complex<float> *first = (complex<float> *) m_frame_fft;
+      const complex<float> *first = (complex<float> *) frame_fft;
       const complex<float> *last  = first + Params::frame_size / 2 + 1;
       fft_out.emplace_back (first, last);
     }
