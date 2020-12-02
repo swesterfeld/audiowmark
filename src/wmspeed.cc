@@ -154,8 +154,9 @@ private:
   };
   vector<vector<SyncFinder::FrameBit>> sync_bits;
   vector<vector<Mags>> fft_sync_bits;
-  void  prepare_mags();
-  Score compare (double relative_speed);
+
+  void prepare_mags();
+  void compare (double relative_speed);
 
   std::mutex mutex;
   vector<Score> result_scores;
@@ -186,13 +187,7 @@ public:
       {
         const double relative_speed = pow (step, p);
 
-        thread_pool.add_job ([relative_speed, this]()
-          {
-            Score score = compare (relative_speed);
-
-            std::lock_guard<std::mutex> lg (mutex);
-            result_scores.push_back (score);
-          });
+        thread_pool.add_job ([relative_speed, this]() { compare (relative_speed); });
       }
   }
 
@@ -349,7 +344,7 @@ SpeedSync::prepare_mags()
   free_array_float (out);
 }
 
-SpeedSync::Score
+void
 SpeedSync::compare (double relative_speed)
 {
   const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
@@ -420,7 +415,8 @@ SpeedSync::compare (double relative_speed)
         }
     }
   //printf ("%f %f\n", best_score.speed, best_score.quality);
-  return best_score;
+  std::lock_guard<std::mutex> lg (mutex);
+  result_scores.push_back (best_score);
 }
 
 static double
