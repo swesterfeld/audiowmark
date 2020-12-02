@@ -18,13 +18,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <thread>
-#include <vector>
-#include <mutex>
-#include <set>
-#include <functional>
-#include <condition_variable>
-
 #include "threadpool.hh"
 
 int
