@@ -204,7 +204,7 @@ public:
 };
 
 static double
-speed_scan (const WavData& in_data)
+speed_scan (ThreadPool& thread_pool, const WavData& in_data)
 {
   vector<SpeedSync::Score> scores;
 
@@ -216,7 +216,6 @@ speed_scan (const WavData& in_data)
   vector<std::unique_ptr<SpeedSync>> speed_sync;
 
   auto t = get_time();
-  ThreadPool thread_pool;
   for (int c = -n_center_steps; c <= n_center_steps; c++)
     {
       double c_speed = pow (step, c * (n_steps * 2 + 1));
@@ -483,18 +482,19 @@ detect_speed (const WavData& in_data)
       WavData in_clip_short = get_speed_clip (clip_location, in_data, 21 * 1.3);
       WavData in_clip_long  = get_speed_clip (clip_location, in_data, 50 * 1.3);
 
+      ThreadPool thread_pool;
+
       /* first pass:  find approximation for speed */
-      speed = speed_scan (in_clip_short);
+      speed = speed_scan (thread_pool, in_clip_short);
 
       /* second pass: fast refine (not always perfect) */
       double t = get_time();
       SpeedSync speed_sync (in_clip_long, speed, 1.00005, 20, /* seconds */ 50);
-      ThreadPool tp;
-      speed_sync.prepare_job (tp);
-      tp.wait_all();
+      speed_sync.prepare_job (thread_pool);
+      thread_pool.wait_all();
 
-      speed_sync.search (tp);
-      tp.wait_all();
+      speed_sync.search (thread_pool);
+      thread_pool.wait_all();
       auto scores = speed_sync.get_scores();
       sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b)
         {
