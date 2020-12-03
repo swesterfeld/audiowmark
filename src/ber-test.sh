@@ -76,7 +76,7 @@ do
       ((SPEED_SEED++))
       echo in_speed $SPEED
 
-      sox -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
+      sox -D -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
       mv ${AWM_FILE}.speed.wav ${AWM_FILE}.wav
 
       TEST_SPEED_ARGS="--detect-speed --detect-speed-hint $SPEED"
