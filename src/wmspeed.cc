@@ -165,14 +165,20 @@ private:
   const double step;
   const int    n_steps;
   const double seconds;
+  const int    frames_per_block;
 public:
   SpeedSync (const WavData& in_data, double center, double step, int n_steps, double seconds) :
     in_data (in_data),
     center (center),
     step (step),
     n_steps (n_steps),
-    seconds (seconds)
+    seconds (seconds),
+    frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
   {
+    // constructor is run in the main thread; everything that is not thread-safe must happen here
+    SyncFinder sync_finder;
+
+    sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
   }
   void
   prepare_job (ThreadPool& thread_pool)
@@ -290,9 +296,6 @@ SpeedSync::prepare_mags()
       window[i] *= 2.0 / window_weight;
     }
 
-  SyncFinder sync_finder;
-  sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
-
   FFTProcessor fft_processor (sub_frame_size);
 
   float *in = fft_processor.in();
@@ -346,7 +349,6 @@ SpeedSync::prepare_mags()
 void
 SpeedSync::compare (double relative_speed)
 {
-  const int frames_per_block = mark_sync_frame_count() + mark_data_frame_count();
   const int pad_start = frames_per_block * /* HACK */ 4;
   Score best_score;
   // FIXME: pad_start must be scaled with speed
