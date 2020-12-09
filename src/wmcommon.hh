@@ -46,7 +46,6 @@ public:
   static           int  have_key;
 
   static           bool detect_speed;
-  static           bool detect_speed_slow;
   static           double detect_speed_hint;       // for debugging --detect-speed
 
   static           size_t payload_size;            // number of payload bits for the watermark

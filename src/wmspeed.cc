@@ -82,62 +82,6 @@ truncate (const WavData& in_data, double seconds)
     }
   return out_data;
 }
-#if 0
-static double
-detect_speed (const WavData& wav_data, double center, double step, int n_steps, int seconds, double *quality_p)
-{
-  WavData wd_truncated = truncate (wav_data, seconds * 1.5);
-  double best_speed = 1.0;
-  double best_quality = 0;
-
-  int best_hint_step = 0;
-  if (Params::detect_speed_hint > 0)
-    {
-      double best_dist = 1000;
-      for (int p = -n_steps; p <= n_steps; p++)
-        {
-          double dist = fabs (center * pow (step, p) - Params::detect_speed_hint);
-          if (dist < best_dist)
-            {
-              best_hint_step = p;
-              best_dist      = dist;
-            }
-        }
-    }
-  printf ("## range [%f..%f], n_steps=%d\n", center * pow (step, -n_steps), center * pow (step, n_steps), n_steps);
-  for (int p = -n_steps; p <= n_steps; p++)
-    {
-      if (Params::detect_speed_hint > 0)
-        if (abs (p - best_hint_step) > 2)
-          continue;
-
-      double speed = center * pow (step, p);
-
-      WavData wd_resampled = resample_ratio (wd_truncated, speed, Params::mark_sample_rate);
-      wd_resampled = truncate (wd_resampled, seconds);
-
-      ResultSet result_set;
-      ClipDecoder clip_decoder;
-      clip_decoder.run (wd_resampled, result_set);
-      printf ("%f %f         ", speed, result_set.best_quality());
-      if (result_set.best_quality() > 0)
-        {
-          printf ("\n");
-          if (result_set.best_quality() > best_quality)
-            {
-              best_quality = result_set.best_quality();
-              best_speed = speed;
-            }
-        }
-      else
-        printf ("\r");
-      fflush (stdout);
-    }
-  if (quality_p)
-    *quality_p = best_quality;
-  return best_speed;
-}
-#endif
 
 class SpeedSync
 {
@@ -464,49 +408,32 @@ get_speed_clip (double location, const WavData& in_data, double clip_seconds)
 double
 detect_speed (const WavData& in_data)
 {
-  if (Params::detect_speed_slow) /* SLOW */
+  double clip_location = get_clip_location (in_data);
+
+  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+  WavData in_clip_short = get_speed_clip (clip_location, in_data, 21 * 1.3);
+  WavData in_clip_long  = get_speed_clip (clip_location, in_data, 50 * 1.3);
+
+  ThreadPool thread_pool;
+
+  /* first pass:  find approximation for speed */
+  const SpeedScanParams scan1
     {
-#if 0
-      /* first pass:  find approximation for speed */
-      speed = detect_speed (in_data, 1.0, 1.001, /* steps */ 200, /* seconds */ 15, nullptr);
+      .seconds        = 21,
+      .step           = 1.0007,
+      .n_steps        = 5,
+      .n_center_steps = 28
+    };
+  double speed = speed_scan (thread_pool, in_clip_short, scan1, /* start speed */ 1.0);
 
-      /* second pass: refine speed */
-      speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50, nullptr);
-#endif
-      return 42; // FIXME
-    }
-  else /* better performance, less accurate */
+  /* second pass: fast refine (not always perfect) */
+  const SpeedScanParams scan2
     {
-      double speed = 1.0;
-      double clip_location = get_clip_location (in_data);
-
-      /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-      WavData in_clip_short = get_speed_clip (clip_location, in_data, 21 * 1.3);
-      WavData in_clip_long  = get_speed_clip (clip_location, in_data, 50 * 1.3);
-
-      ThreadPool thread_pool;
-
-      /* first pass:  find approximation for speed */
-      const SpeedScanParams scan1
-        {
-          .seconds        = 21,
-          .step           = 1.0007,
-          .n_steps        = 5,
-          .n_center_steps = 28
-        };
-      speed = speed_scan (thread_pool, in_clip_short, scan1, speed);
-
-      /* second pass: fast refine (not always perfect) */
-      const SpeedScanParams scan2
-        {
-          .seconds        = 50,
-          .step           = 1.00005,
-          .n_steps        = 20,
-          .n_center_steps = 0
-        };
-      speed = speed_scan (thread_pool, in_clip_long, scan2, speed);
-      return speed;
-    }
+      .seconds        = 50,
+      .step           = 1.00005,
+      .n_steps        = 20,
+      .n_center_steps = 0
+    };
+  speed = speed_scan (thread_pool, in_clip_long, scan2, speed);
+  return speed;
 }
-
-

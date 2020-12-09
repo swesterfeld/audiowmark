@@ -590,7 +590,7 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
 {
 
   WavData wav_data;
-  if (Params::detect_speed || Params::detect_speed_slow)
+  if (Params::detect_speed)
     {
       double speed = detect_speed (in_data);
       printf ("## delta %.5f %%\n", 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
