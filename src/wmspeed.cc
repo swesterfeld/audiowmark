@@ -202,7 +202,7 @@ speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanPara
   // we could search the N best matches, but using the best result works well in practice
   SpeedSync::Score best_s = scores[0];
 
-  printf ("## %f %f\n", best_s.speed, best_s.quality);
+  printf ("detect_speed_%.0f %f %f %f\n", params.seconds, best_s.speed, best_s.quality, 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
   return best_s.speed;
 }
 
