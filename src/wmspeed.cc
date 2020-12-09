@@ -213,7 +213,7 @@ struct SpeedScanParams
 };
 
 static double
-speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanParams& params)
+speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanParams& params, double speed)
 {
   vector<SpeedSync::Score> scores;
 
@@ -224,7 +224,7 @@ speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanPara
   auto t = get_time();
   for (int c = -params.n_center_steps; c <= params.n_center_steps; c++)
     {
-      double c_speed = pow (params.step, c * (params.n_steps * 2 + 1));
+      double c_speed = speed * pow (params.step, c * (params.n_steps * 2 + 1));
 
       speed_sync.push_back (std::make_unique<SpeedSync> (in_data, c_speed, params.step, params.n_steps, params.seconds));
     }
@@ -464,7 +464,6 @@ get_speed_clip (double location, const WavData& in_data, double clip_seconds)
 double
 detect_speed (const WavData& in_data)
 {
-  double speed;
   if (Params::detect_speed_slow) /* SLOW */
     {
 #if 0
@@ -474,10 +473,11 @@ detect_speed (const WavData& in_data)
       /* second pass: refine speed */
       speed = detect_speed (in_data, speed, 1.00005, /* steps */ 20,  /* seconds */ 50, nullptr);
 #endif
-      speed = 42; // FIXME
+      return 42; // FIXME
     }
   else /* better performance, less accurate */
     {
+      double speed = 1.0;
       double clip_location = get_clip_location (in_data);
 
       /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
@@ -494,28 +494,19 @@ detect_speed (const WavData& in_data)
           .n_steps        = 5,
           .n_center_steps = 28
         };
-      speed = speed_scan (thread_pool, in_clip_short, scan1);
+      speed = speed_scan (thread_pool, in_clip_short, scan1, speed);
 
       /* second pass: fast refine (not always perfect) */
-      double t = get_time();
-      SpeedSync speed_sync (in_clip_long, speed, 1.00005, 20, /* seconds */ 50);
-      speed_sync.prepare_job (thread_pool);
-      thread_pool.wait_all();
-
-      speed_sync.search (thread_pool);
-      thread_pool.wait_all();
-      auto scores = speed_sync.get_scores();
-      sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b)
+      const SpeedScanParams scan2
         {
-          if (s_a.quality == s_b.quality)
-            return s_a.speed > s_b.speed;
-           return s_a.quality > s_b.quality;
-        });
-      if (!scores.empty())
-        speed = scores[0].speed;
-      printf ("## time for 2nd pass: %f\n", get_time() - t);
+          .seconds        = 50,
+          .step           = 1.00005,
+          .n_steps        = 20,
+          .n_center_steps = 0
+        };
+      speed = speed_scan (thread_pool, in_clip_long, scan2, speed);
+      return speed;
     }
-  return speed;
 }
 
 
