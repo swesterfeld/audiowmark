@@ -204,24 +204,29 @@ public:
   }
 };
 
+struct SpeedScanParams
+{
+  double seconds        = 0;
+  double step           = 0;
+  int    n_steps        = 0;
+  int    n_center_steps = 0;
+};
+
 static double
-speed_scan (ThreadPool& thread_pool, const WavData& in_data)
+speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanParams& params)
 {
   vector<SpeedSync::Score> scores;
 
   /* n_center_steps / n_steps settings: speed approximately 0.8..1.25 */
-  const int n_center_steps = 28;
-  const int n_steps = 5;
-  const double step = 1.0007;
 
   vector<std::unique_ptr<SpeedSync>> speed_sync;
 
   auto t = get_time();
-  for (int c = -n_center_steps; c <= n_center_steps; c++)
+  for (int c = -params.n_center_steps; c <= params.n_center_steps; c++)
     {
-      double c_speed = pow (step, c * (n_steps * 2 + 1));
+      double c_speed = pow (params.step, c * (params.n_steps * 2 + 1));
 
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_data, c_speed, step, n_steps, /* seconds */ 21));
+      speed_sync.push_back (std::make_unique<SpeedSync> (in_data, c_speed, params.step, params.n_steps, params.seconds));
     }
 
   for (auto& s : speed_sync)
@@ -482,7 +487,14 @@ detect_speed (const WavData& in_data)
       ThreadPool thread_pool;
 
       /* first pass:  find approximation for speed */
-      speed = speed_scan (thread_pool, in_clip_short);
+      const SpeedScanParams scan1
+        {
+          .seconds        = 21,
+          .step           = 1.0007,
+          .n_steps        = 5,
+          .n_center_steps = 28
+        };
+      speed = speed_scan (thread_pool, in_clip_short, scan1);
 
       /* second pass: fast refine (not always perfect) */
       double t = get_time();
