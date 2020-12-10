@@ -302,8 +302,12 @@ SpeedSync::prepare_mags()
 void
 SpeedSync::compare (double relative_speed)
 {
-  const int pad_start = frames_per_block * /* HACK */ 4;
+  const int steps_per_frame = Params::frame_size / Params::sync_search_step;
+  const int pad_start = frames_per_block * steps_per_frame;
+  const double relative_speed_inv = 1 / relative_speed;
   Score best_score;
+
+  assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
   // FIXME: pad_start must be scaled with speed
   for (int offset = -pad_start; offset < 0; offset++)
     {
@@ -319,15 +323,18 @@ SpeedSync::compare (double relative_speed)
           float dmag = 0;
           for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
             {
-              const int index1 = (offset + frame_bits[f].frame * /* HACK */ 4) / relative_speed;
+              int index = offset + frame_bits[f].frame * steps_per_frame;
+
+              const int index1 = index * relative_speed_inv;
               if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index1][mi].umag;
                   dmag += fft_sync_bits[index1][mi].dmag;
                   frame_bit_count++;
                 }
-              // FIXME: probably better compute double index
-              const int index2 = index1 + (frames_per_block * /* HACK */ 4) / relative_speed;
+              index += frames_per_block * steps_per_frame;
+
+              const int index2 = index * relative_speed_inv;
               if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index2][mi].dmag;
