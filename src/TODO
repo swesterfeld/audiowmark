@@ -1,5 +1,4 @@
 speed detection:
- - fft planner should only run once per size
  - double decode
  - propagate debug flag from "cmp" to speed detect
  - rename methods => add_search_jobs()...
@@ -7,7 +6,6 @@ speed detection:
  - maybe truncate cleanup
  - SpeedSync should take struct arg
  - remove pad start scaling
- - move get speed clip to speed_scan
  - average speed if more than one best-quality 50s estimate is produced
  - test code
  - document in README

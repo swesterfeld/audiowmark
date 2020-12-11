@@ -27,6 +27,8 @@ using std::complex;
 using std::map;
 
 static std::mutex fft_planner_mutex;
+static std::map<size_t, fftwf_plan> fft_plan_map;
+static std::map<size_t, fftwf_plan> ifft_plan_map;
 
 FFTProcessor::FFTProcessor (size_t N)
 {
@@ -37,8 +39,18 @@ FFTProcessor::FFTProcessor (size_t N)
   m_in  = static_cast<float *> (fftwf_malloc (sizeof (float) * N_2));
   m_out = static_cast<float *> (fftwf_malloc (sizeof (float) * N_2));
 
-  plan_fft = fftwf_plan_dft_r2c_1d (N, m_in, (fftwf_complex *) m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
-  plan_ifft = fftwf_plan_dft_c2r_1d (N, (fftwf_complex *) m_in, m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+  /* plan if not done already */
+  fftwf_plan& pfft = fft_plan_map[N];
+  if (!pfft)
+    pfft = fftwf_plan_dft_r2c_1d (N, m_in, (fftwf_complex *) m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+
+  fftwf_plan& pifft = ifft_plan_map[N];
+  if (!pifft)
+    pifft = fftwf_plan_dft_c2r_1d (N, (fftwf_complex *) m_in, m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+
+  /* store plan for size N as member variables */
+  plan_fft = pfft;
+  plan_ifft = pifft;
 
   // we could add code for saving plans here, and use patient planning
 }
