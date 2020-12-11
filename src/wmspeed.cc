@@ -26,6 +26,7 @@
 
 using std::vector;
 using std::sort;
+using std::max;
 
 /* FIXME: dedup this template */
 template<class R>
@@ -192,22 +193,34 @@ speed_scan (ThreadPool& thread_pool, const WavData& in_data, const SpeedScanPara
       vector<SpeedSync::Score> step_scores = s->get_scores();
       scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
-  sort (scores.begin(), scores.end(), [] (SpeedSync::Score s_a, SpeedSync::Score s_b)
-    {
-      if (s_a.quality == s_b.quality)
-        return s_a.speed > s_b.speed;
-       return s_a.quality > s_b.quality;
-    });
 
-  // we could search the N best matches, but using the best result works well in practice
-  SpeedSync::Score best_s = scores[0];
+  /* output best result, or: if there is not a unique best result, average all best results */
+
+  double best_quality = 0;
+  for (auto score : scores)
+    best_quality = max (best_quality, score.quality);
+
+  double best_speed = 0;
+  int speed_count = 0;
+  for (auto score : scores)
+    {
+      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
+
+      if (score.quality >= best_quality * factor)
+        {
+          best_speed += score.speed;
+          speed_count++;
+        }
+    }
+  if (speed_count)
+    best_speed /= speed_count;
 
   printf ("detect_speed_%.0f %f %f %f\n",
     params.seconds,
-    best_s.speed,
-    best_s.quality,
-    100 * fabs (best_s.speed - Params::detect_speed_hint) / Params::detect_speed_hint);
-  return best_s.speed;
+    best_speed,
+    best_quality,
+    100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint);
+  return best_speed;
 }
 
 /* FIXME: is this the best choice */
