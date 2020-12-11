@@ -8,6 +8,7 @@ speed detection:
  - SpeedSync should take struct arg
  - remove pad start scaling
  - move get speed clip to speed_scan
+ - average speed if more than one best-quality 50s estimate is produced
  - test code
  - document in README
  - analyze remaining variants
