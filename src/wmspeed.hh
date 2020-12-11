@@ -20,6 +20,6 @@
 
 #include "wavdata.hh"
 
-double detect_speed (const WavData& in_data);
+double detect_speed (const WavData& in_data, bool print_results);
 
 #endif /* AUDIOWMARK_WM_SPEED_HH */

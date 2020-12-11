@@ -592,9 +592,7 @@ decode_and_report (const WavData& in_data, const string& orig_pattern)
   WavData wav_data;
   if (Params::detect_speed)
     {
-      double speed = detect_speed (in_data);
-      printf ("## delta %.5f %%\n", 100 * fabs (speed - Params::detect_speed_hint) / Params::detect_speed_hint);
-      printf ("## speed refined %f\n", speed);
+      double speed = detect_speed (in_data, !orig_pattern.empty());
 
       int r = Params::mark_sample_rate * speed;
       if (r != Params::mark_sample_rate)

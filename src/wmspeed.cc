@@ -175,14 +175,14 @@ public:
 };
 
 static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed)
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
 
-  vector<std::unique_ptr<SpeedSync>> speed_sync;
+  auto t0 = get_time();
 
-  auto t = get_time();
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
   for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
     {
       double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
@@ -192,17 +192,15 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   for (auto& s : speed_sync)
     s->start_prepare_job (thread_pool);
-
   thread_pool.wait_all();
-  printf ("## wait prepare jobs: %f\n", get_time() - t);
-  t=get_time();
+
+  auto t1 = get_time();
 
   for (auto& s : speed_sync)
-    s->add_search_jobs (thread_pool);
-
+    s->start_search_jobs (thread_pool);
   thread_pool.wait_all();
-  printf ("## wait search jobs: %f\n", get_time() - t);
-  t=get_time();
+
+  auto t2 = get_time();
 
   vector<SpeedSync::Score> scores;
   for (auto& s : speed_sync)
@@ -232,11 +230,15 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   if (speed_count)
     best_speed /= speed_count;
 
-  printf ("detect_speed_%.0f %f %f %f\n",
-    scan_params.seconds,
-    best_speed,
-    best_quality,
-    100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint);
+  if (print_results)
+    {
+      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
+        scan_params.seconds,
+        best_speed,
+        best_quality,
+        100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint,
+        t1 - t0, t2 - t1);
+    }
   return best_speed;
 }
 
@@ -427,23 +429,23 @@ get_clip_location (const WavData& in_data)
 }
 
 double
-detect_speed (const WavData& in_data)
+detect_speed (const WavData& in_data, bool print_results)
 {
   double clip_location = get_clip_location (in_data);
 
   ThreadPool thread_pool;
 
-  /* n_center_steps / n_steps settings: speed approximately 0.8..1.25 */
-
   /* first pass:  find approximation for speed */
   const SpeedScanParams scan1
     {
       .seconds        = 21,
+
+      /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.0007,
       .n_steps        = 5,
       .n_center_steps = 28
     };
-  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0);
+  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0, print_results);
 
   /* second pass: fast refine (not always perfect) */
   const SpeedScanParams scan2
@@ -453,6 +455,6 @@ detect_speed (const WavData& in_data)
       .n_steps        = 20,
       .n_center_steps = 0
     };
-  speed = speed_scan (thread_pool, clip_location, in_data, scan2, speed);
+  speed = speed_scan (thread_pool, clip_location, in_data, scan2, speed, print_results);
   return speed;
 }

@@ -1,6 +1,5 @@
 speed detection:
  - double decode
- - propagate debug flag from "cmp" to speed detect
  - cleanup resampler api
  - maybe truncate cleanup
  - remove pad start scaling
