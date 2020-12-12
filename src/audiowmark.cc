@@ -690,6 +690,8 @@ main (int argc, char **argv)
     }
   else if (ap.parse_cmd ("test-clip"))
     {
+      parse_shared_options (ap);
+
       if (ap.parse_args (4, args))
         return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
     }
