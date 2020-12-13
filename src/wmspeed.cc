@@ -133,73 +133,6 @@ public:
   }
 };
 
-static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
-{
-  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
-
-  auto t0 = get_time();
-
-  vector<std::unique_ptr<SpeedSync>> speed_sync;
-  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
-    {
-      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
-
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
-    }
-
-  for (auto& s : speed_sync)
-    s->start_prepare_job (thread_pool);
-  thread_pool.wait_all();
-
-  auto t1 = get_time();
-
-  for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool);
-  thread_pool.wait_all();
-
-  auto t2 = get_time();
-
-  vector<SpeedSync::Score> scores;
-  for (auto& s : speed_sync)
-    {
-      vector<SpeedSync::Score> step_scores = s->get_scores();
-      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
-    }
-
-  /* output best result, or: if there is not a unique best result, average all best results */
-
-  double best_quality = 0;
-  for (auto score : scores)
-    best_quality = max (best_quality, score.quality);
-
-  double best_speed = 0;
-  int speed_count = 0;
-  for (auto score : scores)
-    {
-      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
-
-      if (score.quality >= best_quality * factor)
-        {
-          best_speed += score.speed;
-          speed_count++;
-        }
-    }
-  if (speed_count)
-    best_speed /= speed_count;
-
-  if (print_results)
-    {
-      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
-        scan_params.seconds,
-        best_speed,
-        best_quality,
-        100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint,
-        t1 - t0, t2 - t1);
-    }
-  return best_speed;
-}
 
 /* FIXME: is this the best choice */
 inline double
@@ -369,6 +302,74 @@ SpeedSync::compare (double relative_speed)
   //printf ("%f %f\n", best_score.speed, best_score.quality);
   std::lock_guard<std::mutex> lg (mutex);
   result_scores.push_back (best_score);
+}
+
+static double
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
+{
+  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
+
+  auto t0 = get_time();
+
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
+  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+    {
+      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
+
+      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
+    }
+
+  for (auto& s : speed_sync)
+    s->start_prepare_job (thread_pool);
+  thread_pool.wait_all();
+
+  auto t1 = get_time();
+
+  for (auto& s : speed_sync)
+    s->start_search_jobs (thread_pool);
+  thread_pool.wait_all();
+
+  auto t2 = get_time();
+
+  vector<SpeedSync::Score> scores;
+  for (auto& s : speed_sync)
+    {
+      vector<SpeedSync::Score> step_scores = s->get_scores();
+      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
+    }
+
+  /* output best result, or: if there is not a unique best result, average all best results */
+
+  double best_quality = 0;
+  for (auto score : scores)
+    best_quality = max (best_quality, score.quality);
+
+  double best_speed = 0;
+  int speed_count = 0;
+  for (auto score : scores)
+    {
+      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
+
+      if (score.quality >= best_quality * factor)
+        {
+          best_speed += score.speed;
+          speed_count++;
+        }
+    }
+  if (speed_count)
+    best_speed /= speed_count;
+
+  if (print_results)
+    {
+      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
+        scan_params.seconds,
+        best_speed,
+        best_quality,
+        100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint,
+        t1 - t0, t2 - t1);
+    }
+  return best_speed;
 }
 
 static double
