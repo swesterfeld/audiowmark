@@ -133,17 +133,6 @@ public:
   }
 };
 
-
-/* FIXME: is this the best choice */
-inline double
-window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
-{
-  if (fabs (x) > 1)
-    return 0;
-
-  return 0.54 + 0.46 * cos (M_PI * x);
-}
-
 void
 SpeedSync::prepare_mags()
 {
@@ -161,6 +150,7 @@ SpeedSync::prepare_mags()
     {
       const double fsize_2 = sub_frame_size / 2.0;
       // const double win =  window_cos ((i - fsize_2) / fsize_2);
+      /* FIXME: is this the best choice */
       const double win = window_hamming ((i - fsize_2) / fsize_2);
       //const double win = 1;
       window[i] = win;

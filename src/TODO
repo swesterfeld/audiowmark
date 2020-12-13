@@ -2,10 +2,8 @@ speed detection:
  - double decode
  - maybe truncate cleanup
  - remove pad start scaling
- - average speed if more than one best-quality 50s estimate is produced
  - test code
  - document in README
- - analyze remaining variants
 
 possible improvements:
 - dynamic bit strength

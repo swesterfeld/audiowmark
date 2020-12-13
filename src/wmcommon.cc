@@ -49,23 +49,6 @@ std::string Params::output_label;
 using std::vector;
 using std::complex;
 
-inline double
-window_cos (double x) /* von Hann window */
-{
-  if (fabs (x) > 1)
-    return 0;
-  return 0.5 * cos (x * M_PI) + 0.5;
-}
-
-inline double
-window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
-{
-  if (fabs (x) > 1)
-    return 0;
-
-  return 0.54 + 0.46 * cos (M_PI * x);
-}
-
 /*
  * glibc log2f is a lot faster than glibc log10
  */

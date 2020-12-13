@@ -168,6 +168,23 @@ randomize_bit_order (const std::vector<T>& bit_vec, bool encode)
   return out_bits;
 }
 
+inline double
+window_cos (double x) /* von Hann window */
+{
+  if (fabs (x) > 1)
+    return 0;
+  return 0.5 * cos (x * M_PI) + 0.5;
+}
+
+inline double
+window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
+{
+  if (fabs (x) > 1)
+    return 0;
+
+  return 0.54 + 0.46 * cos (M_PI * x);
+}
+
 int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);
 int add_watermark (const std::string& infile, const std::string& outfile, const std::string& bits);
 int get_watermark (const std::string& infile, const std::string& orig_pattern);
