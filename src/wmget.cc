@@ -555,6 +555,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       // speeds closer to 1.0 than this usually work without stretching before decode
       if (speed < 0.9999 || speed > 1.0001)
         {
+          printf ("speed %.6f\n", speed);
           WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
 
           result_set.set_speed_pattern (true);
