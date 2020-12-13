@@ -1,9 +1,8 @@
 #!/bin/bash
 
-SEEDS=$(seq 5)
+SEEDS=$(seq 8)
 STRENGTHS="10 15"
-QUALITIES="128 256"
-CLIPS="15 30 1000"
+CLIPS="15 30"
 
 echo -n "all:"
 
@@ -11,13 +10,13 @@ for SEED in $SEEDS
 do
   for STRENGTH in $STRENGTHS
   do
-    for QUALITY in $QUALITIES
+    # clips
+    for CLIP in $CLIPS
     do
-      for CLIP in $CLIPS
-      do
-        echo -n " speed-$CLIP-$STRENGTH-$QUALITY-$SEED"
-      done
+      echo -n " speed-$CLIP-$STRENGTH-$SEED"
     done
+    # full file
+    echo -n " speed-$STRENGTH-$SEED"
   done
 done
 
@@ -28,16 +27,20 @@ for SEED in $SEEDS
 do
   for STRENGTH in $STRENGTHS
   do
-    for QUALITY in $QUALITIES
+    # clips
+    for CLIP in $CLIPS
     do
-      for CLIP in $CLIPS
-      do
-        FILE="speed-$CLIP-$STRENGTH-$QUALITY-$SEED"
-        echo "$FILE:"
-        echo -e "\t( cd ..; AWM_RAND_PATTERN=1 AWM_SET=huge2 AWM_PARAMS='--strength $STRENGTH' AWM_SPEED=1 AWM_CLIP='$CLIP' AWM_SEEDS=$SEED AWM_FILE='t-$FILE' ber-test.sh mp3 $QUALITY ) >x$FILE"
-        echo -e "\tmv x$FILE $FILE"
-        echo
-      done
+      FILE="speed-$CLIP-$STRENGTH-$SEED"
+      echo "$FILE:"
+      echo -e "\t( cd ..; AWM_RAND_PATTERN=1 AWM_SET=huge2 AWM_PARAMS='--strength $STRENGTH' AWM_SPEED=1 AWM_CLIP='$CLIP' AWM_SEEDS=$SEED AWM_FILE='t-$FILE' ber-test.sh mp3 128 ) >x$FILE"
+      echo -e "\tmv x$FILE $FILE"
+      echo
     done
+    # full file
+    FILE="speed-$STRENGTH-$SEED"
+    echo "$FILE:"
+    echo -e "\t( cd ..; AWM_RAND_PATTERN=1 AWM_SET=huge2 AWM_PARAMS='--strength $STRENGTH' AWM_SPEED=1 AWM_SEEDS=$SEED AWM_FILE='t-$FILE' ber-test.sh mp3 128 ) >x$FILE"
+    echo -e "\tmv x$FILE $FILE"
+    echo
   done
 done
