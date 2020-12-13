@@ -1,6 +1,5 @@
 speed detection:
  - double decode
- - cleanup resampler api
  - maybe truncate cleanup
  - remove pad start scaling
  - average speed if more than one best-quality 50s estimate is produced

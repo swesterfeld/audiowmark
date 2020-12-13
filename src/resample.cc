@@ -89,4 +89,22 @@ resample (const WavData& wav_data, int rate)
   exit (1);
 }
 
+WavData
+resample_ratio (const WavData& wav_data, double ratio, int new_rate)
+{
+  const int hlen = 16;
+  const vector<float>& in = wav_data.samples();
+  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+
+  VResampler vresampler;
+  if (vresampler.setup (ratio, wav_data.n_channels(), hlen) != 0)
+    {
+      error ("audiowmark: failed to setup vresampler with ratio=%f\n", ratio);
+      exit (1);
+    }
+
+  process_resampler (vresampler, in, out);
+  return WavData (out, wav_data.n_channels(), new_rate, wav_data.bit_depth());
+}
+
 

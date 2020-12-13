@@ -20,54 +20,13 @@
 #include "syncfinder.hh"
 #include "threadpool.hh"
 #include "fft.hh"
+#include "resample.hh"
 
 #include <algorithm>
-#include <zita-resampler/vresampler.h>
 
 using std::vector;
 using std::sort;
 using std::max;
-
-/* FIXME: dedup this template */
-template<class R>
-static void
-process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
-{
-  resampler.out_count = out.size() / resampler.nchan();
-  resampler.out_data = &out[0];
-
-  /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
-  resampler.inp_count = resampler.inpsize () / 2 - 1;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-
-  resampler.inp_count = in.size() / resampler.nchan();
-  resampler.inp_data = (float *) &in[0];
-  resampler.process();
-
-  /* zita needs k/2 samples after the actual input */
-  resampler.inp_count = resampler.inpsize() / 2;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-}
-
-static WavData
-resample_ratio (const WavData& wav_data, double ratio, int new_rate)
-{
-  const int hlen = 16;
-  const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
-
-  VResampler vresampler;
-  if (vresampler.setup (ratio, wav_data.n_channels(), hlen) != 0)
-    {
-      error ("audiowmark: failed to setup vresampler with ratio=%f\n", ratio);
-      exit (1);
-    }
-
-  process_resampler (vresampler, in, out);
-  return WavData (out, wav_data.n_channels(), new_rate, wav_data.bit_depth());
-}
 
 static WavData
 truncate (const WavData& in_data, double seconds)
