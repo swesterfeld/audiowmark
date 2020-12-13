@@ -592,9 +592,9 @@ parse_get_options (ArgParser& ap)
     {
       Params::detect_speed = true;
     }
-  if (ap.parse_opt ("--detect-speed-hint", f))
+  if (ap.parse_opt ("--test-speed", f))
     {
-      Params::detect_speed_hint = f;
+      Params::test_speed = f;
     }
 }
 

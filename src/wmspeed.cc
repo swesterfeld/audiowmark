@@ -356,7 +356,7 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
         scan_params.seconds,
         best_speed,
         best_quality,
-        100 * fabs (best_speed - Params::detect_speed_hint) / Params::detect_speed_hint,
+        100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
         t1 - t0, t2 - t1);
     }
   return best_speed;

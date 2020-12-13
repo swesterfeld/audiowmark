@@ -79,7 +79,7 @@ do
       sox -D -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
       mv ${AWM_FILE}.speed.wav ${AWM_FILE}.wav
 
-      TEST_SPEED_ARGS="--detect-speed --detect-speed-hint $SPEED"
+      TEST_SPEED_ARGS="--detect-speed --test-speed $SPEED"
     else
       TEST_SPEED_ARGS=""
     fi
