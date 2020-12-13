@@ -18,15 +18,13 @@
 #include <string>
 #include <algorithm>
 
-#include <zita-resampler/resampler.h>
-#include <zita-resampler/vresampler.h>
-
 #include "wavdata.hh"
 #include "wmcommon.hh"
 #include "wmspeed.hh"
 #include "convcode.hh"
 #include "shortcode.hh"
 #include "syncfinder.hh"
+#include "resample.hh"
 #include "fft.hh"
 
 using std::string;
@@ -34,70 +32,6 @@ using std::vector;
 using std::min;
 using std::max;
 using std::complex;
-
-template<class R>
-static void
-process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
-{
-  resampler.out_count = out.size() / resampler.nchan();
-  resampler.out_data = &out[0];
-
-  /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
-  resampler.inp_count = resampler.inpsize () / 2 - 1;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-
-  resampler.inp_count = in.size() / resampler.nchan();
-  resampler.inp_data = (float *) &in[0];
-  resampler.process();
-
-  /* zita needs k/2 samples after the actual input */
-  resampler.inp_count = resampler.inpsize() / 2;
-  resampler.inp_data  = nullptr;
-  resampler.process();
-}
-
-static WavData
-resample (const WavData& wav_data, int rate)
-{
-  /* in our application, resampling should only be called if it is necessary
-   * since using the resampler with input rate == output rate would be slow
-   */
-  assert (rate != wav_data.sample_rate());
-
-  const int hlen = 16;
-  const double ratio = double (rate) / wav_data.sample_rate();
-
-  const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
-
-  /* zita-resampler provides two resampling algorithms
-   *
-   * a fast optimized version: Resampler
-   *   this is an optimized version, which works for many common cases,
-   *   like resampling between 22050, 32000, 44100, 48000, 96000 Hz
-   *
-   * a slower version: VResampler
-   *   this works for arbitary rates (like 33333 -> 44100 resampling)
-   *
-   * so we try using Resampler, and if that fails fall back to VResampler
-   */
-  Resampler resampler;
-  if (resampler.setup (wav_data.sample_rate(), rate, wav_data.n_channels(), hlen) == 0)
-    {
-      process_resampler (resampler, in, out);
-      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
-    }
-
-  VResampler vresampler;
-  if (vresampler.setup (ratio, wav_data.n_channels(), hlen) == 0)
-    {
-      process_resampler (vresampler, in, out);
-      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
-    }
-  error ("audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
-  exit (1);
-}
 
 static vector<float>
 normalize_soft_bits (const vector<float>& soft_bits)
