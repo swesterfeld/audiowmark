@@ -1,5 +1,4 @@
 speed detection:
- - double decode
  - maybe truncate cleanup
  - remove pad start scaling
  - test code

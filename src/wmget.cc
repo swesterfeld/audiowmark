@@ -141,11 +141,18 @@ public:
     float             decode_error = 0;
     SyncFinder::Score sync_score;
     Type              type;
+    bool              speed_pattern;
   };
 private:
   vector<Pattern> patterns;
+  bool            speed_pattern = false;
 
 public:
+  void
+  set_speed_pattern (bool sp)
+  {
+    speed_pattern = sp;
+  }
   void
   add_pattern (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
   {
@@ -154,6 +161,7 @@ public:
     p.bit_vec = bit_vec;
     p.decode_error = decode_error;
     p.type = pattern_type;
+    p.speed_pattern = speed_pattern;
 
     patterns.push_back (p);
   }
@@ -172,8 +180,13 @@ public:
       {
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
-            printf ("pattern   all %s %.3f %.3f\n", bit_vec_to_str (pattern.bit_vec).c_str(),
-                                                    pattern.sync_score.quality, pattern.decode_error);
+            const char *extra = "";
+            if (pattern.speed_pattern)
+              extra = " SPEED";
+
+            printf ("pattern   all %s %.3f %.3f%s\n", bit_vec_to_str (pattern.bit_vec).c_str(),
+                                                      pattern.sync_score.quality, pattern.decode_error,
+                                                      extra);
           }
         else
           {
@@ -190,6 +203,8 @@ public:
               }
             if (pattern.type == Type::CLIP)
               block_str = "CLIP-" + block_str;
+            if (pattern.speed_pattern)
+              block_str += "-SPEED";
 
             const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
             printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (pattern.bit_vec).c_str(),
@@ -520,25 +535,37 @@ public:
 };
 
 static int
-decode_and_report (const WavData& in_data, const string& orig_pattern)
+decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
+  ResultSet result_set;
 
-  WavData wav_data;
+  /*
+   * The strategy for integrating speed detection into decoding is this:
+   *  - we always (unconditionally) try to decode the  watermark on the original wav data
+   *  - if detected speed is somewhat different than 1.0, we also try to decode stretched data
+   *  - we report all normal and speed results we get
+   *
+   * The reason to do it this way is that the detected speed may be wrong (on short clips)
+   * and we don't want to loose a successful clip decoder match in this case.
+   */
   if (Params::detect_speed)
     {
-      double speed = detect_speed (in_data, !orig_pattern.empty());
+      double speed = detect_speed (wav_data, !orig_pattern.empty());
 
-      int r = Params::mark_sample_rate * speed;
-      if (r != Params::mark_sample_rate)
-        wav_data = resample (in_data, Params::mark_sample_rate * speed);
-      else
-        wav_data = in_data;
+      // speeds closer to 1.0 than this usually work without stretching before decode
+      if (speed < 0.9999 || speed > 1.0001)
+        {
+          WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
+
+          result_set.set_speed_pattern (true);
+          BlockDecoder block_decoder;
+          block_decoder.run (wav_data_speed, result_set);
+
+          ClipDecoder clip_decoder;
+          clip_decoder.run (wav_data_speed, result_set);
+          result_set.set_speed_pattern (false);
+        }
     }
-  else
-    {
-      wav_data = in_data;
-    }
-  ResultSet result_set;
 
   BlockDecoder block_decoder;
   block_decoder.run (wav_data, result_set);
