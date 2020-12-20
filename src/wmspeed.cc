@@ -388,7 +388,7 @@ detect_speed (const WavData& in_data, bool print_results)
   /* first pass:  find approximation for speed */
   const SpeedScanParams scan1
     {
-      .seconds        = 21,
+      .seconds        = 25,
 
       /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.0007,
