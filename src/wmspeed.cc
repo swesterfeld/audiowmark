@@ -240,7 +240,7 @@ SpeedSync::compare (double relative_speed)
             {
               int index = offset + frame_bits[f].frame * steps_per_frame;
 
-              const int index1 = index * relative_speed_inv;
+              const int index1 = lrint (index * relative_speed_inv);
               if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index1][mi].umag;
@@ -249,7 +249,7 @@ SpeedSync::compare (double relative_speed)
                 }
               index += frames_per_block * steps_per_frame;
 
-              const int index2 = index * relative_speed_inv;
+              const int index2 = lrint (index * relative_speed_inv);
               if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
                 {
                   umag += fft_sync_bits[index2][mi].dmag;
