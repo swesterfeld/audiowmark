@@ -218,12 +218,12 @@ void
 SpeedSync::compare (double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
-  const int pad_start = frames_per_block * steps_per_frame;
+  const int pad_start = frames_per_block * steps_per_frame + /* add a bit of overlap to handle boundaries */ steps_per_frame;
   const double relative_speed_inv = 1 / relative_speed;
   Score best_score;
 
   assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
-  // FIXME: pad_start must be scaled with speed
+
   for (int offset = -pad_start; offset < 0; offset++)
     {
       double sync_quality = 0;
