@@ -410,8 +410,8 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   return best_speed;
 }
 
-static double
-get_clip_location (const WavData& in_data)
+static vector<double>
+get_clip_locations (const WavData& in_data, int n)
 {
   Random rng (0, Random::Stream::speed_clip);
 
@@ -423,17 +423,42 @@ get_clip_location (const WavData& in_data)
 
   rng.seed (Random::seed_from_hash (xsamples), Random::Stream::speed_clip);
 
-  return rng.random_double();
+  /* return a set of n possible clip locations */
+  vector<double> result;
+  for (int c = 0; c < n; c++)
+    result.push_back (rng.random_double());
+  return result;
+}
+
+static double
+get_best_clip_location (const WavData& in_data, double seconds, int candidates)
+{
+  double clip_location = 0;
+  double best_energy = 0;
+
+  /* try a few clip locations, use the one with highest signal energy */
+  for (auto location : get_clip_locations (in_data, candidates))
+    {
+      WavData wd = get_speed_clip (location, in_data, seconds);
+
+      double energy = 0;
+      for (auto s : wd.samples())
+        energy += s * s;
+      if (energy > best_energy)
+        {
+          best_energy = energy;
+          clip_location = location;
+        }
+    }
+  return clip_location;
 }
 
 double
 detect_speed (const WavData& in_data, bool print_results)
 {
-  double clip_location = get_clip_location (in_data);
-
   ThreadPool thread_pool;
 
-  /* first pass:  find approximation for speed */
+  /* first pass: find approximation for speed */
   const SpeedScanParams scan1
     {
       .seconds        = 25,
@@ -444,6 +469,9 @@ detect_speed (const WavData& in_data, bool print_results)
       .n_center_steps = 28,
       .interpolate    = true
     };
+  const int    clip_candidates = 5;
+  const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
+
   double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0, print_results);
 
   /* second pass: fast refine (not always perfect) */
