@@ -302,14 +302,14 @@ class QInterpolator  // quadratic interpolation between three data values
 public:
   QInterpolator (double y1, double y2, double y3)
   {
-    a = (y1 + y3 - 2*y2) / 2;
+    a = (y1 + y3) / 2 - y2;
     b = (y3 - y1) / 2;
     c = y2;
   }
   double
   eval (double x)
   {
-    return a * x * x + b * x + c;
+    return ((a * x) + b) * x + c;
   }
   double
   x_max()
