@@ -69,6 +69,7 @@ struct SpeedScanParams
   double step           = 0;
   int    n_steps        = 0;
   int    n_center_steps = 0;
+  bool   interpolate    = false;
 };
 
 class SpeedSync
@@ -294,6 +295,29 @@ SpeedSync::compare (double relative_speed)
   result_scores.push_back (best_score);
 }
 
+class QInterpolator  // quadratic interpolation between three data values
+{
+  double a, b, c;
+
+public:
+  QInterpolator (double y1, double y2, double y3)
+  {
+    a = (y1 + y3 - 2*y2) / 2;
+    b = (y3 - y1) / 2;
+    c = y2;
+  }
+  double
+  eval (double x)
+  {
+    return a * x * x + b * x + c;
+  }
+  double
+  x_max()
+  {
+    return -b / (2 * a);
+  }
+};
+
 static double
 speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
 {
@@ -329,6 +353,30 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
       scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
 
+  sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
+  if (scan_params.interpolate)
+    {
+      /* typically, the location of a quality peak is between two values, so we try to estimate
+       * the "true" quality at the peak by quadratic interpolation between the data points
+       */
+      for (size_t x = 1; x + 2 < scores.size(); x++)
+        {
+          /* check for peaks
+           *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
+           *  - double peak : two values have equal quality, this must be larger than left and right neighbour
+           */
+          const double q1 = scores[x - 1].quality;
+          const double q2 = scores[x].quality;
+          const double q3 = scores[x + 1].quality;
+          const double q4 = scores[x + 2].quality;
+          if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
+            {
+              QInterpolator quality_interp (q1, q2, q3);
+
+              scores[x].quality = quality_interp.eval (quality_interp.x_max());
+            }
+        }
+    }
   /* output best result, or: if there is not a unique best result, average all best results */
 
   double best_quality = 0;
@@ -393,7 +441,8 @@ detect_speed (const WavData& in_data, bool print_results)
       /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.0007,
       .n_steps        = 5,
-      .n_center_steps = 28
+      .n_center_steps = 28,
+      .interpolate    = true
     };
   double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0, print_results);
 
@@ -403,7 +452,8 @@ detect_speed (const WavData& in_data, bool print_results)
       .seconds        = 50,
       .step           = 1.00005,
       .n_steps        = 20,
-      .n_center_steps = 0
+      .n_center_steps = 0,
+      .interpolate    = false
     };
   speed = speed_scan (thread_pool, clip_location, in_data, scan2, speed, print_results);
   return speed;
