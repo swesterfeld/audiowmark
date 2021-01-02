@@ -525,4 +525,4 @@ You should be able to execute `audiowmark` via Docker.
 Example that outputs the usage message:
 
   docker build -t audiowmark .
-  docker run -v <local-data-directory>:/data -it audiowmark -h
+  docker run -v <local-data-directory>:/data --rm -it audiowmark -h
