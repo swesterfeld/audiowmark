@@ -58,6 +58,7 @@ print_usage()
   printf ("\n");
   printf ("Global options:\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
+  printf ("  --json                produce JSON output\n");
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
@@ -455,6 +456,10 @@ parse_shared_options (ArgParser& ap)
   if (ap.parse_opt ("--strength", f))
     {
       Params::water_delta = f / 1000;
+    }
+  if (ap.parse_opt ("--json"))
+    {
+      Params::json_output = true;
     }
   if (ap.parse_opt  ("--key", s))
     {
