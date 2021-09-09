@@ -167,6 +167,51 @@ public:
     patterns.push_back (p);
   }
   void
+  print_json (const WavData& wav_data)
+  {
+    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+      const int all1 = p1.type == Type::ALL;
+      const int all2 = p2.type == Type::ALL;
+      if (all1 != all2)
+        return all1 < all2;
+      else
+        return p1.sync_score.index < p2.sync_score.index;
+    });
+    const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
+    printf ("{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
+    printf ("  \"matches\": [\n");
+    int nth = 0;
+    for (const auto& pattern : patterns)
+      {
+        if (nth++ != 0)
+          printf (",\n");
+        if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
+          {
+            printf ("    { \"pos\": \"0:00\", \"bits\": \"%s\", \"type\": \"ALL\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false }",
+                    bit_vec_to_str (pattern.bit_vec).c_str(),
+                    pattern.sync_score.quality, pattern.decode_error);
+          }
+        else
+          {
+            const char *blockc; // quoted block type + comma
+            switch (pattern.sync_score.block_type)
+              {
+              case ConvBlockType::a:  blockc = "\"A\",  ";      break;
+              case ConvBlockType::b:  blockc = "\"B\",  ";      break;
+              case ConvBlockType::ab: blockc = "\"AB\", ";      break;
+              }
+            const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
+            printf ("    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"type\": %s \"quality\": %.5f, \"error\": %.6f, \"clip\": %s }",
+                    // pattern %2d:%02d %s %.3f %.3f %s\n
+                    seconds / 60, seconds % 60,
+                    bit_vec_to_str (pattern.bit_vec).c_str(), blockc,
+                    pattern.sync_score.quality, pattern.decode_error,
+                    pattern.type == Type::CLIP ? "true" : "false");
+          }
+      }
+    printf (" ]\n}\n");
+  }
+  void
   print()
   {
     std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
@@ -574,9 +619,12 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   ClipDecoder clip_decoder;
   clip_decoder.run (wav_data, result_set);
-  result_set.print();
 
-  if (!orig_pattern.empty())
+  if (Params::json_output)
+    {
+      result_set.print_json (wav_data);
+    }
+  else if (!orig_pattern.empty())
     {
       int match_count = result_set.print_match_count (orig_pattern);
 
