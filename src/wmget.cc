@@ -187,7 +187,7 @@ public:
           printf (",\n");
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
-            printf ("    { \"pos\": \"0:00\", \"bits\": \"%s\", \"type\": \"ALL\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false }",
+            printf ("    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
                     bit_vec_to_str (pattern.bit_vec).c_str(),
                     pattern.sync_score.quality, pattern.decode_error);
           }
@@ -196,17 +196,16 @@ public:
             const char *blockc; // quoted block type + comma
             switch (pattern.sync_score.block_type)
               {
-              case ConvBlockType::a:  blockc = "\"A\",  ";      break;
-              case ConvBlockType::b:  blockc = "\"B\",  ";      break;
-              case ConvBlockType::ab: blockc = "\"AB\", ";      break;
+              case ConvBlockType::a:  blockc = "\"A\"";      break;
+              case ConvBlockType::b:  blockc = "\"B\"";      break;
+              case ConvBlockType::ab: blockc = "\"AB\"";      break;
               }
             const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
-            printf ("    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"type\": %s \"quality\": %.5f, \"error\": %.6f, \"clip\": %s }",
-                    // pattern %2d:%02d %s %.3f %.3f %s\n
+            printf ("    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %s, \"type\": %s }",
                     seconds / 60, seconds % 60,
-                    bit_vec_to_str (pattern.bit_vec).c_str(), blockc,
+                    bit_vec_to_str (pattern.bit_vec).c_str(),
                     pattern.sync_score.quality, pattern.decode_error,
-                    pattern.type == Type::CLIP ? "true" : "false");
+                    pattern.type == Type::CLIP ? "true" : "false", blockc);
           }
       }
     printf (" ]\n}\n");
