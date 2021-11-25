@@ -207,11 +207,11 @@ public:
               case ConvBlockType::ab: blockc = "\"AB\"";      break;
               }
             const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
-            fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %s, \"type\": %s }",
+            fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %-6s \"type\": %s }",
                      seconds / 60, seconds % 60,
                      bit_vec_to_str (pattern.bit_vec).c_str(),
                      pattern.sync_score.quality, pattern.decode_error,
-                     pattern.type == Type::CLIP ? "true" : "false", blockc);
+                     pattern.type == Type::CLIP ? "true," : "false,", blockc);
           }
       }
     fprintf (outfile, " ]\n}\n");
