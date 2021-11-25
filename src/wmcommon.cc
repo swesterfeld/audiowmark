@@ -22,7 +22,6 @@
 
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
-bool   Params::json_output     = false;
 bool   Params::mix             = true;
 bool   Params::hard            = false; // hard decode bits? (soft decoding is better)
 bool   Params::snr             = false; // compute/show snr while adding watermark
@@ -44,6 +43,7 @@ RawFormat Params::raw_output_format;
 
 int    Params::hls_bit_rate = 0;
 
+std::string Params::json_output;
 std::string Params::input_label;
 std::string Params::output_label;
 

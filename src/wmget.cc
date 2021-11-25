@@ -167,8 +167,14 @@ public:
     patterns.push_back (p);
   }
   void
-  print_json (const WavData& wav_data)
+  print_json (const WavData& wav_data, const std::string &json_file)
   {
+    FILE *outfile = fopen (json_file.c_str(), "w");
+    if (!outfile)
+      {
+        perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
+        exit (127);
+      }
     std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
       const int all1 = p1.type == Type::ALL;
       const int all2 = p2.type == Type::ALL;
@@ -178,18 +184,18 @@ public:
         return p1.sync_score.index < p2.sync_score.index;
     });
     const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
-    printf ("{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
-    printf ("  \"matches\": [\n");
+    fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
+    fprintf (outfile, "  \"matches\": [\n");
     int nth = 0;
     for (const auto& pattern : patterns)
       {
         if (nth++ != 0)
-          printf (",\n");
+          fprintf (outfile, ",\n");
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
-            printf ("    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
-                    bit_vec_to_str (pattern.bit_vec).c_str(),
-                    pattern.sync_score.quality, pattern.decode_error);
+            fprintf (outfile, "    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
+                     bit_vec_to_str (pattern.bit_vec).c_str(),
+                     pattern.sync_score.quality, pattern.decode_error);
           }
         else
           {
@@ -201,14 +207,15 @@ public:
               case ConvBlockType::ab: blockc = "\"AB\"";      break;
               }
             const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
-            printf ("    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %s, \"type\": %s }",
-                    seconds / 60, seconds % 60,
-                    bit_vec_to_str (pattern.bit_vec).c_str(),
-                    pattern.sync_score.quality, pattern.decode_error,
-                    pattern.type == Type::CLIP ? "true" : "false", blockc);
+            fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %s, \"type\": %s }",
+                     seconds / 60, seconds % 60,
+                     bit_vec_to_str (pattern.bit_vec).c_str(),
+                     pattern.sync_score.quality, pattern.decode_error,
+                     pattern.type == Type::CLIP ? "true" : "false", blockc);
           }
       }
-    printf (" ]\n}\n");
+    fprintf (outfile, " ]\n}\n");
+    fclose (outfile);
   }
   void
   print()
@@ -619,11 +626,12 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   ClipDecoder clip_decoder;
   clip_decoder.run (wav_data, result_set);
 
-  if (Params::json_output)
-    {
-      result_set.print_json (wav_data);
-    }
-  else if (!orig_pattern.empty())
+  if (!Params::json_output.empty())
+    result_set.print_json (wav_data, Params::json_output);
+
+  result_set.print();
+
+  if (!orig_pattern.empty())
     {
       int match_count = result_set.print_match_count (orig_pattern);
 
