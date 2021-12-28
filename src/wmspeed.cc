@@ -72,6 +72,43 @@ struct SpeedScanParams
   bool   interpolate    = false;
 };
 
+class MagMatrix
+{
+public:
+  struct Mags
+  {
+    float umag = 0;
+    float dmag = 0;
+  };
+private:
+  vector<Mags> m_data;
+  int m_cols = 0;
+  int m_rows = 0;
+public:
+  Mags&
+  operator() (int row, int col)
+  {
+    return m_data[row * m_cols + col];
+  }
+  void
+  resize (int rows, int cols)
+  {
+    m_rows = rows;
+    m_cols = cols;
+
+    /* - don't preserve contents on resize
+     * - free unused memory on resize
+     */
+    vector<Mags> new_data (m_rows * m_cols);
+    m_data.swap (new_data);
+  }
+  int
+  rows()
+  {
+    return m_rows;
+  }
+};
+
 class SpeedSync
 {
 public:
@@ -81,13 +118,8 @@ public:
     double quality = 0;
   };
 private:
-  struct Mags
-  {
-    float umag = 0;
-    float dmag = 0;
-  };
   vector<vector<SyncFinder::FrameBit>> sync_bits;
-  vector<vector<Mags>> fft_sync_bits;
+  MagMatrix sync_matrix;
 
   void prepare_mags();
   void compare (double relative_speed);
@@ -169,10 +201,18 @@ SpeedSync::prepare_mags()
   float *in = fft_processor.in();
   float *out = fft_processor.out();
 
-  fft_sync_bits.clear();
+  /* set mag matrix size */
+  int n_sync_rows = 0;
+  int n_sync_cols = sync_bits[0].size() * sync_bits.size();
+  for (size_t ppos = 0; ppos + sub_frame_size < in_data_sub.n_frames(); ppos += sub_sync_search_step)
+    n_sync_rows++;
+  sync_matrix.resize (n_sync_rows, n_sync_cols);
+
   size_t pos = 0;
+  int row = 0;
   while (pos + sub_frame_size < in_data_sub.n_frames())
     {
+      int col = 0;
       const std::vector<float>& samples = in_data_sub.samples();
       vector<float> fft_out_db;
 
@@ -193,7 +233,6 @@ SpeedSync::prepare_mags()
               fft_out_db.push_back (db_from_factor (abs, min_db));
             }
         }
-      vector<Mags> mags;
       for (size_t bit = 0; bit < sync_bits.size(); bit++)
         {
           const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[bit];
@@ -206,12 +245,14 @@ SpeedSync::prepare_mags()
                   umag += fft_out_db[frame_bit.up[i]];
                   dmag += fft_out_db[frame_bit.down[i]];
                 }
-              mags.push_back (Mags {umag, dmag});
+              sync_matrix (row, col++) = MagMatrix::Mags {umag, dmag};
             }
         }
-      fft_sync_bits.push_back (mags);
+      assert (col == n_sync_cols);
+      row++;
       pos += sub_sync_search_step;
     }
+  assert (row == n_sync_rows);
 }
 
 void
@@ -241,19 +282,21 @@ SpeedSync::compare (double relative_speed)
               int index = offset + frame_bits[f].frame * steps_per_frame;
 
               const int index1 = lrint (index * relative_speed_inv);
-              if (index1 >= 0 && index1 < (int) fft_sync_bits.size())
+              if (index1 >= 0 && index1 < sync_matrix.rows())
                 {
-                  umag += fft_sync_bits[index1][mi].umag;
-                  dmag += fft_sync_bits[index1][mi].dmag;
+                  auto mags = sync_matrix (index1, mi);
+                  umag += mags.umag;
+                  dmag += mags.dmag;
                   frame_bit_count++;
                 }
               index += frames_per_block * steps_per_frame;
 
               const int index2 = lrint (index * relative_speed_inv);
-              if (index2 >= 0 && index2 < (int) fft_sync_bits.size())
+              if (index2 >= 0 && index2 < sync_matrix.rows())
                 {
-                  umag += fft_sync_bits[index2][mi].dmag;
-                  dmag += fft_sync_bits[index2][mi].umag;
+                  auto mags = sync_matrix (index2, mi);
+                  umag += mags.dmag;
+                  dmag += mags.umag;
                   frame_bit_count++;
                 }
               mi++;
