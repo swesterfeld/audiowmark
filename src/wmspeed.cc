@@ -166,6 +166,22 @@ public:
   }
 };
 
+static inline float
+db_from_complex (float re, float im, float min_dB)
+{
+  float abs2 = re * re + im * im;
+
+  if (abs2 > 0)
+    {
+      constexpr float log2_log10_factor = 3.01029995663981; // 10 / log2 (10)
+
+      // glibc log2f is a lot faster than glibc log10
+      return log2f (abs2) * log2_log10_factor;
+    }
+  else
+    return min_dB;
+}
+
 void
 SpeedSync::prepare_mags()
 {
@@ -227,10 +243,8 @@ SpeedSync::prepare_mags()
           for (int i = Params::min_band; i <= Params::max_band; i++)
             {
               const float min_db = -96;
-              float re = out[i * 2];
-              float im = out[i * 2 + 1];
-              float abs = sqrt (re * re + im * im); // FIXME: could avoid sqrt here
-              fft_out_db.push_back (db_from_factor (abs, min_db));
+
+              fft_out_db.push_back (db_from_complex (out[i * 2], out[i * 2 + 1], min_db));
             }
         }
       for (size_t bit = 0; bit < sync_bits.size(); bit++)
