@@ -49,30 +49,6 @@ std::string Params::output_label;
 using std::vector;
 using std::complex;
 
-/*
- * glibc log2f is a lot faster than glibc log10
- */
-inline double
-fast_log10 (double l)
-{
-  constexpr double log2_log10_factor = 0.3010299956639811952; // 1 / log2 (10)
-
-  return log2f (l) * log2_log10_factor;
-}
-
-double
-db_from_factor (double factor, double min_dB)
-{
-  if (factor > 0)
-    {
-      double dB = fast_log10 (factor); /* Bell */
-      dB *= 20;
-      return dB;
-    }
-  else
-    return min_dB;
-}
-
 FFTAnalyzer::FFTAnalyzer (int n_channels) :
   m_n_channels (n_channels),
   m_fft_processor (Params::frame_size)

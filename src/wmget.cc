@@ -83,8 +83,8 @@ mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
               const int u = mix_entries[b].up;
               const int d = mix_entries[b].down;
 
-              umag += db_from_factor (abs (fft_out[index][u]), min_db);
-              dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+              umag += db_from_complex (fft_out[index][u], min_db);
+              dmag += db_from_complex (fft_out[index][d], min_db);
             }
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
@@ -116,10 +116,11 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 
           const double min_db = -96;
           for (auto u : up)
-            umag += db_from_factor (abs (fft_out[index][u]), min_db);
+            umag += db_from_complex (fft_out[index][u], min_db);
 
           for (auto d : down)
-            dmag += db_from_factor (abs (fft_out[index][d]), min_db);
+            dmag += db_from_complex (fft_out[index][d], min_db);
+
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
         {

@@ -136,8 +136,6 @@ struct MixEntry
 
 std::vector<MixEntry> gen_mix_entries();
 
-double db_from_factor (double factor, double min_dB);
-
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
 
@@ -183,6 +181,28 @@ window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
     return 0;
 
   return 0.54 + 0.46 * cos (M_PI * x);
+}
+
+static inline float
+db_from_complex (float re, float im, float min_dB)
+{
+  float abs2 = re * re + im * im;
+
+  if (abs2 > 0)
+    {
+      constexpr float log2_log10_factor = 3.01029995663981; // 10 / log2 (10)
+
+      // glibc log2f is a lot faster than glibc log10
+      return log2f (abs2) * log2_log10_factor;
+    }
+  else
+    return min_dB;
+}
+
+static inline float
+db_from_complex (std::complex<float> f, float min_dB)
+{
+  return db_from_complex (f.real(), f.imag(), min_dB);
 }
 
 int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);

@@ -391,7 +391,7 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
           /* computing db-magnitude is expensive, so we better do it here */
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             for (int i = Params::min_band; i <= Params::max_band; i++)
-              fft_out_db[out_pos++] = db_from_factor (abs (frame_result[ch][i]), min_db);
+              fft_out_db[out_pos++] = db_from_complex (frame_result[ch][i], min_db);
 
           have_frames[f] = 1;
         }
