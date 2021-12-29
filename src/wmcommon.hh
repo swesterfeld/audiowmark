@@ -190,10 +190,10 @@ db_from_complex (float re, float im, float min_dB)
 
   if (abs2 > 0)
     {
-      constexpr float log2_log10_factor = 3.01029995663981; // 10 / log2 (10)
+      constexpr float log2_db_factor = 3.01029995663981; // 10 / log2 (10)
 
       // glibc log2f is a lot faster than glibc log10
-      return log2f (abs2) * log2_log10_factor;
+      return log2f (abs2) * log2_db_factor;
     }
   else
     return min_dB;
