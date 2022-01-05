@@ -22,9 +22,9 @@ do
   do
     cat speed-$CLIP-$STRENGTH-* | awk '{bad += $1; n += $2} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
   done
-  for FULL in speed-$STRENGTH-*
+  for FULL in speed-full-$STRENGTH-*
   do
-    if [ "$(echo $FULL | tr -d a-z0-9)" == "--" ]; then
+    if [ "$(echo $FULL | tr -d a-z0-9)" == "---" ]; then
       cat $FULL
     fi
   done | awk '{bad += $1; n += $2} END {if (n==0) n=1;fer=100.0*bad/n; bold=fer>0?"*":" ";printf ("| %s%.2f%s", bold, fer, bold)}'
