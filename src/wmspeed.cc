@@ -497,6 +497,14 @@ get_best_clip_location (const WavData& in_data, double seconds, int candidates)
 double
 detect_speed (const WavData& in_data, bool print_results)
 {
+  /* typically even for high strength we need at least a few seconds of audio
+   * in in_data for successful speed detection, but our algorithm won't work at
+   * all for very short input files
+   */
+  double in_seconds = double (in_data.n_frames()) / in_data.sample_rate();
+  if (in_seconds < 0.25)
+    return 1;
+
   ThreadPool thread_pool;
 
   /* first pass: find approximation for speed */
