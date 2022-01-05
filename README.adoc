@@ -129,6 +129,9 @@ Use watermarking key from file <filename> (see <<key>>).
 --strength <s>::
 Set the watermarking strength (see <<strength>>).
 
+--detect-speed::
+Detect and correct replay speed difference (see <<speed>>).
+
 [[key]]
 == Watermark Key
 
@@ -169,6 +172,49 @@ watermark. Fractional strengths (like 7.5) are possible.
 
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
+
+[[speed]]
+== Speed Detection
+
+If a watermarked audio signal is played back a little faster or slower than the
+original speed, watermark detection will fail. This could happen by accident if
+the digital watermark was converted to an analog signal and back and the
+original speed was not (exactly) preserved. It could also be done intentionally
+as an attack to avoid the watermark from being detected.
+
+In order to be able to find the watermark in these cases, `audiowmark` can try
+to figure out the speed difference to the original audio signal and correct the
+replay speed before detecting the watermark. The search range for the replay
+speed is approximately *[0.8..1.25]*.
+
+Example: add a watermark to `in.wav` and increase the replay speed by 5% using
+`sox`.
+[subs=+quotes]
+....
+  *$ audiowmark add in.wav out.wav 0123456789abcdef0011223344556677*
+  [...]
+  *$ sox out.wav out1.wav speed 1.05*
+....
+
+Without speed detection, we get no results. With speed detection the speed
+difference is detected and corrected so we get results.
+[subs=+quotes]
+....
+  *$ audiowmark get out1.wav*
+  *$ audiowmark get out1.wav --detect-speed*
+  speed 1.049966
+  pattern  0:05 0123456789abcdef0011223344556677 1.209 0.147 A-SPEED
+  pattern  0:57 0123456789abcdef0011223344556677 1.301 0.143 B-SPEED
+  pattern  0:57 0123456789abcdef0011223344556677 1.255 0.145 AB-SPEED
+  pattern  1:49 0123456789abcdef0011223344556677 1.380 0.173 A-SPEED
+  pattern   all 0123456789abcdef0011223344556677 1.297 0.130 SPEED
+....
+
+The speed detection algorithm is not enabled by default because it is
+relatively slow (total cpu time required) and needs a lot of memory. However
+the search is automatically run in parallel using many threads on systems with
+many cpu cores. So on good hardware it makes sense to always enable this option
+to be robust to replay speed attacks.
 
 == Short Payload (experimental)
 
