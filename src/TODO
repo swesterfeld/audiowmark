@@ -4,9 +4,14 @@ speed detection:
  - document in README
 
 speed detection possible improvements:
-- refine with 128 sync step instead of 256
+- refine with 128 sync step instead of 256?
 - use bigger initial region (50s) --detect-speed-harder
-- use window hann instead of hamming for sync bits (or all bits)
+- use window hann instead of hamming for sync bits (or all bits)?
+- remove lrint and QInterpolator?
+- detect silence instead of total volume?
+- split big region into two smaller ones?
+- connected search on even smaller regions?
+- reorder memory access in compare to be more cache efficient
 
 possible improvements:
 - dynamic bit strength
