@@ -61,6 +61,7 @@ print_usage()
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
+  printf ("  --detect-speed        detect/correct replay speed difference (get/cmp)\n");
   printf ("  -q, --quiet           disable information messages\n");
   printf ("\n");
   printf ("  --input-format raw    use raw stream as input\n");
