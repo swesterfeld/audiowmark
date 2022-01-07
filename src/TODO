@@ -7,6 +7,8 @@ speed detection possible improvements:
 - split big region into two smaller ones?
 - connected search on even smaller regions?
 - reorder memory access in compare to be more cache efficient
+- n-best search?
+- soft sync?
 
 possible improvements:
 - dynamic bit strength
