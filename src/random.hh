@@ -57,13 +57,13 @@ public:
 
     return buffer[buffer_pos++];
   }
-  uint64_t
-  min() const
+  static constexpr uint64_t
+  min()
   {
     return 0;
   }
-  uint64_t
-  max() const
+  static constexpr uint64_t
+  max()
   {
     return UINT64_MAX;
   }
