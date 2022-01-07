@@ -20,15 +20,27 @@
 
 #include <complex>
 #include <vector>
+#include <fftw3.h>
 
-/* high level api */
-std::vector<std::complex<float>> fft (const std::vector<float>& in);
-std::vector<float>               ifft (const std::vector<std::complex<float>>& in);
+class FFTProcessor
+{
+  fftwf_plan plan_fft;
+  fftwf_plan plan_ifft;
+  float *m_in = nullptr;
+  float *m_out = nullptr;
+public:
+  FFTProcessor (size_t N);
+  ~FFTProcessor();
 
-/* more efficient: low level api */
-void   fftar_float (size_t N, float *in, float *out);
-float *new_array_float (size_t N);
-void   free_array_float (float *f);
+  /* low level (fast) */
+  void   fft();
+  void   ifft();
+  float *in()  { return m_in; }
+  float *out() { return m_out; };
 
+  /* high level (convenient) */
+  std::vector<std::complex<float>> fft (const std::vector<float>& in);
+  std::vector<float>               ifft (const std::vector<std::complex<float>>& in);
+};
 
 #endif /* AUDIOWMARK_FFT_HH */

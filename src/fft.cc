@@ -20,99 +20,81 @@
 #include <fftw3.h>
 
 #include <map>
+#include <mutex>
 
 using std::vector;
 using std::complex;
 using std::map;
 
-float *
-new_array_float (size_t N)
+static std::mutex fft_planner_mutex;
+static std::map<size_t, fftwf_plan> fft_plan_map;
+static std::map<size_t, fftwf_plan> ifft_plan_map;
+
+FFTProcessor::FFTProcessor (size_t N)
 {
+  std::lock_guard<std::mutex> lg (fft_planner_mutex);
+
   const size_t N_2 = N + 2; /* extra space for r2c extra complex output */
 
-  return (float *) fftwf_malloc (sizeof (float) * N_2);
+  m_in  = static_cast<float *> (fftwf_malloc (sizeof (float) * N_2));
+  m_out = static_cast<float *> (fftwf_malloc (sizeof (float) * N_2));
+
+  /* plan if not done already */
+  fftwf_plan& pfft = fft_plan_map[N];
+  if (!pfft)
+    pfft = fftwf_plan_dft_r2c_1d (N, m_in, (fftwf_complex *) m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+
+  fftwf_plan& pifft = ifft_plan_map[N];
+  if (!pifft)
+    pifft = fftwf_plan_dft_c2r_1d (N, (fftwf_complex *) m_in, m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+
+  /* store plan for size N as member variables */
+  plan_fft = pfft;
+  plan_ifft = pifft;
+
+  // we could add code for saving plans here, and use patient planning
+}
+
+FFTProcessor::~FFTProcessor()
+{
+  fftwf_free (m_in);
+  fftwf_free (m_out);
 }
 
 void
-free_array_float (float *f)
+FFTProcessor::fft()
 {
-  fftwf_free (f);
+  fftwf_execute_dft_r2c (plan_fft, m_in, (fftwf_complex *) m_out);
 }
 
 void
-fftar_float (size_t N, float *in, float *out)
+FFTProcessor::ifft()
 {
-  static map<int, fftwf_plan> plan_for_size;
-
-  fftwf_plan& plan = plan_for_size[N];
-  if (!plan)
-    {
-      float *plan_in = new_array_float (N);
-      float *plan_out = new_array_float (N);
-      plan = fftwf_plan_dft_r2c_1d (N, plan_in, (fftwf_complex *) plan_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
-
-      // we add code for saving plans here, and use patient planning
-    }
-  fftwf_execute_dft_r2c (plan, in, (fftwf_complex *) out);
-}
-
-void
-fftsr_float (size_t N, float *in, float *out)
-{
-  static map<int, fftwf_plan> plan_for_size;
-
-  fftwf_plan& plan = plan_for_size[N];
-  if (!plan)
-    {
-      float *plan_in = new_array_float (N);
-      float *plan_out = new_array_float (N);
-      plan = fftwf_plan_dft_c2r_1d (N, (fftwf_complex *) plan_in, plan_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
-
-      // we add code for saving plans here, and use patient planning
-    }
-  fftwf_execute_dft_c2r (plan, (fftwf_complex *)in, out);
-}
-
-vector<complex<float>>
-fft (const vector<float>& in)
-{
-  vector<complex<float>> out (in.size() / 2 + 1);
-
-  /* ensure memory is SSE-aligned (or other vectorized stuff) */
-  float *fft_in = new_array_float (in.size());
-  float *fft_out = new_array_float (in.size());
-
-  std::copy (in.begin(), in.end(), fft_in);
-  fftar_float (in.size(), fft_in, fft_out);
-
-  /* complex<float> vector and fft_out have the same layout in memory */
-  std::copy (fft_out, fft_out + out.size() * 2, reinterpret_cast<float *> (&out[0]));
-
-  free_array_float (fft_out);
-  free_array_float (fft_in);
-
-  return out;
+  fftwf_execute_dft_c2r (plan_ifft, (fftwf_complex *) m_in, m_out);
 }
 
 vector<float>
-ifft (const vector<complex<float>>& in)
+FFTProcessor::ifft (const vector<complex<float>>& in)
 {
   vector<float> out ((in.size() - 1) * 2);
 
-  /* ensure memory is SSE-aligned (or other vectorized stuff) */
-  float *ifft_in = new_array_float (out.size());
-  float *ifft_out = new_array_float (out.size());
-
-  /* complex<float> vector and fft_out have the same layout in memory */
-  std::copy (in.begin(), in.end(), reinterpret_cast<complex<float> *> (ifft_in));
-  fftsr_float (out.size(), ifft_in, ifft_out);
-
-  std::copy (ifft_out, ifft_out + out.size(), &out[0]);
-
-  free_array_float (ifft_out);
-  free_array_float (ifft_in);
+  /* complex<float> vector and m_out have the same layout in memory */
+  std::copy (in.begin(), in.end(), reinterpret_cast<complex<float> *> (m_in));
+  ifft();
+  std::copy (m_out, m_out + out.size(), &out[0]);
 
   return out;
 }
 
+vector<complex<float>>
+FFTProcessor::fft (const vector<float>& in)
+{
+  vector<complex<float>> out (in.size() / 2 + 1);
 
+  /* complex<float> vector and m_out have the same layout in memory */
+  std::copy (in.begin(), in.end(), m_in);
+  fft();
+  std::copy (m_out, m_out + out.size() * 2, reinterpret_cast<float *> (&out[0]));
+
+  return out;
+}

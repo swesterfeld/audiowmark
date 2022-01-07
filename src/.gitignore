@@ -10,3 +10,5 @@ teststream
 testlimiter
 testhls
 testmpegts
+testshortcode
+testthreadpool

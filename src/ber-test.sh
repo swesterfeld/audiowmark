@@ -70,6 +70,26 @@ do
     else
       TEST_CUT_ARGS=""
     fi
+    if [ "x$AWM_SPEED" != x ]; then
+      if [ "x$AWM_SPEED_PRE_MP3" != x ]; then
+        # first (optional) mp3 step: simulate quality loss before speed change
+        lame -b "$AWM_SPEED_PRE_MP3" ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
+        rm ${AWM_FILE}.wav
+        ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
+      fi
+
+      [ -z $SPEED_SEED ] && SPEED_SEED=0
+      SPEED=$(audiowmark test-speed $SPEED_SEED --test-key $SEED)
+      ((SPEED_SEED++))
+      echo in_speed $SPEED
+
+      sox -D -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
+      mv ${AWM_FILE}.speed.wav ${AWM_FILE}.wav
+
+      TEST_SPEED_ARGS="--detect-speed --test-speed $SPEED"
+    else
+      TEST_SPEED_ARGS=""
+    fi
     if [ "x$TRANSFORM" == "xmp3" ]; then
       if [ "x$2" == "x" ]; then
         echo "need mp3 bitrate" >&2
@@ -108,18 +128,18 @@ do
       for CLIP in $(seq $AWM_MULTI_CLIP)
       do
         audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
-        audiowmark cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+        audiowmark cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
         rm ${OUT_FILE}.clip.wav
         echo
       done
     elif [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
       do
-        audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
+        audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
         echo
       done
     else
-      audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS
+      audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
       echo
     fi
     rm -f ${AWM_FILE}.wav $OUT_FILE # cleanup temp files

@@ -15,35 +15,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "utils.hh"
-#include "random.hh"
+#ifndef AUDIOWMARK_RESAMPLE_HH
+#define AUDIOWMARK_RESAMPLE_HH
 
-#include <inttypes.h>
+#include "wavdata.hh"
 
-using std::vector;
-using std::string;
+WavData resample (const WavData& wav_data, int rate);
+WavData resample_ratio (const WavData& wav_data, double ratio, int new_rate);
 
-int
-main (int argc, char **argv)
-{
-  Random rng (0xf00f1234b00b5678U, Random::Stream::bit_order);
-  for (size_t i = 0; i < 20; i++)
-    {
-      uint64_t x = rng();
-      printf ("%016" PRIx64 "\n", x);
-    }
-  for (size_t i = 0; i < 20; i++)
-    printf ("%f\n", rng.random_double());
-
-  uint64_t s = 0;
-  double t_start = get_time();
-  size_t runs = 25000000;
-  for (size_t i = 0; i < runs; i++)
-    {
-      s += rng();
-    }
-  double t_end = get_time();
-  printf ("s=%016" PRIx64 "\n\n", s);
-
-  printf ("%f Mvalues/sec\n", runs / (t_end - t_start) / 1000000);
-}
+#endif /* AUDIOWMARK_RESAMPLE_HH */

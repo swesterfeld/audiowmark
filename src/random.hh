@@ -23,6 +23,7 @@
 
 #include <vector>
 #include <string>
+#include <random>
 
 class Random
 {
@@ -30,7 +31,7 @@ public:
   enum class Stream {
     data_up_down = 1,
     sync_up_down = 2,
-    pad_up_down = 3,   /* unused */
+    speed_clip = 3,
     mix = 4,
     bit_order = 5,
     frame_position = 6
@@ -40,6 +41,8 @@ private:
   gcry_cipher_hd_t           seed_cipher = nullptr;
   std::vector<uint64_t>      buffer;
   size_t                     buffer_pos = 0;
+
+  std::uniform_real_distribution<double> double_dist;
 
   void die_on_error (const char *func, gcry_error_t error);
 public:
@@ -53,6 +56,21 @@ public:
       refill_buffer();
 
     return buffer[buffer_pos++];
+  }
+  static constexpr uint64_t
+  min()
+  {
+    return 0;
+  }
+  static constexpr uint64_t
+  max()
+  {
+    return UINT64_MAX;
+  }
+  double
+  random_double() /* range [0,1) */
+  {
+    return double_dist (*this);
   }
   void refill_buffer();
   void seed (uint64_t seed, Stream stream);
@@ -73,6 +91,7 @@ public:
   static void        set_global_test_key (uint64_t seed);
   static void        load_global_key (const std::string& key_file);
   static std::string gen_key();
+  static uint64_t    seed_from_hash (const std::vector<float>& floats);
 };
 
 #endif /* AUDIOWMARK_RANDOM_HH */

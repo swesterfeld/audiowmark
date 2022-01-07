@@ -25,6 +25,8 @@ double Params::water_delta     = 0.01;
 bool   Params::mix             = true;
 bool   Params::hard            = false; // hard decode bits? (soft decoding is better)
 bool   Params::snr             = false; // compute/show snr while adding watermark
+bool   Params::detect_speed    = false;
+double Params::test_speed      = -1;
 int    Params::have_key        = 0;
 size_t Params::payload_size    = 128;
 bool   Params::payload_short   = false;
@@ -47,49 +49,9 @@ std::string Params::output_label;
 using std::vector;
 using std::complex;
 
-inline double
-window_cos (double x) /* von Hann window */
-{
-  if (fabs (x) > 1)
-    return 0;
-  return 0.5 * cos (x * M_PI) + 0.5;
-}
-
-inline double
-window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
-{
-  if (fabs (x) > 1)
-    return 0;
-
-  return 0.54 + 0.46 * cos (M_PI * x);
-}
-
-/*
- * glibc log2f is a lot faster than glibc log10
- */
-inline double
-fast_log10 (double l)
-{
-  constexpr double log2_log10_factor = 0.3010299956639811952; // 1 / log2 (10)
-
-  return log2f (l) * log2_log10_factor;
-}
-
-double
-db_from_factor (double factor, double min_dB)
-{
-  if (factor > 0)
-    {
-      double dB = fast_log10 (factor); /* Bell */
-      dB *= 20;
-      return dB;
-    }
-  else
-    return min_dB;
-}
-
 FFTAnalyzer::FFTAnalyzer (int n_channels) :
-  m_n_channels (n_channels)
+  m_n_channels (n_channels),
+  m_fft_processor (Params::frame_size)
 {
   /* generate analysis window */
   m_window.resize (Params::frame_size);
@@ -111,21 +73,15 @@ FFTAnalyzer::FFTAnalyzer (int n_channels) :
       m_window[i] *= 2.0 / window_weight;
     }
 
-  /* allocate properly aligned buffers for SIMD */
-  m_frame  = new_array_float (Params::frame_size);
-  m_frame_fft = new_array_float (Params::frame_size);
-}
-
-FFTAnalyzer::~FFTAnalyzer()
-{
-  free_array_float (m_frame);
-  free_array_float (m_frame_fft);
 }
 
 vector<vector<complex<float>>>
 FFTAnalyzer::run_fft (const vector<float>& samples, size_t start_index)
 {
   assert (samples.size() >= (Params::frame_size + start_index) * m_n_channels);
+
+  float *frame     = m_fft_processor.in();
+  float *frame_fft = m_fft_processor.out();
 
   vector<vector<complex<float>>> fft_out;
   for (int ch = 0; ch < m_n_channels; ch++)
@@ -136,14 +92,14 @@ FFTAnalyzer::run_fft (const vector<float>& samples, size_t start_index)
       /* deinterleave frame data and apply window */
       for (size_t x = 0; x < Params::frame_size; x++)
         {
-          m_frame[x] = samples[pos] * m_window[x];
+          frame[x] = samples[pos] * m_window[x];
           pos += m_n_channels;
         }
       /* FFT transform */
-      fftar_float (Params::frame_size, m_frame, m_frame_fft);
+      m_fft_processor.fft();
 
       /* complex<float> and frame_fft have the same layout in memory */
-      const complex<float> *first = (complex<float> *) m_frame_fft;
+      const complex<float> *first = (complex<float> *) frame_fft;
       const complex<float> *last  = first + Params::frame_size / 2 + 1;
       fft_out.emplace_back (first, last);
     }
@@ -247,4 +203,8 @@ gen_mix_entries()
   return mix_entries;
 }
 
-
+int
+frame_count (const WavData& wav_data)
+{
+  return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
+}

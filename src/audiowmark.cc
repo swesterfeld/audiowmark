@@ -61,6 +61,7 @@ print_usage()
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
+  printf ("  --detect-speed        detect/correct replay speed difference (get/cmp)\n");
   printf ("  -q, --quiet           disable information messages\n");
   printf ("\n");
   printf ("  --input-format raw    use raw stream as input\n");
@@ -294,7 +295,7 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
     {
       // this is unbiased only if 2 * block_size + time_seconds is smaller than overall file length
       const size_t values_per_block = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size * in_data.n_channels();
-      start_point = 2 * values_per_block * (double(rng()) / UINT64_MAX);
+      start_point = 2 * values_per_block * rng.random_double();
       start_point /= in_data.n_channels();
 
       end_point = start_point + time_seconds * in_data.sample_rate();
@@ -313,6 +314,16 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
       error ("audiowmark: error saving %s: %s\n", out_file.c_str(), err.message());
       return 1;
     }
+  return 0;
+}
+
+int
+test_speed (int seed)
+{
+  Random rng (seed, /* there is no stream for this test */ Random::Stream::data_up_down);
+  double low = 0.85;
+  double high = 1.15;
+  printf ("%.6f\n", low + (rng() / double (UINT64_MAX)) * (high - low));
   return 0;
 }
 
@@ -565,6 +576,8 @@ parse_add_options (ArgParser& ap)
 void
 parse_get_options (ArgParser& ap)
 {
+  float f;
+
   ap.parse_opt ("--test-cut", Params::test_cut);
   ap.parse_opt ("--test-truncate", Params::test_truncate);
 
@@ -575,6 +588,14 @@ parse_get_options (ArgParser& ap)
   if (ap.parse_opt ("--test-no-sync"))
     {
       Params::test_no_sync = true;
+    }
+  if (ap.parse_opt ("--detect-speed"))
+    {
+      Params::detect_speed = true;
+    }
+  if (ap.parse_opt ("--test-speed", f))
+    {
+      Params::test_speed = f;
     }
 }
 
@@ -670,8 +691,17 @@ main (int argc, char **argv)
     }
   else if (ap.parse_cmd ("test-clip"))
     {
+      parse_shared_options (ap);
+
       if (ap.parse_args (4, args))
-        test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+        return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+    }
+  else if (ap.parse_cmd ("test-speed"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (1, args))
+        return test_speed (atoi (args[0].c_str()));
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;

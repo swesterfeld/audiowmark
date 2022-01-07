@@ -23,6 +23,8 @@
 
 #include "random.hh"
 #include "rawinputstream.hh"
+#include "wavdata.hh"
+#include "fft.hh"
 
 #include <assert.h>
 
@@ -42,6 +44,9 @@ public:
   static           bool hard;                      // hard decode bits? (soft decoding is better)
   static           bool snr;                       // compute/show snr while adding watermark
   static           int  have_key;
+
+  static           bool detect_speed;
+  static           double test_speed;              // for debugging --detect-speed
 
   static           size_t payload_size;            // number of payload bits for the watermark
   static           bool   payload_short;
@@ -114,11 +119,9 @@ class FFTAnalyzer
 {
   int           m_n_channels = 0;
   std::vector<float> m_window;
-  float        *m_frame = nullptr;
-  float        *m_frame_fft = nullptr;
+  FFTProcessor  m_fft_processor;
 public:
   FFTAnalyzer (int n_channels);
-  ~FFTAnalyzer();
 
   std::vector<std::vector<std::complex<float>>> run_fft (const std::vector<float>& samples, size_t start_index);
   std::vector<std::vector<std::complex<float>>> fft_range (const std::vector<float>& samples, size_t start_index, size_t frame_count);
@@ -133,10 +136,10 @@ struct MixEntry
 
 std::vector<MixEntry> gen_mix_entries();
 
-double db_from_factor (double factor, double min_dB);
-
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
+
+int frame_count (const WavData& wav_data);
 
 int sync_frame_pos (int f);
 int data_frame_pos (int f);
@@ -161,6 +164,45 @@ randomize_bit_order (const std::vector<T>& bit_vec, bool encode)
         out_bits[order[i]] = bit_vec[i];
     }
   return out_bits;
+}
+
+inline double
+window_cos (double x) /* von Hann window */
+{
+  if (fabs (x) > 1)
+    return 0;
+  return 0.5 * cos (x * M_PI) + 0.5;
+}
+
+inline double
+window_hamming (double x) /* sharp (rectangle) cutoffs at boundaries */
+{
+  if (fabs (x) > 1)
+    return 0;
+
+  return 0.54 + 0.46 * cos (M_PI * x);
+}
+
+static inline float
+db_from_complex (float re, float im, float min_dB)
+{
+  float abs2 = re * re + im * im;
+
+  if (abs2 > 0)
+    {
+      constexpr float log2_db_factor = 3.01029995663981; // 10 / log2 (10)
+
+      // glibc log2f is a lot faster than glibc log10
+      return log2f (abs2) * log2_db_factor;
+    }
+  else
+    return min_dB;
+}
+
+static inline float
+db_from_complex (std::complex<float> f, float min_dB)
+{
+  return db_from_complex (f.real(), f.imag(), min_dB);
 }
 
 int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);

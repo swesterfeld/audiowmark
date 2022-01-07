@@ -1,4 +1,4 @@
-AC_INIT([audiowmark], [0.5.0])
+AC_INIT([audiowmark], [0.6.0])
 AC_CONFIG_SRCDIR([src/audiowmark.cc])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
@@ -93,10 +93,14 @@ dnl -------------------------------------------------------------------------
 # need c++14 mode
 AX_CXX_COMPILE_STDCXX_14(ext)
 
-# use -Wall
+# use -Wall / -pthread if available
 AC_LANG_PUSH([C++])
-AX_CHECK_COMPILE_FLAG([-Wall],                                 [CXXFLAGS="$CXXFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-Wall],    [CXXFLAGS="$CXXFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-pthread], [CXXFLAGS="$CXXFLAGS -pthread"])
 AC_LANG_POP([C++])
+
+# Less cluttered build output
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
