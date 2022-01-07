@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SEEDS=$(seq 8)
+SEEDS=$(seq 10)
 STRENGTHS="10 15"
 CLIPS="15 30"
 
