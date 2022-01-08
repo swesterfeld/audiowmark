@@ -602,9 +602,12 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
    * The reason to do it this way is that the detected speed may be wrong (on short clips)
    * and we don't want to loose a successful clip decoder match in this case.
    */
-  if (Params::detect_speed)
+  if (Params::detect_speed || Params::try_speed > 0)
     {
-      speed = detect_speed (wav_data, !orig_pattern.empty());
+      if (Params::detect_speed)
+        speed = detect_speed (wav_data, !orig_pattern.empty());
+      else
+        speed = Params::try_speed;
 
       // speeds closer to 1.0 than this usually work without stretching before decode
       if (speed < 0.9999 || speed > 1.0001)

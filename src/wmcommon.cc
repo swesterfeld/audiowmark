@@ -26,6 +26,7 @@ bool   Params::mix             = true;
 bool   Params::hard            = false; // hard decode bits? (soft decoding is better)
 bool   Params::snr             = false; // compute/show snr while adding watermark
 bool   Params::detect_speed    = false;
+double Params::try_speed       = -1;
 double Params::test_speed      = -1;
 int    Params::have_key        = 0;
 size_t Params::payload_size    = 128;

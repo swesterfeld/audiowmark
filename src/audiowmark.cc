@@ -599,6 +599,15 @@ parse_get_options (ArgParser& ap)
     {
       Params::detect_speed = true;
     }
+  if (ap.parse_opt ("--try-speed", f))
+    {
+      if (Params::detect_speed)
+        {
+          error ("audiowmark: can not use both options: --detect-speed and --try-speed\n");
+          exit (1);
+        }
+      Params::try_speed = f;
+    }
   if (ap.parse_opt ("--test-speed", f))
     {
       Params::test_speed = f;
