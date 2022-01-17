@@ -169,7 +169,7 @@ public:
   void
   print_json (const WavData& wav_data, const std::string &json_file, const double speed)
   {
-    FILE *outfile = fopen (json_file.c_str(), "w");
+    FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
     if (!outfile)
       {
         perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
