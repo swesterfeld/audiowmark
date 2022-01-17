@@ -167,7 +167,7 @@ public:
     patterns.push_back (p);
   }
   void
-  print_json (const WavData& wav_data, const std::string &json_file)
+  print_json (const WavData& wav_data, const std::string &json_file, const double speed)
   {
     FILE *outfile = fopen (json_file.c_str(), "w");
     if (!outfile)
@@ -185,6 +185,7 @@ public:
     });
     const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
     fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
+    fprintf (outfile, "  \"speed\": %.6f,\n", speed);
     fprintf (outfile, "  \"matches\": [\n");
     int nth = 0;
     for (const auto& pattern : patterns)
@@ -193,7 +194,7 @@ public:
           fprintf (outfile, ",\n");
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
-            fprintf (outfile, "    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
+            fprintf (outfile, "    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.6f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
                      bit_vec_to_str (pattern.bit_vec).c_str(),
                      pattern.sync_score.quality, pattern.decode_error);
           }
@@ -590,6 +591,7 @@ static int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
   ResultSet result_set;
+  double speed = 1.0;
 
   /*
    * The strategy for integrating speed detection into decoding is this:
@@ -602,7 +604,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
    */
   if (Params::detect_speed)
     {
-      double speed = detect_speed (wav_data, !orig_pattern.empty());
+      speed = detect_speed (wav_data, !orig_pattern.empty());
 
       // speeds closer to 1.0 than this usually work without stretching before decode
       if (speed < 0.9999 || speed > 1.0001)
@@ -627,7 +629,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   clip_decoder.run (wav_data, result_set);
 
   if (!Params::json_output.empty())
-    result_set.print_json (wav_data, Params::json_output);
+    result_set.print_json (wav_data, Params::json_output, speed);
 
   result_set.print();
 
