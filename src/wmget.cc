@@ -192,28 +192,28 @@ public:
       {
         if (nth++ != 0)
           fprintf (outfile, ",\n");
-        if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
+
+        std::string btype;
+        switch (pattern.sync_score.block_type)
           {
-            fprintf (outfile, "    { \"pos\": \"0:00\", \"bits\": \"%s\", \"quality\": %.6f, \"error\": %.6f, \"clip\": false, \"type\": \"ALL\" }",
-                     bit_vec_to_str (pattern.bit_vec).c_str(),
-                     pattern.sync_score.quality, pattern.decode_error);
+          case ConvBlockType::a:        btype = "A";    break;
+          case ConvBlockType::b:        btype = "B";    break;
+          case ConvBlockType::ab:       btype = "AB";   break;
           }
-        else
-          {
-            const char *blockc; // quoted block type + comma
-            switch (pattern.sync_score.block_type)
-              {
-              case ConvBlockType::a:  blockc = "\"A\"";      break;
-              case ConvBlockType::b:  blockc = "\"B\"";      break;
-              case ConvBlockType::ab: blockc = "\"AB\"";      break;
-              }
-            const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
-            fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"clip\": %-6s \"type\": %s }",
-                     seconds / 60, seconds % 60,
-                     bit_vec_to_str (pattern.bit_vec).c_str(),
-                     pattern.sync_score.quality, pattern.decode_error,
-                     pattern.type == Type::CLIP ? "true," : "false,", blockc);
-          }
+        if (pattern.type == Type::ALL)
+          btype = "ALL";
+        if (pattern.type == Type::CLIP)
+          btype = "CLIP-" + btype;
+        if (pattern.speed_pattern)
+          btype += "-SPEED";
+
+        const int seconds = pattern.type == Type::ALL ? 0 : pattern.sync_score.index / Params::mark_sample_rate;
+
+        fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
+                 seconds / 60, seconds % 60,
+                 bit_vec_to_str (pattern.bit_vec).c_str(),
+                 pattern.sync_score.quality, pattern.decode_error,
+                 btype.c_str());
       }
     fprintf (outfile, " ]\n}\n");
     fclose (outfile);
