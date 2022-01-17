@@ -609,7 +609,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
       // speeds closer to 1.0 than this usually work without stretching before decode
       if (speed < 0.9999 || speed > 1.0001)
         {
-          printf ("speed %.6f\n", speed);
+          if (Params::json_output != "-")
+            printf ("speed %.6f\n", speed);
           WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
 
           result_set.set_speed_pattern (true);
@@ -631,7 +632,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   if (!Params::json_output.empty())
     result_set.print_json (wav_data, Params::json_output, speed);
 
-  result_set.print();
+  if (Params::json_output != "-")
+    result_set.print();
 
   if (!orig_pattern.empty())
     {
