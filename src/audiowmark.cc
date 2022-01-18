@@ -58,7 +58,7 @@ print_usage()
   printf ("\n");
   printf ("Global options:\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
-  printf ("  --json <file>         write JSON results into file\n");
+  printf ("  --json <file>         write JSON results into file (get/cmp)\n");
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
