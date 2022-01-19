@@ -138,6 +138,7 @@ public:
   enum class Type { BLOCK, CLIP, ALL };
   struct Pattern
   {
+    double            time = 0;
     vector<int>       bit_vec;
     float             decode_error = 0;
     SyncFinder::Score sync_score;
@@ -155,9 +156,10 @@ public:
     speed_pattern = sp;
   }
   void
-  add_pattern (SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
+  add_pattern (double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
   {
     Pattern p;
+    p.time = time;
     p.sync_score = sync_score;
     p.bit_vec = bit_vec;
     p.decode_error = decode_error;
@@ -207,7 +209,7 @@ public:
         if (pattern.speed_pattern)
           btype += "-SPEED";
 
-        const int seconds = pattern.type == Type::ALL ? 0 : pattern.sync_score.index / Params::mark_sample_rate;
+        const int seconds = pattern.time;
 
         fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
                  seconds / 60, seconds % 60,
@@ -259,7 +261,7 @@ public:
             if (pattern.speed_pattern)
               block_str += "-SPEED";
 
-            const int seconds = pattern.sync_score.index / Params::mark_sample_rate;
+            const int seconds = pattern.time;
             printf ("pattern %2d:%02d %s %.3f %.3f %s\n", seconds / 60, seconds % 60, bit_vec_to_str (pattern.bit_vec).c_str(),
                       pattern.sync_score.quality, pattern.decode_error, block_str.c_str());
           }
@@ -361,8 +363,9 @@ public:
             float decode_error = 0;
             vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
+            const double time = double (sync_score.index) / wav_data.sample_rate();
             if (!bit_vec.empty())
-              result_set.add_pattern (sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+              result_set.add_pattern (time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
             total_count += 1;
 
             /* ---- update "all" pattern ---- */
@@ -391,7 +394,7 @@ public:
                   {
                     score_ab.index = sync_score.index;
                     score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-                    result_set.add_pattern (score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                    result_set.add_pattern (time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
                   }
               }
             last_block_type = sync_score.block_type;
@@ -412,7 +415,7 @@ public:
         vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
         if (!bit_vec.empty())
-          result_set.add_pattern (score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+          result_set.add_pattern (/* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
       }
 
     debug_sync_frame_count = frame_count (wav_data);
@@ -519,7 +522,7 @@ class ClipDecoder
               {
                 SyncFinder::Score sync_score_nopad = sync_score;
                 sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
-                result_set.add_pattern (sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+                result_set.add_pattern (time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
               }
           }
       }
