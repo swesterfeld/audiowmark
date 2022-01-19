@@ -169,6 +169,18 @@ public:
     patterns.push_back (p);
   }
   void
+  sort_by_time()
+  {
+    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+      const int all1 = p1.type == Type::ALL;
+      const int all2 = p2.type == Type::ALL;
+      if (all1 != all2)
+        return all1 < all2;
+      else
+        return p1.time < p2.time;
+    });
+  }
+  void
   print_json (const WavData& wav_data, const std::string &json_file, const double speed)
   {
     FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
@@ -177,14 +189,6 @@ public:
         perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
         exit (127);
       }
-    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
-      const int all1 = p1.type == Type::ALL;
-      const int all2 = p2.type == Type::ALL;
-      if (all1 != all2)
-        return all1 < all2;
-      else
-        return p1.sync_score.index < p2.sync_score.index;
-    });
     const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
     fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
     fprintf (outfile, "  \"speed\": %.6f,\n", speed);
@@ -223,14 +227,6 @@ public:
   void
   print()
   {
-    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
-      const int all1 = p1.type == Type::ALL;
-      const int all2 = p2.type == Type::ALL;
-      if (all1 != all2)
-        return all1 < all2;
-      else
-        return p1.sync_score.index < p2.sync_score.index;
-    });
     for (const auto& pattern : patterns)
       {
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
@@ -634,6 +630,8 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   ClipDecoder clip_decoder;
   clip_decoder.run (wav_data, result_set);
+
+  result_set.sort_by_time();
 
   if (!Params::json_output.empty())
     result_set.print_json (wav_data, Params::json_output, speed);
