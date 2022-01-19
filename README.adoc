@@ -132,6 +132,9 @@ Set the watermarking strength (see <<strength>>).
 --detect-speed::
 Detect and correct replay speed difference (see <<speed>>).
 
+--json <file>::
+Write results to <file> in machine readable JSON format.
+
 [[key]]
 == Watermark Key
 

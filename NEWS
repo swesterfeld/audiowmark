@@ -1,6 +1,7 @@
 Overview of Changes in audiowmark-0.6.0:
 
 * implement speed detection/correction (--detect-speed)
+* Add '--json' CLI option for machine readable results.
 
 Overview of Changes in audiowmark-0.5.0:
 

@@ -41,6 +41,7 @@ using std::max;
 void
 print_usage()
 {
+  //       01234567891123456789212345678931234567894123456789512345678961234567897123456789
   printf ("usage: audiowmark <command> [ <args>... ]\n");
   printf ("\n");
   printf ("Commands:\n");
@@ -57,11 +58,12 @@ print_usage()
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
   printf ("Global options:\n");
-  printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
+  printf ("  --detect-speed        detect and correct replay speed difference (get & cmp)\n");
+  printf ("  --json <file>         write JSON results into file (get & cmp)\n");
+  printf ("  --key <file>          load watermarking key from file\n");
   printf ("  --linear              disable non-linear bit storage\n");
   printf ("  --short <bits>        enable short payload mode\n");
-  printf ("  --key <file>          load watermarking key from file\n");
-  printf ("  --detect-speed        detect/correct replay speed difference (get/cmp)\n");
+  printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  -q, --quiet           disable information messages\n");
   printf ("\n");
   printf ("  --input-format raw    use raw stream as input\n");
@@ -455,6 +457,10 @@ parse_shared_options (ArgParser& ap)
   if (ap.parse_opt ("--strength", f))
     {
       Params::water_delta = f / 1000;
+    }
+  if (ap.parse_opt ("--json", s))
+    {
+      Params::json_output = s;
     }
   if (ap.parse_opt  ("--key", s))
     {

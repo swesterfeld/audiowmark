@@ -40,6 +40,7 @@ public:
   static constexpr int min_band          = 20;
 
   static           double water_delta;
+  static           std::string json_output;
   static           bool mix;
   static           bool hard;                      // hard decode bits? (soft decoding is better)
   static           bool snr;                       // compute/show snr while adding watermark

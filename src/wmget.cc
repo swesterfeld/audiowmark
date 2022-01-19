@@ -167,6 +167,58 @@ public:
     patterns.push_back (p);
   }
   void
+  print_json (const WavData& wav_data, const std::string &json_file, const double speed)
+  {
+    FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
+    if (!outfile)
+      {
+        perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
+        exit (127);
+      }
+    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+      const int all1 = p1.type == Type::ALL;
+      const int all2 = p2.type == Type::ALL;
+      if (all1 != all2)
+        return all1 < all2;
+      else
+        return p1.sync_score.index < p2.sync_score.index;
+    });
+    const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
+    fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
+    fprintf (outfile, "  \"speed\": %.6f,\n", speed);
+    fprintf (outfile, "  \"matches\": [\n");
+    int nth = 0;
+    for (const auto& pattern : patterns)
+      {
+        if (nth++ != 0)
+          fprintf (outfile, ",\n");
+
+        std::string btype;
+        switch (pattern.sync_score.block_type)
+          {
+          case ConvBlockType::a:        btype = "A";    break;
+          case ConvBlockType::b:        btype = "B";    break;
+          case ConvBlockType::ab:       btype = "AB";   break;
+          }
+        if (pattern.type == Type::ALL)
+          btype = "ALL";
+        if (pattern.type == Type::CLIP)
+          btype = "CLIP-" + btype;
+        if (pattern.speed_pattern)
+          btype += "-SPEED";
+
+        const int seconds = pattern.type == Type::ALL ? 0 : pattern.sync_score.index / Params::mark_sample_rate;
+
+        fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
+                 seconds / 60, seconds % 60,
+                 bit_vec_to_str (pattern.bit_vec).c_str(),
+                 pattern.sync_score.quality, pattern.decode_error,
+                 btype.c_str());
+      }
+    fprintf (outfile, " ]\n}\n");
+    fclose (outfile);
+  }
+  void
   print()
   {
     std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
@@ -539,6 +591,7 @@ static int
 decode_and_report (const WavData& wav_data, const string& orig_pattern)
 {
   ResultSet result_set;
+  double speed = 1.0;
 
   /*
    * The strategy for integrating speed detection into decoding is this:
@@ -551,12 +604,13 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
    */
   if (Params::detect_speed)
     {
-      double speed = detect_speed (wav_data, !orig_pattern.empty());
+      speed = detect_speed (wav_data, !orig_pattern.empty());
 
       // speeds closer to 1.0 than this usually work without stretching before decode
       if (speed < 0.9999 || speed > 1.0001)
         {
-          printf ("speed %.6f\n", speed);
+          if (Params::json_output != "-")
+            printf ("speed %.6f\n", speed);
           WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
 
           result_set.set_speed_pattern (true);
@@ -574,7 +628,12 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 
   ClipDecoder clip_decoder;
   clip_decoder.run (wav_data, result_set);
-  result_set.print();
+
+  if (!Params::json_output.empty())
+    result_set.print_json (wav_data, Params::json_output, speed);
+
+  if (Params::json_output != "-")
+    result_set.print();
 
   if (!orig_pattern.empty())
     {
