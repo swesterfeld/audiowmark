@@ -542,7 +542,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       /* store 3 seconds of the context before this segment and after this segment (if available) */
       const size_t ctx_3sec = 3 * out.sample_rate();
       const size_t prev_size = min<size_t> (start_pos, ctx_3sec);
-      const size_t next_size = min<size_t> (audio_master_data.n_frames() - (segment.size + start_pos), ctx_3sec);
+      const size_t segment_size_with_ctx = prev_size + segment.size + ctx_3sec;
 
       segment.vars["start_pos"] = string_printf ("%zd", start_pos);
       segment.vars["size"] = string_printf ("%zd", segment.size);
@@ -550,11 +550,14 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       segment.vars["bit_rate"] = string_printf ("%d", bit_rate);
 
       /* write audio segment with context */
-      const size_t start_point = start_pos - prev_size;
-      const size_t end_point = start_point + prev_size + segment.size + next_size;
+      const size_t start_point = min (start_pos - prev_size, audio_master_data.n_frames());
+      const size_t end_point = min (start_point + segment_size_with_ctx, audio_master_data.n_frames());
 
       vector<float> out_signal (audio_master_data.samples().begin() + start_point * audio_master_data.n_channels(),
                                 audio_master_data.samples().begin() + end_point * audio_master_data.n_channels());
+
+      // append zeros if audio master is too short to provide segment with context
+      out_signal.resize (segment_size_with_ctx * audio_master_data.n_channels());
 
       vector<unsigned char> full_flac_mem;
       SFOutputStream out_stream;
