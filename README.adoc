@@ -536,6 +536,21 @@ The rules for the AAC bit-rate of the newly encoded watermarked segment are:
 * otherwise, if the `--bit-rate` option is used during `hls-prepare`, this bit-rate will be used
 * otherwise, the bit-rate of the input material is detected during `hls-prepare`
 
+== Compiling from Source
+
+Stable releases are available from http://uplex.de/audiowmark
+
+The steps to compile the source code are:
+
+        ./configure
+        make
+        make install
+
+If you build from git (which doesn't include `configure`), the first
+step is `./autogen.sh`. In this case, you need to ensure that (besides
+the dependencies listed below) the `autoconf-archive` package is
+installed.
+
 == Dependencies
 
 If you compile from source, `audiowmark` needs the following libraries:
