@@ -62,6 +62,10 @@ specified as hex-string):
   Data Blocks:  4
 ....
 
+If you want to use `audiowmark` in any serious application, please read the
+section <<rec-payload>> on how to generate the 128-bit message. Typically these
+bits should be a *hash* or *HMAC* of some sort.
+
 The most important options for adding a watermark are:
 
 --key <filename>::
@@ -91,15 +95,18 @@ seperated by one or more space characters. The first field is a *timestamp*
 indicating the position of the data block. The second field is the *decoded
 message*. For most purposes this is all you need to know.
 
-The software was designed under the assumption that you - the user - will be
-able to decide whether a message is correct or not. To do this, on watermarking
-song files, you could list each message you embedded in a database. During
-retrieval, you should look up each pattern `audiowmark get` outputs in the
-database. If the message is not found, then you should assume that a decoding
-error occurred. In our example each pattern was decoded correctly, because
-the watermark was not damaged at all, but if you for instance use lossy
-compression (with a low bitrate), it may happen that only some of the decoded
-patterns are correct. Or none, if the watermark was damaged too much.
+The software was designed under the assumption that the message is a *hash* or
+*HMAC* of some sort. Before you start using `audiowmark` in any serious
+application, please read the section <<rec-payload>>. You - the user - should
+be able to decide whether a message is correct or not. To do this, on
+watermarking song files, you could *create a database entry* for each message
+you embedded in a watermark. During retrieval, you should perform a *database
+lookup* for each pattern `audiowmark get` outputs. If the message is not found,
+then you should assume that a decoding error occurred. In our example each
+pattern was decoded correctly, because the watermark was not damaged at all,
+but if you for instance use lossy compression (with a low bitrate), it may
+happen that only some of the decoded patterns are correct. Or none, if the
+watermark was damaged too much.
 
 The third field is the *sync score* (higher is better). The synchronization
 algorithm tries to find valid data blocks in the audio file, that become
@@ -175,6 +182,84 @@ watermark. Fractional strengths (like 7.5) are possible.
 
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --strength 15 out.wav
+
+[[rec-payload]]
+== Recommendations for the Watermarking Payload
+
+Although `audiowmark` does not specify what the 128-bit message stored in the
+watermark should be, it was designed under the assumption that the message
+should be a *hash* or *HMAC* of some sort.
+
+Lets look at a typical use case. We have a song called *Dreams* by an artist
+called *Alice*. A user called *John Smith* downloads a watermarked copy.
+
+Later, we find this file somewhere on the internet. Typically we want to answer
+the questions:
+
+ * is this one of the files we previously watermarked?
+ * what song/artist is this?
+ * which user shared it?
+
+_When the user downloads a watermarked copy_, we construct a string that
+contains all information we need to answer our questions, for example
+like this:
+
+  Artist:Alice|Title:Dreams|User:John Smith
+
+To obtain the 128-bit message, we can hash this string, for instance by
+using the first 128 bits of a SHA-256 hash like this:
+
+  $ STRING="Artist:Alice|Title:Dreams|User:John Smith"
+  $ MSG=`echo -n "$STRING" | sha256sum | head -c 32`
+  $ echo $MSG
+  ecd057f0d1fbb25d6430b338b5d72eb2
+
+This 128-bit message can be used as watermark:
+
+  $ audiowmark add --key my.key song.wav song.wm.wav $MSG
+
+At this point, we should also *create a database entry* consisting of the
+hash value `$MSG` and the corresponding string `$STRING`.
+
+The shell commands for creating the hash are just to provide a simplified
+example. In a real applications special characters (like `$`, `|`, `"`...) can
+occur in fields and the computation of the hash should be robust in those
+cases. A better way to do it would be using a "real" programming language
+to compute the hash, and '\0' instead of '|'.
+
+_If we find a watermarked copy of the song on the net_, the first step is to
+detect the watermark message using
+
+  $ audiowmark get --key my.key song.wm.wav
+  pattern  0:05 ecd057f0d1fbb25d6430b338b5d72eb2 1.377 0.068 A
+  pattern  0:57 ecd057f0d1fbb25d6430b338b5d72eb2 1.392 0.109 B
+  [...]
+
+The second step is to perform a *database lookup* for each result returned by
+`audiowmark`. If we find a matching entry in our database, this is one of the
+files we previously watermarked.
+
+As a last step, we can use the string stored in the database, which contains
+the song/artist and the user that shared it.
+
+_The advantages of using a hash as message are:_
+
+1. Although `audiowmark` sometimes produces *false positives*, this doesn't
+matter, because it is extremely unlikely that a false positive will match an
+existing database entry.
+
+2. Even if a few *bit errors* occur, it is extremely unlikely that a song
+watermarked for user A will be attributed to user B, simply because all hash
+bits depend on the user. So this is a much better payload than storing a user
+ID, artist ID and song ID in the message bits directly.
+
+3. It is *easy to extend*, because we can add any fields we need to the hash
+string. For instance, if we want to store the name of the album, we can simply
+add it to the string.
+
+4. If the hash matches exactly, it is really *hard to deny* that it was this
+user who shared the song. How else could all 128-bits of the watermark match
+the message bits decoded by `audiowmark`?
 
 [[speed]]
 == Speed Detection
