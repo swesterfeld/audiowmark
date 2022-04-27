@@ -209,7 +209,7 @@ like this:
 To obtain the 128-bit message, we can hash this string, for instance by
 using the first 128 bits of a SHA-256 hash like this:
 
-  $ STRING="Artist:Alice|Title:Dreams|User:John Smith"
+  $ STRING='Artist:Alice|Title:Dreams|User:John Smith'
   $ MSG=`echo -n "$STRING" | sha256sum | head -c 32`
   $ echo $MSG
   ecd057f0d1fbb25d6430b338b5d72eb2
@@ -221,11 +221,9 @@ This 128-bit message can be used as watermark:
 At this point, we should also *create a database entry* consisting of the
 hash value `$MSG` and the corresponding string `$STRING`.
 
-The shell commands for creating the hash are just to provide a simplified
-example. In a real applications special characters (like `$`, `|`, `"`...) can
-occur in fields and the computation of the hash should be robust in those
-cases. A better way to do it would be using a "real" programming language
-to compute the hash, and '\0' instead of '|'.
+The shell commands for creating the hash are listed here to provide a
+simplified example. Fields (like the song title) can contain the characters `'`
+and `|`, so these cases need to be dealt with.
 
 _If we find a watermarked copy of the song on the net_, the first step is to
 detect the watermark message using
@@ -258,8 +256,8 @@ string. For instance, if we want to store the name of the album, we can simply
 add it to the string.
 
 4. If the hash matches exactly, it is really *hard to deny* that it was this
-user who shared the song. How else could all 128-bits of the watermark match
-the message bits decoded by `audiowmark`?
+user who shared the song. How else could all 128 bits of the hash match the
+message bits decoded by `audiowmark`?
 
 [[speed]]
 == Speed Detection
