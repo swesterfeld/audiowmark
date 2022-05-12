@@ -19,6 +19,7 @@
 #include <regex>
 
 #include <inttypes.h>
+#include <string.h>
 #include "utils.hh"
 #include "mpegts.hh"
 
