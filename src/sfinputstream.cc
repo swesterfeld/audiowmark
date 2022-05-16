@@ -19,6 +19,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
 
 using std::string;
 using std::vector;
@@ -32,7 +33,15 @@ Error
 SFInputStream::open (const string& filename)
 {
   return open ([&] (SF_INFO *sfinfo) {
-    return sf_open (filename.c_str(), SFM_READ, sfinfo);
+    if (filename == "-")
+      {
+        m_is_stdin = true;
+        return sf_open_fd (STDIN_FILENO, SFM_READ, sfinfo, /* close fd */ SF_FALSE);
+      }
+    else
+      {
+        return sf_open (filename.c_str(), SFM_READ, sfinfo);
+      }
   });
 }
 
@@ -163,6 +172,21 @@ SFInputStream::close()
 
       m_sndfile = nullptr;
       m_state = State::CLOSED;
+
+      if (m_is_stdin)
+        {
+          /* WAV files can contain additional RIFF chunks after the end of the 'data' chunk (issue #19).
+           *  -> skip the rest of stdin to avoid SIGPIPE for the process writing to the pipe
+           */
+          ssize_t count;
+
+          do
+            {
+              char junk[16 * 1024];
+              count = read (STDIN_FILENO, junk, sizeof (junk)) ;
+            }
+          while (count > 0 || (count == -1 && errno == EINTR));
+        }
     }
 }
 
