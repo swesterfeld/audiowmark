@@ -61,6 +61,9 @@ SFInputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func)
   m_n_channels  = sfinfo.channels;
   m_n_values    = sfinfo.frames * sfinfo.channels;
   m_sample_rate = sfinfo.samplerate;
+  printf ("%zd\n", sfinfo.frames);
+  printf ("%d\n", m_n_values);
+  printf ("%zd\n", N_FRAMES_UNKNOWN);
 
   switch (sfinfo.format & SF_FORMAT_SUBMASK)
     {

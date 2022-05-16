@@ -71,11 +71,6 @@ public:
   int sample_rate() const override;
   int bit_depth() const override;
   size_t
-  n_values() const
-  {
-    return m_n_values;
-  }
-  size_t
   n_frames() const override
   {
     return m_n_values / m_n_channels;
