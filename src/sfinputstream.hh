@@ -46,6 +46,7 @@ private:
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   bool        m_read_float_data = false;
+  bool        m_is_stdin = false;
 
   enum class State {
     NEW,
