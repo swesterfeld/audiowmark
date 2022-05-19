@@ -370,6 +370,33 @@ public:
 };
 
 static double
+score_average_best (const vector<SpeedSync::Score>& scores)
+{
+  /* output best result, or: if there is not a unique best result, average all best results */
+
+  double best_quality = 0;
+  for (auto score : scores)
+    best_quality = max (best_quality, score.quality);
+
+  double best_speed = 0;
+  int speed_count = 0;
+  for (auto score : scores)
+    {
+      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
+
+      if (score.quality >= best_quality * factor)
+        {
+          best_speed += score.speed;
+          speed_count++;
+        }
+    }
+  if (speed_count)
+    best_speed /= speed_count;
+
+  return best_speed;
+}
+
+static double
 speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
@@ -469,49 +496,18 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
         }
     }
 
-  auto t5 = get_time();
-
   center_speed_sync->clear_scores();
   double speed_delta = scores[0].speed / center_speed_sync->center_speed();
   printf ("speed_delta = %f\n", speed_delta);
   center_speed_sync->start_search_jobs (thread_pool, scan_params3, speed_delta);
   thread_pool.wait_all();
 
-  auto t6 = get_time();
+  auto t5 = get_time();
 
-  printf ("detect_speed %.3f %.3f\n", t5 - t4, t6 - t5);
+  printf ("detect_speed %.3f\n", t5 - t4);
 
-  scores.clear();
-  for (auto& s : speed_sync)
-    {
-      vector<SpeedSync::Score> step_scores = s->get_scores();
-      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
-    }
+  return score_average_best (center_speed_sync->get_scores());
 
-  sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
-
-  /* output best result, or: if there is not a unique best result, average all best results */
-
-  double best_quality = 0;
-  for (auto score : scores)
-    best_quality = max (best_quality, score.quality);
-
-  double best_speed = 0;
-  int speed_count = 0;
-  for (auto score : scores)
-    {
-      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
-
-      if (score.quality >= best_quality * factor)
-        {
-          best_speed += score.speed;
-          speed_count++;
-        }
-    }
-  if (speed_count)
-    best_speed /= speed_count;
-
-  return best_speed;
 #if 0
   if (print_results)
     {
