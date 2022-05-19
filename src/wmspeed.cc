@@ -149,11 +149,11 @@ public:
   }
 
   void
-  start_search_jobs (ThreadPool& thread_pool)
+  start_search_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params, double speed_delta)
   {
     for (int p = -scan_params.n_steps; p <= scan_params.n_steps; p++)
       {
-        const double relative_speed = pow (scan_params.step, p);
+        const double relative_speed = pow (scan_params.step, p) * speed_delta;
 
         thread_pool.add_job ([relative_speed, this]() { compare (relative_speed); });
       }
@@ -163,6 +163,16 @@ public:
   get_scores()
   {
     return result_scores;
+  }
+  void
+  clear_scores()
+  {
+    result_scores.clear();
+  }
+  double
+  center_speed() const
+  {
+    return center;
   }
 };
 
@@ -382,7 +392,7 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   auto t1 = get_time();
 
   for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool);
+    s->start_search_jobs (thread_pool, scan_params, 1);
   thread_pool.wait_all();
 
   auto t2 = get_time();
@@ -432,7 +442,7 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   auto t3 = get_time();
 
   for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool);
+    s->start_search_jobs (thread_pool, scan_params2, 1);
   thread_pool.wait_all();
 
   auto t4 = get_time();
@@ -447,25 +457,31 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
 
-  speed_sync.clear();
-  speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params3, scores[0].speed));
-
-  scores.clear();
-
-  for (auto& s : speed_sync)
-    s->start_prepare_job (thread_pool);
-  thread_pool.wait_all();
+  double min_dist = 1;
+  SpeedSync *center_speed_sync = nullptr;
+  for (auto& s: speed_sync)
+    {
+      double dist = fabs (s->center_speed() - scores[0].speed);
+      if (dist < min_dist)
+        {
+          min_dist = dist;
+          center_speed_sync = s.get();
+        }
+    }
 
   auto t5 = get_time();
 
-  for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool);
+  center_speed_sync->clear_scores();
+  double speed_delta = scores[0].speed / center_speed_sync->center_speed();
+  printf ("speed_delta = %f\n", speed_delta);
+  center_speed_sync->start_search_jobs (thread_pool, scan_params3, speed_delta);
   thread_pool.wait_all();
 
   auto t6 = get_time();
 
   printf ("detect_speed %.3f %.3f\n", t5 - t4, t6 - t5);
 
+  scores.clear();
   for (auto& s : speed_sync)
     {
       vector<SpeedSync::Score> step_scores = s->get_scores();
