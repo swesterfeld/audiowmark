@@ -360,7 +360,7 @@ public:
 };
 
 static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, double speed, bool print_results)
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
@@ -420,7 +420,10 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   scores.clear();
   speed_sync.clear();
-  speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params2, lmax_scores[0].speed));
+  if (lmax_scores.size() > 5)
+    lmax_scores.resize (5);
+  for (auto score : lmax_scores)
+    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params2, score.speed));
 
   for (auto& s : speed_sync)
     s->start_prepare_job (thread_pool);
@@ -435,6 +438,33 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   auto t4 = get_time();
 
   printf ("detect_speed %.3f %.3f\n", t3 - t2, t4 - t3);
+
+  for (auto& s : speed_sync)
+    {
+      vector<SpeedSync::Score> step_scores = s->get_scores();
+      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
+    }
+
+  sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
+
+  speed_sync.clear();
+  speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params3, scores[0].speed));
+
+  scores.clear();
+
+  for (auto& s : speed_sync)
+    s->start_prepare_job (thread_pool);
+  thread_pool.wait_all();
+
+  auto t5 = get_time();
+
+  for (auto& s : speed_sync)
+    s->start_search_jobs (thread_pool);
+  thread_pool.wait_all();
+
+  auto t6 = get_time();
+
+  printf ("detect_speed %.3f %.3f\n", t5 - t4, t6 - t5);
 
   for (auto& s : speed_sync)
     {
@@ -554,12 +584,22 @@ detect_speed (const WavData& in_data, bool print_results)
   const SpeedScanParams scan2
     {
       .seconds        = 50,
+      .step           = 1.00035,
+      .n_steps        = 1,
+      .n_center_steps = 0,
+      .interpolate    = false
+    };
+
+  /* third pass: fast refine (not always perfect) */
+  const SpeedScanParams scan3
+    {
+      .seconds        = 50,
       .step           = 1.00005,
       .n_steps        = 20,
       .n_center_steps = 0,
       .interpolate    = false
     };
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, scan2, /* start speed */ 1.0, print_results);
+  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, scan2, scan3, /* start speed */ 1.0, print_results);
   return speed;
 }
