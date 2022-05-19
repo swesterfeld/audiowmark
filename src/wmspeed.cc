@@ -595,7 +595,7 @@ detect_speed (const WavData& in_data, bool print_results)
     {
       .seconds        = 50,
       .step           = 1.00005,
-      .n_steps        = 20,
+      .n_steps        = 10,
       .n_center_steps = 0,
       .interpolate    = false
     };
