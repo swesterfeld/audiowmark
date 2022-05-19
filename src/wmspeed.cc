@@ -360,7 +360,7 @@ public:
 };
 
 static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, double speed, bool print_results)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
@@ -387,6 +387,8 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   auto t2 = get_time();
 
+  printf ("detect_speed %.3f %.3f\n", t1 - t0, t2 - t1);
+
   vector<SpeedSync::Score> scores;
   for (auto& s : speed_sync)
     {
@@ -395,29 +397,53 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
     }
 
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
-  if (scan_params.interpolate)
-    {
-      /* typically, the location of a quality peak is between two values, so we try to estimate
-       * the "true" quality at the peak by quadratic interpolation between the data points
-       */
-      for (size_t x = 1; x + 2 < scores.size(); x++)
-        {
-          /* check for peaks
-           *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
-           *  - double peak : two values have equal quality, this must be larger than left and right neighbour
-           */
-          const double q1 = scores[x - 1].quality;
-          const double q2 = scores[x].quality;
-          const double q3 = scores[x + 1].quality;
-          const double q4 = scores[x + 2].quality;
-          if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
-            {
-              QInterpolator quality_interp (q1, q2, q3);
 
-              scores[x].quality = quality_interp.eval (quality_interp.x_max());
-            }
-        }
+  vector<SpeedSync::Score> lmax_scores;
+  for (size_t x = 1; x + 2 < scores.size(); x++)
+    {
+      /* check for peaks
+       *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
+       *  - double peak : two values have equal quality, this must be larger than left and right neighbour
+       */
+      const double q1 = scores[x - 1].quality;
+      const double q2 = scores[x].quality;
+      const double q3 = scores[x + 1].quality;
+      const double q4 = scores[x + 2].quality;
+
+      if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
+        lmax_scores.push_back (scores[x]);
     }
+  sort (lmax_scores.begin(), lmax_scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
+
+  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+  WavData in_clip2 = get_speed_clip (clip_location, in_data, scan_params2.seconds * 1.3);
+
+  scores.clear();
+  speed_sync.clear();
+  speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params2, lmax_scores[0].speed));
+
+  for (auto& s : speed_sync)
+    s->start_prepare_job (thread_pool);
+  thread_pool.wait_all();
+
+  auto t3 = get_time();
+
+  for (auto& s : speed_sync)
+    s->start_search_jobs (thread_pool);
+  thread_pool.wait_all();
+
+  auto t4 = get_time();
+
+  printf ("detect_speed %.3f %.3f\n", t3 - t2, t4 - t3);
+
+  for (auto& s : speed_sync)
+    {
+      vector<SpeedSync::Score> step_scores = s->get_scores();
+      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
+    }
+
+  sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
+
   /* output best result, or: if there is not a unique best result, average all best results */
 
   double best_quality = 0;
@@ -439,6 +465,8 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
   if (speed_count)
     best_speed /= speed_count;
 
+  return best_speed;
+#if 0
   if (print_results)
     {
       printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
@@ -449,6 +477,7 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
         t1 - t0, t2 - t1);
     }
   return best_speed;
+#endif
 }
 
 static vector<double>
@@ -521,8 +550,6 @@ detect_speed (const WavData& in_data, bool print_results)
   const int    clip_candidates = 5;
   const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0, print_results);
-
   /* second pass: fast refine (not always perfect) */
   const SpeedScanParams scan2
     {
@@ -532,6 +559,7 @@ detect_speed (const WavData& in_data, bool print_results)
       .n_center_steps = 0,
       .interpolate    = false
     };
-  speed = speed_scan (thread_pool, clip_location, in_data, scan2, speed, print_results);
+
+  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, scan2, /* start speed */ 1.0, print_results);
   return speed;
 }
