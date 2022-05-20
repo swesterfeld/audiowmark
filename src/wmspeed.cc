@@ -396,21 +396,10 @@ score_average_best (const vector<SpeedSync::Score>& scores)
   return best_speed;
 }
 
-static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
+static vector<SpeedSync::Score>
+run_search (ThreadPool& thread_pool, vector<std::unique_ptr<SpeedSync>>& speed_sync, const SpeedScanParams& scan_params)
 {
-  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
-
   auto t0 = get_time();
-
-  vector<std::unique_ptr<SpeedSync>> speed_sync;
-  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
-    {
-      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
-
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
-    }
 
   for (auto& s : speed_sync)
     s->start_prepare_job (thread_pool);
@@ -432,7 +421,12 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
       vector<SpeedSync::Score> step_scores = s->get_scores();
       scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
+  return scores;
+}
 
+static void
+select_n_best_scores (vector<SpeedSync::Score>& scores, size_t n)
+{
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
 
   vector<SpeedSync::Score> lmax_scores;
@@ -452,38 +446,43 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
     }
   sort (lmax_scores.begin(), lmax_scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
 
+  if (lmax_scores.size() > 5)
+    lmax_scores.resize (5);
+  scores = lmax_scores;
+}
+
+static double
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
+{
+  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
+
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
+  vector<SpeedSync::Score> scores;
+
+  /* search using grid */
+  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+    {
+      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
+
+      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
+    }
+
+  scores = run_search (thread_pool, speed_sync, scan_params);
+
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip2 = get_speed_clip (clip_location, in_data, scan_params2.seconds * 1.3);
 
-  scores.clear();
   speed_sync.clear();
-  if (lmax_scores.size() > 5)
-    lmax_scores.resize (5);
-  for (auto score : lmax_scores)
+
+  select_n_best_scores (scores, 5);
+  for (auto score : scores)
     speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params2, score.speed));
 
-  for (auto& s : speed_sync)
-    s->start_prepare_job (thread_pool);
-  thread_pool.wait_all();
+  scores = run_search (thread_pool, speed_sync, scan_params2);
 
-  auto t3 = get_time();
-
-  for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool, scan_params2, 1);
-  thread_pool.wait_all();
-
-  auto t4 = get_time();
-
-  printf ("detect_speed %.3f %.3f\n", t3 - t2, t4 - t3);
-
-  for (auto& s : speed_sync)
-    {
-      vector<SpeedSync::Score> step_scores = s->get_scores();
-      scores.insert (scores.end(), step_scores.begin(), step_scores.end());
-    }
-
+  // GET 1 BEST
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
-
   double min_dist = 1;
   SpeedSync *center_speed_sync = nullptr;
   for (auto& s: speed_sync)
@@ -495,6 +494,9 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
           center_speed_sync = s.get();
         }
     }
+
+  // EXECUTE SEARCH BEST
+  auto t4 = get_time();
 
   center_speed_sync->clear_scores();
   double speed_delta = scores[0].speed / center_speed_sync->center_speed();
