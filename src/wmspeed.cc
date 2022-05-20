@@ -470,6 +470,17 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   scores = run_search (thread_pool, speed_sync, scan_params);
 
+  if (Params::detect_speed_patient)
+    {
+      select_n_best_scores (scores, 1);
+
+      speed_sync.clear();
+      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params3, scores[0].speed));
+      scores = run_search (thread_pool, speed_sync, scan_params3);
+
+      return score_average_best (scores);
+    }
+
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip2 = get_speed_clip (clip_location, in_data, scan_params2.seconds * 1.3);
 
