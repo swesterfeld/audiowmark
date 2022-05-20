@@ -27,6 +27,7 @@ bool   Params::hard            = false; // hard decode bits? (soft decoding is b
 bool   Params::snr             = false; // compute/show snr while adding watermark
 bool   Params::strict          = false;
 bool   Params::detect_speed    = false;
+bool   Params::detect_speed_patient = false;
 double Params::try_speed       = -1;
 double Params::test_speed      = -1;
 int    Params::have_key        = 0;

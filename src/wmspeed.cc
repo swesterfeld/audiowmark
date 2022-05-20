@@ -589,6 +589,16 @@ detect_speed (const WavData& in_data, bool print_results)
       .n_center_steps = 28,
       .interpolate    = true
     };
+  const SpeedScanParams scan1_patient
+    {
+      .seconds        = 50,
+
+      /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
+      .step           = 1.00035,
+      .n_steps        = 11,
+      .n_center_steps = 28,
+      .interpolate    = true
+    };
   const int    clip_candidates = 5;
   const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
 
@@ -612,6 +622,6 @@ detect_speed (const WavData& in_data, bool print_results)
       .interpolate    = false
     };
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, scan2, scan3, /* start speed */ 1.0, print_results);
+  double speed = speed_scan (thread_pool, clip_location, in_data, Params::detect_speed_patient ? scan1_patient : scan1, scan2, scan3, /* start speed */ 1.0, print_results);
   return speed;
 }

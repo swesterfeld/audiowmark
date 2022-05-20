@@ -600,18 +600,26 @@ parse_get_options (ArgParser& ap)
     {
       Params::test_no_sync = true;
     }
+  int speed_options = 0;
   if (ap.parse_opt ("--detect-speed"))
     {
       Params::detect_speed = true;
+      speed_options++;
+    }
+  if (ap.parse_opt ("--detect-speed-patient"))
+    {
+      Params::detect_speed_patient = true;
+      speed_options++;
     }
   if (ap.parse_opt ("--try-speed", f))
     {
-      if (Params::detect_speed)
-        {
-          error ("audiowmark: can not use both options: --detect-speed and --try-speed\n");
-          exit (1);
-        }
+      speed_options++;
       Params::try_speed = f;
+    }
+  if (speed_options > 1)
+    {
+      error ("audiowmark: can only use one option: --detect-speed or --detect-speed-patient or --try-speed\n");
+      exit (1);
     }
   if (ap.parse_opt ("--test-speed", f))
     {

@@ -48,6 +48,7 @@ public:
   static           int  have_key;
 
   static           bool detect_speed;
+  static           bool detect_speed_patient;
   static           double try_speed;               // manual speed correction
   static           double test_speed;              // for debugging --detect-speed
 
