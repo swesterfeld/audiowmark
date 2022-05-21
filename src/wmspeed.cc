@@ -394,8 +394,16 @@ score_average_best (const vector<SpeedSync::Score>& scores)
 }
 
 static vector<SpeedSync::Score>
-run_search (ThreadPool& thread_pool, vector<std::unique_ptr<SpeedSync>>& speed_sync, const SpeedScanParams& scan_params)
+run_search (ThreadPool& thread_pool, vector<std::unique_ptr<SpeedSync>>& speed_sync, const SpeedScanParams& scan_params, const WavData& in_data, double clip_location, const vector<double>& speeds)
 {
+  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
+  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
+
+  speed_sync.clear();
+
+  for (auto speed : speeds)
+    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, speed));
+
   auto t0 = get_time();
 
   for (auto& s : speed_sync)
@@ -467,48 +475,45 @@ find_closest_speed_sync (const vector<std::unique_ptr<SpeedSync>>& speed_sync, d
 }
 
 static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
+speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, bool print_results)
 {
-  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
-
   vector<std::unique_ptr<SpeedSync>> speed_sync;
   vector<SpeedSync::Score> scores;
 
   /* search using grid */
-  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
-    {
-      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
+  {
+    vector<double> speeds;
 
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
-    }
+    for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+      {
+        speeds.push_back (pow (scan_params.step, c * (scan_params.n_steps * 2 + 1)));
+      }
 
-  scores = run_search (thread_pool, speed_sync, scan_params);
+    scores = run_search (thread_pool, speed_sync, scan_params, in_data, clip_location, speeds);
+  }
 
   if (Params::detect_speed_patient)
     {
       select_n_best_scores (scores, 1);
 
-      speed_sync.clear();
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params3, scores[0].speed));
-      scores = run_search (thread_pool, speed_sync, scan_params3);
+      scores = run_search (thread_pool, speed_sync, scan_params3, in_data, clip_location, { scores[0].speed });
 
       return score_average_best (scores);
     }
 
-  /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-  WavData in_clip2 = get_speed_clip (clip_location, in_data, scan_params2.seconds * 1.3);
-
-  speed_sync.clear();
-
+  /* search 5 best matches */
   select_n_best_scores (scores, 5);
-  for (auto score : scores)
-    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip2, scan_params2, score.speed));
+  {
+    vector<double> speeds;
+    for (auto score : scores)
+      speeds.push_back (score.speed);
 
-  scores = run_search (thread_pool, speed_sync, scan_params2);
+    scores = run_search (thread_pool, speed_sync, scan_params2, in_data, clip_location, speeds);
+  }
 
   select_n_best_scores (scores, 1);
 
+  /* refine best match */
   SpeedSync *center_speed_sync = find_closest_speed_sync (speed_sync, scores[0].speed);
 
   // EXECUTE SEARCH BEST
@@ -639,6 +644,6 @@ detect_speed (const WavData& in_data, bool print_results)
       .interpolate    = false
     };
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, Params::detect_speed_patient ? scan1_patient : scan1, scan2, scan3, /* start speed */ 1.0, print_results);
+  double speed = speed_scan (thread_pool, clip_location, in_data, Params::detect_speed_patient ? scan1_patient : scan1, scan2, scan3, print_results);
   return speed;
 }
