@@ -151,6 +151,8 @@ public:
   void
   start_search_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params, double speed_delta)
   {
+    result_scores.clear();
+
     for (int p = -scan_params.n_steps; p <= scan_params.n_steps; p++)
       {
         const double relative_speed = pow (scan_params.step, p) * speed_delta;
@@ -163,11 +165,6 @@ public:
   get_scores()
   {
     return result_scores;
-  }
-  void
-  clear_scores()
-  {
-    result_scores.clear();
   }
   double
   center_speed() const
@@ -459,6 +456,16 @@ select_n_best_scores (vector<SpeedSync::Score>& scores, size_t n)
   scores = lmax_scores;
 }
 
+static SpeedSync *
+find_closest_speed_sync (const vector<std::unique_ptr<SpeedSync>>& speed_sync, double speed)
+{
+  auto it = std::min_element (speed_sync.begin(), speed_sync.end(), [&](auto& x, auto& y)
+    {
+      return fabs (x->center_speed() - speed) < fabs (y->center_speed() - speed);
+    });
+  return (*it).get();
+}
+
 static double
 speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, double speed, bool print_results)
 {
@@ -502,22 +509,11 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   select_n_best_scores (scores, 1);
 
-  double min_dist = 1;
-  SpeedSync *center_speed_sync = nullptr;
-  for (auto& s: speed_sync)
-    {
-      double dist = fabs (s->center_speed() - scores[0].speed);
-      if (dist < min_dist)
-        {
-          min_dist = dist;
-          center_speed_sync = s.get();
-        }
-    }
+  SpeedSync *center_speed_sync = find_closest_speed_sync (speed_sync, scores[0].speed);
 
   // EXECUTE SEARCH BEST
   auto t4 = get_time();
 
-  center_speed_sync->clear_scores();
   double speed_delta = scores[0].speed / center_speed_sync->center_speed();
   printf ("speed_delta = %f\n", speed_delta);
   center_speed_sync->start_search_jobs (thread_pool, scan_params3, speed_delta);
