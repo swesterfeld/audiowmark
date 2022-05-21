@@ -429,25 +429,33 @@ select_n_best_scores (vector<SpeedSync::Score>& scores, size_t n)
 {
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
 
+  auto get_quality = [&] (int pos) // handle corner cases
+    {
+      if (pos >= 0 && size_t (pos) < scores.size())
+        return scores[pos].quality;
+      else
+        return 0.0;
+    };
+
   vector<SpeedSync::Score> lmax_scores;
-  for (size_t x = 1; x + 2 < scores.size(); x++)
+  for (int x = 0; size_t (x) < scores.size(); x++)
     {
       /* check for peaks
        *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
        *  - double peak : two values have equal quality, this must be larger than left and right neighbour
        */
-      const double q1 = scores[x - 1].quality;
-      const double q2 = scores[x].quality;
-      const double q3 = scores[x + 1].quality;
-      const double q4 = scores[x + 2].quality;
+      const double q1 = get_quality (x - 1);
+      const double q2 = get_quality (x);
+      const double q3 = get_quality (x + 1);
+      const double q4 = get_quality (x + 2);
 
       if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
         lmax_scores.push_back (scores[x]);
     }
   sort (lmax_scores.begin(), lmax_scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
 
-  if (lmax_scores.size() > 5)
-    lmax_scores.resize (5);
+  if (lmax_scores.size() > n)
+    lmax_scores.resize (n);
   scores = lmax_scores;
 }
 
@@ -492,8 +500,8 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
 
   scores = run_search (thread_pool, speed_sync, scan_params2);
 
-  // GET 1 BEST
-  sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
+  select_n_best_scores (scores, 1);
+
   double min_dist = 1;
   SpeedSync *center_speed_sync = nullptr;
   for (auto& s: speed_sync)
