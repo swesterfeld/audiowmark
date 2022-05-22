@@ -121,19 +121,17 @@ private:
   vector<vector<SyncFinder::FrameBit>> sync_bits;
   MagMatrix sync_matrix;
 
-  void prepare_mags();
+  void prepare_mags (const SpeedScanParams& scan_params);
   void compare (double relative_speed);
 
   std::mutex mutex;
   vector<Score> result_scores;
   const WavData& in_data;
-  const SpeedScanParams scan_params;
   const double center;
   const int    frames_per_block;
 public:
-  SpeedSync (const WavData& in_data, const SpeedScanParams& scan_params, double center) :
+  SpeedSync (const WavData& in_data, double center) :
     in_data (in_data),
-    scan_params (scan_params),
     center (center),
     frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
   {
@@ -143,9 +141,9 @@ public:
     sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
   }
   void
-  start_prepare_job (ThreadPool& thread_pool)
+  start_prepare_job (ThreadPool& thread_pool, const SpeedScanParams& scan_params)
   {
-    thread_pool.add_job ([this]() { prepare_mags(); });
+    thread_pool.add_job ([this, &scan_params]() { prepare_mags (scan_params); });
   }
 
   void
@@ -174,7 +172,7 @@ public:
 };
 
 void
-SpeedSync::prepare_mags()
+SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
 {
   WavData in_data_trc (truncate (in_data, scan_params.seconds / center));
 
@@ -402,12 +400,12 @@ run_search (ThreadPool& thread_pool, vector<std::unique_ptr<SpeedSync>>& speed_s
   speed_sync.clear();
 
   for (auto speed : speeds)
-    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, speed));
+    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, speed));
 
   auto t0 = get_time();
 
   for (auto& s : speed_sync)
-    s->start_prepare_job (thread_pool);
+    s->start_prepare_job (thread_pool, scan_params);
   thread_pool.wait_all();
 
   auto t1 = get_time();
