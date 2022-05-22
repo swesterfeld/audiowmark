@@ -472,74 +472,6 @@ find_closest_speed_sync (const vector<std::unique_ptr<SpeedSync>>& speed_sync, d
   return (*it).get();
 }
 
-static double
-speed_scan (double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, bool print_results)
-{
-  ThreadPool thread_pool;
-  vector<std::unique_ptr<SpeedSync>> speed_sync;
-  vector<SpeedSync::Score> scores;
-
-  /* search using grid */
-  {
-    vector<double> speeds;
-
-    for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
-      {
-        speeds.push_back (pow (scan_params.step, c * (scan_params.n_steps * 2 + 1)));
-      }
-
-    scores = run_search (thread_pool, speed_sync, scan_params, in_data, clip_location, speeds);
-  }
-
-  if (Params::detect_speed_patient)
-    {
-      select_n_best_scores (scores, 1);
-
-      scores = run_search (thread_pool, speed_sync, scan_params3, in_data, clip_location, { scores[0].speed });
-
-      return score_average_best (scores);
-    }
-
-  /* search 5 best matches */
-  select_n_best_scores (scores, 5);
-  {
-    vector<double> speeds;
-    for (auto score : scores)
-      speeds.push_back (score.speed);
-
-    scores = run_search (thread_pool, speed_sync, scan_params2, in_data, clip_location, speeds);
-  }
-
-  select_n_best_scores (scores, 1);
-
-  /* refine best match */
-  SpeedSync *center_speed_sync = find_closest_speed_sync (speed_sync, scores[0].speed);
-
-  auto t4 = get_time();
-
-  center_speed_sync->start_search_jobs (thread_pool, scan_params3, scores[0].speed);
-  thread_pool.wait_all();
-
-  auto t5 = get_time();
-
-  printf ("detect_speed %.3f\n", t5 - t4);
-
-  return score_average_best (center_speed_sync->get_scores());
-
-#if 0
-  if (print_results)
-    {
-      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
-        scan_params.seconds,
-        best_speed,
-        best_quality,
-        100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
-        t1 - t0, t2 - t1);
-    }
-  return best_speed;
-#endif
-}
-
 static vector<double>
 get_clip_locations (const WavData& in_data, int n)
 {
@@ -594,52 +526,99 @@ detect_speed (const WavData& in_data, bool print_results)
   if (in_seconds < 0.25)
     return 1;
 
-  /* first pass: find approximation for speed */
-  const SpeedScanParams scan1_normal
+  const SpeedScanParams scan1_normal /* first pass: find approximation: speed approximately 0.8..1.25 */
     {
       .seconds        = 25,
-
-      /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.0007,
       .n_steps        = 5,
       .n_center_steps = 28,
-      .interpolate    = true
     };
   const SpeedScanParams scan1_patient
     {
       .seconds        = 50,
-
-      /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.00035,
       .n_steps        = 11,
       .n_center_steps = 28,
-      .interpolate    = true
     };
   const SpeedScanParams scan1 = Params::detect_speed_patient ? scan1_patient : scan1_normal;
 
-  const int    clip_candidates = 5;
-  const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
-
-  /* second pass: fast refine (not always perfect) */
-  const SpeedScanParams scan2
+  const SpeedScanParams scan2 /* second pass: improve approximation (not necessary for patient speed detection) */
     {
       .seconds        = 50,
       .step           = 1.00035,
       .n_steps        = 1,
-      .n_center_steps = 0,
-      .interpolate    = false
     };
-
-  /* third pass: fast refine (not always perfect) */
-  const SpeedScanParams scan3
+  const SpeedScanParams scan3 /* third pass: fast refine (not always perfect) */
     {
       .seconds        = 50,
       .step           = 1.00005,
       .n_steps        = 10,
-      .n_center_steps = 0,
-      .interpolate    = false
     };
 
-  double speed = speed_scan (clip_location, in_data, scan1, scan2, scan3, print_results);
-  return speed;
+  const int    clip_candidates = 5;
+  const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
+
+  ThreadPool thread_pool;
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
+  vector<SpeedSync::Score> scores;
+
+  /* search using grid */
+  {
+    vector<double> speeds;
+
+    for (int c = -scan1.n_center_steps; c <= scan1.n_center_steps; c++)
+      {
+        speeds.push_back (pow (scan1.step, c * (scan1.n_steps * 2 + 1)));
+      }
+
+    scores = run_search (thread_pool, speed_sync, scan1, in_data, clip_location, speeds);
+  }
+
+  if (Params::detect_speed_patient)
+    {
+      select_n_best_scores (scores, 1);
+
+      scores = run_search (thread_pool, speed_sync, scan3, in_data, clip_location, { scores[0].speed });
+
+      return score_average_best (scores);
+    }
+
+  /* search 5 best matches */
+  select_n_best_scores (scores, 5);
+  {
+    vector<double> speeds;
+    for (auto score : scores)
+      speeds.push_back (score.speed);
+
+    scores = run_search (thread_pool, speed_sync, scan2, in_data, clip_location, speeds);
+  }
+
+  select_n_best_scores (scores, 1);
+
+  /* refine best match */
+  SpeedSync *center_speed_sync = find_closest_speed_sync (speed_sync, scores[0].speed);
+
+  auto t4 = get_time();
+
+  center_speed_sync->start_search_jobs (thread_pool, scan3, scores[0].speed);
+  thread_pool.wait_all();
+
+  auto t5 = get_time();
+
+  printf ("detect_speed %.3f\n", t5 - t4);
+
+  return score_average_best (center_speed_sync->get_scores());
+
+#if 0
+  if (print_results)
+    {
+      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
+        scan_params.seconds,
+        best_speed,
+        best_quality,
+        100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
+        t1 - t0, t2 - t1);
+    }
+  return best_speed;
+#endif
 }
