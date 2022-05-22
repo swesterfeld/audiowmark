@@ -374,6 +374,9 @@ class SpeedSearch
   const WavData& in_data;
   double clip_location;
 
+  double start_time;
+  vector<double> times;
+
   SpeedSync *
   find_closest_speed_sync (double speed)
   {
@@ -384,11 +387,28 @@ class SpeedSearch
     return (*it).get();
   }
 
+  void
+  timer_start()
+  {
+    start_time = get_time();
+  }
+  void
+  timer_report()
+  {
+    auto t = get_time();
+    times.push_back (t - start_time);
+    start_time = t;
+  }
 public:
   SpeedSearch (const WavData& in_data, double clip_location) :
     in_data (in_data),
     clip_location (clip_location)
   {
+  }
+  vector<double>
+  get_times()
+  {
+    return times;
   }
 
   vector<SpeedSync::Score> run_search (const SpeedScanParams& scan_params, const vector<double>& speeds);
@@ -406,21 +426,19 @@ SpeedSearch::run_search (const SpeedScanParams& scan_params, const vector<double
   for (auto speed : speeds)
     speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, speed));
 
-  auto t0 = get_time();
+  timer_start();
 
   for (auto& s : speed_sync)
     s->start_prepare_job (thread_pool, scan_params);
   thread_pool.wait_all();
 
-  auto t1 = get_time();
+  timer_report();
 
   for (auto& s : speed_sync)
     s->start_search_jobs (thread_pool, scan_params, s->center_speed());
   thread_pool.wait_all();
 
-  auto t2 = get_time();
-
-  printf ("detect_speed %.3f %.3f\n", t1 - t0, t2 - t1);
+  timer_report();
 
   vector<SpeedSync::Score> scores;
   for (auto& s : speed_sync)
@@ -436,14 +454,12 @@ SpeedSearch::refine_search (const SpeedScanParams& scan_params, double speed)
 {
   SpeedSync *center_speed_sync = find_closest_speed_sync (speed);
 
-  auto t0 = get_time();
+  timer_start();
 
   center_speed_sync->start_search_jobs (thread_pool, scan_params, speed);
   thread_pool.wait_all();
 
-  auto t1 = get_time();
-
-  printf ("detect_speed %.3f\n", t1 - t0);
+  timer_report();
 
   return center_speed_sync->get_scores();
 }
@@ -571,7 +587,7 @@ detect_speed (const WavData& in_data, bool print_results)
   const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
 
   vector<SpeedSync::Score> scores;
-  SpeedSearch search_context (in_data, clip_location);
+  SpeedSearch speed_search (in_data, clip_location);
 
   /* search using grid */
   {
@@ -582,14 +598,14 @@ detect_speed (const WavData& in_data, bool print_results)
         speeds.push_back (pow (scan1.step, c * (scan1.n_steps * 2 + 1)));
       }
 
-    scores = search_context.run_search (scan1, speeds);
+    scores = speed_search.run_search (scan1, speeds);
   }
 
   if (Params::detect_speed_patient)
     {
       select_n_best_scores (scores, 1);
 
-      scores = search_context.run_search (scan3, { scores[0].speed });
+      scores = speed_search.run_search (scan3, { scores[0].speed });
     }
   else
     {
@@ -600,15 +616,23 @@ detect_speed (const WavData& in_data, bool print_results)
       for (auto score : scores)
         speeds.push_back (score.speed);
 
-      scores = search_context.run_search (scan2, speeds);
+      scores = speed_search.run_search (scan2, speeds);
 
       /* refine best match */
       select_n_best_scores (scores, 1);
 
-      scores = search_context.refine_search (scan3, scores[0].speed);
+      scores = speed_search.refine_search (scan3, scores[0].speed);
     }
-  return score_average_best (scores);
 
+  double best_speed = score_average_best (scores);
+
+  if (print_results)
+    {
+      printf ("detect_speed");
+      for (auto t : speed_search.get_times())
+        printf (" %.3f", t);
+      printf ("\n");
+    }
 #if 0
   if (print_results)
     {
@@ -619,6 +643,6 @@ detect_speed (const WavData& in_data, bool print_results)
         100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
         t1 - t0, t2 - t1);
     }
-  return best_speed;
 #endif
+  return best_speed;
 }
