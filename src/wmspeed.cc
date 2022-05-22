@@ -473,8 +473,9 @@ find_closest_speed_sync (const vector<std::unique_ptr<SpeedSync>>& speed_sync, d
 }
 
 static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, bool print_results)
+speed_scan (double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, const SpeedScanParams& scan_params2, const SpeedScanParams& scan_params3, bool print_results)
 {
+  ThreadPool thread_pool;
   vector<std::unique_ptr<SpeedSync>> speed_sync;
   vector<SpeedSync::Score> scores;
 
@@ -596,10 +597,8 @@ detect_speed (const WavData& in_data, bool print_results)
   if (in_seconds < 0.25)
     return 1;
 
-  ThreadPool thread_pool;
-
   /* first pass: find approximation for speed */
-  const SpeedScanParams scan1
+  const SpeedScanParams scan1_normal
     {
       .seconds        = 25,
 
@@ -619,6 +618,8 @@ detect_speed (const WavData& in_data, bool print_results)
       .n_center_steps = 28,
       .interpolate    = true
     };
+  const SpeedScanParams scan1 = Params::detect_speed_patient ? scan1_patient : scan1_normal;
+
   const int    clip_candidates = 5;
   const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
 
@@ -642,6 +643,6 @@ detect_speed (const WavData& in_data, bool print_results)
       .interpolate    = false
     };
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, Params::detect_speed_patient ? scan1_patient : scan1, scan2, scan3, print_results);
+  double speed = speed_scan (clip_location, in_data, scan1, scan2, scan3, print_results);
   return speed;
 }
