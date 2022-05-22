@@ -69,7 +69,6 @@ struct SpeedScanParams
   double step           = 0;
   int    n_steps        = 0;
   int    n_center_steps = 0;
-  bool   interpolate    = false;
 };
 
 class MagMatrix
@@ -340,29 +339,6 @@ SpeedSync::compare (double relative_speed)
   std::lock_guard<std::mutex> lg (mutex);
   result_scores.push_back (best_score);
 }
-
-class QInterpolator  // quadratic interpolation between three data values
-{
-  double a, b, c;
-
-public:
-  QInterpolator (double y1, double y2, double y3)
-  {
-    a = (y1 + y3) / 2 - y2;
-    b = (y3 - y1) / 2;
-    c = y2;
-  }
-  double
-  eval (double x)
-  {
-    return ((a * x) + b) * x + c;
-  }
-  double
-  x_max()
-  {
-    return -b / (2 * a);
-  }
-};
 
 static double
 score_average_best (const vector<SpeedSync::Score>& scores)
