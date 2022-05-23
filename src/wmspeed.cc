@@ -424,7 +424,14 @@ SpeedSearch::run_search (const SpeedScanParams& scan_params, const vector<double
   speed_sync.clear();
 
   for (auto speed : speeds)
-    speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, speed));
+    {
+      for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+        {
+          double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
+
+          speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, c_speed));
+        }
+    }
 
   timer_start();
 
@@ -589,27 +596,19 @@ detect_speed (const WavData& in_data, bool print_results)
   vector<SpeedSync::Score> scores;
   SpeedSearch speed_search (in_data, clip_location);
 
-  /* search using grid */
-  {
-    vector<double> speeds;
-
-    for (int c = -scan1.n_center_steps; c <= scan1.n_center_steps; c++)
-      {
-        speeds.push_back (pow (scan1.step, c * (scan1.n_steps * 2 + 1)));
-      }
-
-    scores = speed_search.run_search (scan1, speeds);
-  }
+  /* initial search using grid */
+  scores = speed_search.run_search (scan1, { 1.0 });
 
   if (Params::detect_speed_patient)
     {
+      /* improve best match */
       select_n_best_scores (scores, 1);
 
       scores = speed_search.run_search (scan3, { scores[0].speed });
     }
   else
     {
-      /* search 5 best matches */
+      /* improve 5 best matches */
       select_n_best_scores (scores, 5);
 
       vector<double> speeds;
