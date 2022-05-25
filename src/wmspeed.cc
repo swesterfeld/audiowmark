@@ -181,15 +181,13 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;
 
+  /* generate analysis window */
   double window_weight = 0;
   float window[sub_frame_size];
   for (size_t i = 0; i < sub_frame_size; i++)
     {
       const double fsize_2 = sub_frame_size / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      /* FIXME: is this the best choice */
       const double win = window_hamming ((i - fsize_2) / fsize_2);
-      //const double win = 1;
       window[i] = win;
       window_weight += win;
     }
