@@ -116,8 +116,15 @@ public:
     double speed = 0;
     double quality = 0;
   };
+  struct SyncBit
+  {
+    int bit = 0;
+    int frame = 0;
+    std::vector<int> up;
+    std::vector<int> down;
+  };
 private:
-  vector<vector<SyncFinder::FrameBit>> sync_bits;
+  vector<SyncBit> sync_bits;
   MagMatrix sync_matrix;
 
   void prepare_mags (const SpeedScanParams& scan_params);
@@ -137,7 +144,22 @@ public:
     // constructor is run in the main thread; everything that is not thread-safe must happen here
     SyncFinder sync_finder;
 
-    sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
+    auto sync_finder_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
+    for (size_t bit = 0; bit < sync_finder_bits.size(); bit++)
+      {
+        for (const auto& frame_bit : sync_finder_bits[bit])
+          {
+            SyncBit sb;
+
+            sb.bit    = bit;
+            sb.frame  = frame_bit.frame;
+            sb.up     = frame_bit.up;
+            sb.down   = frame_bit.down;
+
+            sync_bits.push_back (sb);
+          }
+      }
+    std::sort (sync_bits.begin(), sync_bits.end(), [](const auto& s1, const auto& s2) { return s1.frame < s2.frame; });
   }
   void
   start_prepare_job (ThreadPool& thread_pool, const SpeedScanParams& scan_params)
@@ -205,7 +227,7 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
 
   /* set mag matrix size */
   int n_sync_rows = 0;
-  int n_sync_cols = sync_bits[0].size() * sync_bits.size();
+  int n_sync_cols = sync_bits.size();
   for (size_t ppos = 0; ppos + sub_frame_size < in_data_sub.n_frames(); ppos += sub_sync_search_step)
     n_sync_rows++;
   sync_matrix.resize (n_sync_rows, n_sync_cols);
@@ -233,20 +255,16 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
               fft_out_db.push_back (db_from_complex (out[i * 2], out[i * 2 + 1], min_db));
             }
         }
-      for (size_t bit = 0; bit < sync_bits.size(); bit++)
+      for (const auto& sync_bit : sync_bits)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[bit];
-          for (const auto& frame_bit : frame_bits)
-            {
-              float umag = 0, dmag = 0;
+          float umag = 0, dmag = 0;
 
-              for (size_t i = 0; i < frame_bit.up.size(); i++)
-                {
-                  umag += fft_out_db[frame_bit.up[i]];
-                  dmag += fft_out_db[frame_bit.down[i]];
-                }
-              sync_matrix (row, col++) = MagMatrix::Mags {umag, dmag};
+          for (size_t i = 0; i < sync_bit.up.size(); i++)
+            {
+              umag += fft_out_db[sync_bit.up[i]];
+              dmag += fft_out_db[sync_bit.down[i]];
             }
+          sync_matrix (row, col++) = MagMatrix::Mags {umag, dmag};
         }
       assert (col == n_sync_cols);
       row++;
@@ -267,58 +285,66 @@ SpeedSync::compare (double relative_speed)
 
   for (int offset = -pad_start; offset < 0; offset++)
     {
-      double sync_quality = 0;
       int mi = 0;
-      int frame_bit_count = 0;
-      int bit_count = 0;
-      for (size_t sync_bit = 0; sync_bit < Params::sync_bits; sync_bit++)
+      struct BitValue {
+        float umag = 0;
+        float dmag = 0;
+        int count = 0;
+      };
+      BitValue bit_values[Params::sync_bits];
+
+      for (const auto& frame_bit : sync_bits)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[sync_bit];
+          auto& bv = bit_values[frame_bit.bit];
 
-          float umag = 0;
-          float dmag = 0;
-          for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
+          int index = offset + frame_bit.frame * steps_per_frame;
+
+          const int index1 = lrint (index * relative_speed_inv);
+          if (index1 >= 0 && index1 < sync_matrix.rows())
             {
-              int index = offset + frame_bits[f].frame * steps_per_frame;
-
-              const int index1 = lrint (index * relative_speed_inv);
-              if (index1 >= 0 && index1 < sync_matrix.rows())
-                {
-                  auto mags = sync_matrix (index1, mi);
-                  umag += mags.umag;
-                  dmag += mags.dmag;
-                  frame_bit_count++;
-                }
-              index += frames_per_block * steps_per_frame;
-
-              const int index2 = lrint (index * relative_speed_inv);
-              if (index2 >= 0 && index2 < sync_matrix.rows())
-                {
-                  auto mags = sync_matrix (index2, mi);
-                  umag += mags.dmag;
-                  dmag += mags.umag;
-                  frame_bit_count++;
-                }
-              mi++;
+              auto mags = sync_matrix (index1, mi);
+              bv.umag += mags.umag;
+              bv.dmag += mags.dmag;
+              bv.count++;
             }
+          index += frames_per_block * steps_per_frame;
+
+          const int index2 = lrint (index * relative_speed_inv);
+          if (index2 >= 0 && index2 < sync_matrix.rows())
+            {
+              auto mags = sync_matrix (index2, mi);
+              bv.umag += mags.dmag;
+              bv.dmag += mags.umag;
+              bv.count++;
+            }
+          mi++;
+        }
+
+      double sync_quality = 0;
+      int bit_count = 0;
+
+      for (size_t bit = 0; bit < Params::sync_bits; bit++)
+        {
+          const auto& bv = bit_values[bit];
+
           /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
           double raw_bit;
-          if (umag == 0 || dmag == 0)
+          if (bv.umag == 0 || bv.dmag == 0)
             {
               raw_bit = 0;
             }
-          else if (umag < dmag)
+          else if (bv.umag < bv.dmag)
             {
-              raw_bit = 1 - umag / dmag;
+              raw_bit = 1 - bv.umag / bv.dmag;
             }
           else
             {
-              raw_bit = dmag / umag - 1;
+              raw_bit = bv.dmag / bv.umag - 1;
             }
-          const int expect_data_bit = sync_bit & 1; /* expect 010101 */
+          const int expect_data_bit = bit & 1; /* expect 010101 */
           const double q = expect_data_bit ? raw_bit : -raw_bit;
-          sync_quality += q * frame_bit_count;
-          bit_count += frame_bit_count;
+          sync_quality += q * bv.count;
+          bit_count += bv.count;
         }
       if (bit_count)
         {
