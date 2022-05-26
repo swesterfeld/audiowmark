@@ -625,10 +625,14 @@ detect_speed (const WavData& in_data, bool print_results)
 
   if (print_results)
     {
+      double total = 0.0;
       printf ("detect_speed");
       for (auto t : speed_search.get_times())
-        printf (" %.3f", t);
-      printf ("\n");
+        {
+          total += t;
+          printf (" %.3f", t);
+        }
+      printf (" %.3f\n", total);
     }
 #if 0
   if (print_results)
