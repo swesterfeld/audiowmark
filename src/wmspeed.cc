@@ -123,18 +123,27 @@ public:
     std::vector<int> up;
     std::vector<int> down;
   };
+  struct BitValue
+  {
+    float umag = 0;
+    float dmag = 0;
+    int count = 0;
+  };
 private:
   vector<SyncBit> sync_bits;
   MagMatrix sync_matrix;
 
   void prepare_mags (const SpeedScanParams& scan_params);
   void compare (double relative_speed);
+  template<bool B2>
+  void compare_bits (BitValue *bit_values, double relative_speed, int offset);
 
   std::mutex mutex;
   vector<Score> result_scores;
   const WavData& in_data;
   const double center;
   const int    frames_per_block;
+
 public:
   SpeedSync (const WavData& in_data, double center) :
     in_data (in_data),
@@ -273,65 +282,67 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
   assert (row == n_sync_rows);
 }
 
+template<bool B2> void
+SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int offset)
+{
+  const int steps_per_frame = Params::frame_size / Params::sync_search_step;
+  const double relative_speed_inv = 1 / relative_speed;
+
+  /* search start */
+  auto si = sync_bits.begin();
+  while (si != sync_bits.end())
+    {
+      int index = offset + si->frame * steps_per_frame;
+
+      if (index >= 0)
+        break;
+
+      si++;
+    }
+  int mi = si - sync_bits.begin();
+
+  while (si != sync_bits.end())
+    {
+      int index = offset + si->frame * steps_per_frame;
+
+      const int index1 = lrint (index * relative_speed_inv);
+      if (index1 >= sync_matrix.rows())
+        return;
+
+      auto& bv = bit_values[si->bit];
+      auto mags = sync_matrix (index1, mi);
+      if (B2)
+        {
+          bv.umag += mags.dmag;
+          bv.dmag += mags.umag;
+        }
+      else
+        {
+          bv.umag += mags.umag;
+          bv.dmag += mags.dmag;
+        }
+      bv.count++;
+
+      si++;
+      mi++;
+    }
+}
+
 void
 SpeedSync::compare (double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
   const int pad_start = frames_per_block * steps_per_frame + /* add a bit of overlap to handle boundaries */ steps_per_frame;
-  const double relative_speed_inv = 1 / relative_speed;
   Score best_score;
 
   assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
 
   for (int offset = -pad_start; offset < 0; offset++)
     {
-      int mi = 0;
-      struct BitValue {
-        float umag = 0;
-        float dmag = 0;
-        int count = 0;
-      };
       BitValue bit_values[Params::sync_bits];
 
-      for (const auto& frame_bit : sync_bits)
-        {
-          int index = offset + frame_bit.frame * steps_per_frame;
-
-          const int index1 = lrint (index * relative_speed_inv);
-          if (index1 >= 0)
-            {
-              if (index1 >= sync_matrix.rows())
-                break;
-
-              auto& bv = bit_values[frame_bit.bit];
-              auto mags = sync_matrix (index1, mi);
-              bv.umag += mags.umag;
-              bv.dmag += mags.dmag;
-              bv.count++;
-            }
-          mi++;
-        }
-
-      mi = 0;
-      const int offset2 = offset + frames_per_block * steps_per_frame;
-      for (const auto& frame_bit : sync_bits)
-        {
-          int index = offset2 + frame_bit.frame * steps_per_frame;
-
-          const int index2 = lrint (index * relative_speed_inv);
-          if (index2 >= 0)
-            {
-              if (index2 >= sync_matrix.rows())
-                break;
-
-              auto& bv = bit_values[frame_bit.bit];
-              auto mags = sync_matrix (index2, mi);
-              bv.umag += mags.dmag;
-              bv.dmag += mags.umag;
-              bv.count++;
-            }
-          mi++;
-        }
+      compare_bits<false> (bit_values, relative_speed, offset);
+      compare_bits<true>  (bit_values, relative_speed, offset + frames_per_block * steps_per_frame);
 
       double sync_quality = 0;
       int bit_count = 0;
