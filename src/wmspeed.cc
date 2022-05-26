@@ -295,23 +295,36 @@ SpeedSync::compare (double relative_speed)
 
       for (const auto& frame_bit : sync_bits)
         {
-          auto& bv = bit_values[frame_bit.bit];
-
           int index = offset + frame_bit.frame * steps_per_frame;
 
           const int index1 = lrint (index * relative_speed_inv);
-          if (index1 >= 0 && index1 < sync_matrix.rows())
+          if (index1 >= 0)
             {
+              if (index1 >= sync_matrix.rows())
+                break;
+
+              auto& bv = bit_values[frame_bit.bit];
               auto mags = sync_matrix (index1, mi);
               bv.umag += mags.umag;
               bv.dmag += mags.dmag;
               bv.count++;
             }
-          index += frames_per_block * steps_per_frame;
+          mi++;
+        }
+
+      mi = 0;
+      const int offset2 = offset + frames_per_block * steps_per_frame;
+      for (const auto& frame_bit : sync_bits)
+        {
+          int index = offset2 + frame_bit.frame * steps_per_frame;
 
           const int index2 = lrint (index * relative_speed_inv);
-          if (index2 >= 0 && index2 < sync_matrix.rows())
+          if (index2 >= 0)
             {
+              if (index2 >= sync_matrix.rows())
+                break;
+
+              auto& bv = bit_values[frame_bit.bit];
               auto mags = sync_matrix (index2, mi);
               bv.umag += mags.dmag;
               bv.dmag += mags.umag;
