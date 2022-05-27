@@ -1,7 +1,6 @@
 speed detection possible improvements:
 - refine with 128 sync step instead of 256?
 - grid size adjustment
-- remove lrint?
 - detect silence instead of total volume?
 - split big region into two smaller ones?
 - connected search on even smaller regions?

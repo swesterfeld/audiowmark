@@ -302,14 +302,12 @@ SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int *start
 
   for (auto si = sync_bits.begin() + mi; si != sync_bits.end(); si++)
     {
-      int index = offset + si->frame * steps_per_frame;
-
-      const int index1 = lrint (index * relative_speed_inv);
-      if (index1 >= sync_matrix.rows())
+      int index = (offset + si->frame * steps_per_frame) * relative_speed_inv;
+      if (index >= sync_matrix.rows())
         return;
 
       auto& bv = bit_values[si->bit];
-      auto mags = sync_matrix (index1, mi);
+      auto mags = sync_matrix (index, mi);
       if (B2)
         {
           bv.umag += mags.dmag;
