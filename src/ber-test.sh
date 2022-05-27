@@ -86,7 +86,11 @@ do
       sox -D -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
       mv ${AWM_FILE}.speed.wav ${AWM_FILE}.wav
 
-      TEST_SPEED_ARGS="--detect-speed --test-speed $SPEED"
+      if [ "x$AWM_SPEED_PATIENT" != x ]; then
+        TEST_SPEED_ARGS="--detect-speed-patient --test-speed $SPEED"
+      else
+        TEST_SPEED_ARGS="--detect-speed --test-speed $SPEED"
+      fi
     else
       TEST_SPEED_ARGS=""
     fi
