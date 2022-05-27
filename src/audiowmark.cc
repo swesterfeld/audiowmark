@@ -459,10 +459,6 @@ parse_shared_options (ArgParser& ap)
     {
       Params::water_delta = f / 1000;
     }
-  if (ap.parse_opt ("--json", s))
-    {
-      Params::json_output = s;
-    }
   if (ap.parse_opt  ("--key", s))
     {
       Params::have_key++;
@@ -587,6 +583,7 @@ parse_add_options (ArgParser& ap)
 void
 parse_get_options (ArgParser& ap)
 {
+  string s;
   float f;
 
   ap.parse_opt ("--test-cut", Params::test_cut);
@@ -624,6 +621,10 @@ parse_get_options (ArgParser& ap)
   if (ap.parse_opt ("--test-speed", f))
     {
       Params::test_speed = f;
+    }
+  if (ap.parse_opt ("--json", s))
+    {
+      Params::json_output = s;
     }
 }
 
