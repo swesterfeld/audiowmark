@@ -683,8 +683,12 @@ detect_speed (const WavData& in_data, bool print_results)
 
   if (print_results)
     {
+      double delta = -1;
+      if (Params::test_speed > 0)
+        delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
+      printf ("detect_speed %f %.4f   ", best_speed, delta);
+
       double total = 0.0;
-      printf ("detect_speed");
       for (auto t : speed_search.get_times())
         {
           total += t;
