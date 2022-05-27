@@ -136,7 +136,7 @@ private:
   void prepare_mags (const SpeedScanParams& scan_params);
   void compare (double relative_speed);
   template<bool B2>
-  void compare_bits (BitValue *bit_values, double relative_speed, int offset);
+  void compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset);
 
   std::mutex mutex;
   vector<Score> result_scores;
@@ -283,25 +283,24 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
 }
 
 template<bool B2> void
-SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int offset)
+SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
   const double relative_speed_inv = 1 / relative_speed;
 
   /* search start */
-  auto si = sync_bits.begin();
-  while (si != sync_bits.end())
+  int mi = *start_mi;
+  while (mi > 0)
     {
-      int index = offset + si->frame * steps_per_frame;
-
-      if (index >= 0)
+      int index = offset + sync_bits[mi - 1].frame * steps_per_frame;
+      if (index < 0)
         break;
 
-      si++;
+      mi--;
     }
-  int mi = si - sync_bits.begin();
+  *start_mi = mi;
 
-  while (si != sync_bits.end())
+  for (auto si = sync_bits.begin() + mi; si != sync_bits.end(); si++)
     {
       int index = offset + si->frame * steps_per_frame;
 
@@ -323,7 +322,6 @@ SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int offset
         }
       bv.count++;
 
-      si++;
       mi++;
     }
 }
@@ -337,12 +335,14 @@ SpeedSync::compare (double relative_speed)
 
   assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
 
+  int start_mi1 = sync_bits.size();
+  int start_mi2 = sync_bits.size();
   for (int offset = -pad_start; offset < 0; offset++)
     {
       BitValue bit_values[Params::sync_bits];
 
-      compare_bits<false> (bit_values, relative_speed, offset);
-      compare_bits<true>  (bit_values, relative_speed, offset + frames_per_block * steps_per_frame);
+      compare_bits<false> (bit_values, relative_speed, &start_mi1, offset);
+      compare_bits<true>  (bit_values, relative_speed, &start_mi2, offset + frames_per_block * steps_per_frame);
 
       double sync_quality = 0;
       int bit_count = 0;
