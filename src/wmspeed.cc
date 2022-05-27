@@ -456,6 +456,14 @@ public:
   {
     return times;
   }
+  static void
+  debug_range (const SpeedScanParams& scan_params)
+  {
+    auto bound = [&] (float f) {
+      return 100 * pow (scan_params.step, f * (scan_params.n_center_steps * (scan_params.n_steps * 2 + 1) + scan_params.n_steps));
+    };
+    printf ("range = [ %.2f .. %.2f ]\n", bound (-1), bound (1));
+  }
 
   vector<SpeedSync::Score> run_search (const SpeedScanParams& scan_params, const vector<double>& speeds);
   vector<SpeedSync::Score> refine_search (const SpeedScanParams& scan_params, double speed);
@@ -635,6 +643,8 @@ detect_speed (const WavData& in_data, bool print_results)
       .step           = 1.00005,
       .n_steps        = 10,
     };
+
+  // SpeedSearch::debug_range (scan1);
 
   const int    clip_candidates = 5;
   const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
