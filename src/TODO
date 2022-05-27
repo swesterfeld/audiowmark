@@ -1,10 +1,18 @@
+release todo:
+- provide better diagnostics for command line options
+- document --detect-speed-patient
+- warn on input_frames != output_frames
+- support --strict
+- merge infinite wav header generator
+- make check
+- don't crash on cmp fo
+
 speed detection possible improvements:
-- refine with 128 sync step instead of 256?
 - grid size adjustment
+- refine with 128 sync step instead of 256?
 - detect silence instead of total volume?
 - split big region into two smaller ones?
 - connected search on even smaller regions?
-- reorder memory access in compare to be more cache efficient
 
 possible improvements:
 - dynamic bit strength
