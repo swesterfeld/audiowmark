@@ -302,7 +302,7 @@ SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int *start
 
   for (auto si = sync_bits.begin() + mi; si != sync_bits.end(); si++)
     {
-      int index = (offset + si->frame * steps_per_frame) * relative_speed_inv;
+      int index = (offset + si->frame * steps_per_frame) * relative_speed_inv + 0.5;
       if (index >= sync_matrix.rows())
         return;
 
