@@ -264,19 +264,13 @@ public:
       }
   }
   int
-  print_match_count (const string& orig_pattern)
+  print_match_count (const vector<int>& orig_bits)
   {
     int match_count = 0;
 
-    vector<int> orig_vec = bit_str_to_vec (orig_pattern);
     for (auto p : patterns)
       {
-        bool        match = true;
-
-        for (size_t i = 0; i < p.bit_vec.size(); i++)
-          match = match && (p.bit_vec[i] == orig_vec[i % orig_vec.size()]);
-
-        if (match)
+        if (p.bit_vec == orig_bits)
           match_count++;
       }
     printf ("match_count %d %zd\n", match_count, patterns.size());
@@ -587,7 +581,7 @@ public:
 };
 
 static int
-decode_and_report (const WavData& wav_data, const string& orig_pattern)
+decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
 {
   ResultSet result_set;
   double speed = 1.0;
@@ -604,7 +598,7 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
     {
       if (Params::detect_speed || Params::detect_speed_patient)
-        speed = detect_speed (wav_data, !orig_pattern.empty());
+        speed = detect_speed (wav_data, !orig_bits.empty());
       else
         speed = Params::try_speed;
 
@@ -639,9 +633,9 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
   if (Params::json_output != "-")
     result_set.print();
 
-  if (!orig_pattern.empty())
+  if (!orig_bits.empty())
     {
-      int match_count = result_set.print_match_count (orig_pattern);
+      int match_count = result_set.print_match_count (orig_bits);
 
       block_decoder.print_debug_sync();
 
@@ -654,6 +648,14 @@ decode_and_report (const WavData& wav_data, const string& orig_pattern)
 int
 get_watermark (const string& infile, const string& orig_pattern)
 {
+  vector<int> orig_bitvec;
+  if (!orig_pattern.empty())
+    {
+      orig_bitvec = parse_payload (orig_pattern);
+      if (orig_bitvec.empty())
+        return 1;
+    }
+
   WavData wav_data;
   Error err = wav_data.load (infile);
   if (err)
@@ -675,10 +677,10 @@ get_watermark (const string& infile, const string& orig_pattern)
     }
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
-      return decode_and_report (wav_data, orig_pattern);
+      return decode_and_report (wav_data, orig_bitvec);
     }
   else
     {
-      return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_pattern);
+      return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_bitvec);
     }
 }

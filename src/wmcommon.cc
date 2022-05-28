@@ -20,6 +20,10 @@
 #include "convcode.hh"
 #include "shortcode.hh"
 
+using std::string;
+using std::vector;
+using std::complex;
+
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
 bool   Params::mix             = true;
@@ -46,12 +50,9 @@ RawFormat Params::raw_output_format;
 
 int    Params::hls_bit_rate = 0;
 
-std::string Params::json_output;
-std::string Params::input_label;
-std::string Params::output_label;
-
-using std::vector;
-using std::complex;
+string Params::json_output;
+string Params::input_label;
+string Params::output_label;
 
 FFTAnalyzer::FFTAnalyzer (int n_channels) :
   m_n_channels (n_channels),
@@ -211,4 +212,34 @@ int
 frame_count (const WavData& wav_data)
 {
   return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
+}
+
+vector<int>
+parse_payload (const string& bits)
+{
+  auto bitvec = bit_str_to_vec (bits);
+  if (bitvec.empty())
+    {
+      error ("audiowmark: cannot parse bits '%s'\n", bits.c_str());
+      return {};
+    }
+  if (Params::payload_short && bitvec.size() != Params::payload_size)
+    {
+      error ("audiowmark: number of message bits must match payload size (%zd bits)\n", Params::payload_size);
+      return {};
+    }
+  if (bitvec.size() > Params::payload_size)
+    {
+      error ("audiowmark: number of bits in message '%s' larger than payload size\n", bits.c_str());
+      return {};
+    }
+  if (bitvec.size() < Params::payload_size)
+    {
+      /* expand message automatically; good for testing, maybe not so good for the final product */
+      vector<int> expanded_bitvec;
+      for (size_t i = 0; i < Params::payload_size; i++)
+        expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
+      bitvec = expanded_bitvec;
+    }
+  return bitvec;
 }

@@ -148,6 +148,8 @@ int frame_count (const WavData& wav_data);
 int sync_frame_pos (int f);
 int data_frame_pos (int f);
 
+std::vector<int> parse_payload (const std::string& str);
+
 template<class T> std::vector<T>
 randomize_bit_order (const std::vector<T>& bit_vec, bool encode)
 {

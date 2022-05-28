@@ -5,7 +5,6 @@ release todo:
 - support --strict
 - merge infinite wav header generator
 - make check
-- don't crash on cmp fo
 
 speed detection possible improvements:
 - grid size adjustment
