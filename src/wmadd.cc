@@ -751,13 +751,24 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
         }
       total_output_frames += samples.size() / n_channels;
     }
+
+  if (Params::snr)
+    info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
+
+  info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
+
   if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
       const size_t expect_frames = in_stream->n_frames() + zero_frames;
       if (total_output_frames != expect_frames)
         {
-          error ("audiowmark: error: input frames (%zd) != output frames (%zd)\n", expect_frames, total_output_frames);
-          return 1;
+          auto msg = string_printf ("unexpected EOF; input frames (%zd) != output frames (%zd)", expect_frames, total_output_frames);
+          if (Params::strict)
+            {
+              warning ("audiowmark: error: %s\n", msg.c_str());
+              return 1;
+            }
+          error ("audiowmark: warning: %s\n", msg.c_str());
         }
     }
 
@@ -767,11 +778,6 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
       error ("audiowmark: closing output stream failed: %s\n", err.message());
       return 1;
     }
-
-  if (Params::snr)
-    info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
-
-  info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
   return 0;
 }
 
