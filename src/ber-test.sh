@@ -88,6 +88,8 @@ do
 
       if [ "x$AWM_SPEED_PATIENT" != x ]; then
         TEST_SPEED_ARGS="--detect-speed-patient --test-speed $SPEED"
+      elif [ "x$AWM_TRY_SPEED" != x ]; then
+        TEST_SPEED_ARGS="--try-speed $SPEED"
       else
         TEST_SPEED_ARGS="--detect-speed --test-speed $SPEED"
       fi
