@@ -617,8 +617,8 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
     }
   else
     {
-      int orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
-      info ("Time:         %d:%02d\n", orig_seconds / 60, orig_seconds % 60);
+      size_t orig_seconds = in_stream->n_frames() / in_stream->sample_rate();
+      info ("Time:         %zd:%02zd\n", orig_seconds / 60, orig_seconds % 60);
     }
   info ("Sample Rate:  %d\n", in_stream->sample_rate());
   info ("Channels:     %d\n", in_stream->n_channels());
