@@ -7,7 +7,6 @@ release todo:
 - make check
 
 speed detection possible improvements:
-- grid size adjustment
 - refine with 128 sync step instead of 256?
 - detect silence instead of total volume?
 - split big region into two smaller ones?
