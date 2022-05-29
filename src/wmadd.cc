@@ -751,6 +751,12 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
         }
       total_output_frames += samples.size() / n_channels;
     }
+
+  if (Params::snr)
+    info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
+
+  info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
+
   if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
       const size_t expect_frames = in_stream->n_frames() + zero_frames;
@@ -772,11 +778,6 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
       error ("audiowmark: closing output stream failed: %s\n", err.message());
       return 1;
     }
-
-  if (Params::snr)
-    info ("SNR:          %f dB\n", 10 * log10 (snr_signal_power / snr_delta_power));
-
-  info ("Data Blocks:  %d\n", wm_resampler.data_blocks());
   return 0;
 }
 
