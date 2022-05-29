@@ -1,8 +1,6 @@
 release todo:
 - provide better diagnostics for command line options
 - document --detect-speed-patient
-- warn on input_frames != output_frames
-- support --strict
 - merge infinite wav header generator
 - make check
 
