@@ -1,10 +1,10 @@
 release todo:
 - provide better diagnostics for command line options
-- document --detect-speed-patient
 - merge infinite wav header generator
 - make check
 
 speed detection possible improvements:
+- would n-best search make detect-speed-patient better?
 - refine with 128 sync step instead of 256?
 - detect silence instead of total volume?
 - split big region into two smaller ones?
