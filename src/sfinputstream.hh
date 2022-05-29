@@ -42,7 +42,7 @@ private:
 
   SNDFILE    *m_sndfile = nullptr;
   int         m_n_channels = 0;
-  int         m_n_values = 0;
+  size_t      m_n_frames = 0;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   bool        m_read_float_data = false;
@@ -74,7 +74,7 @@ public:
   size_t
   n_frames() const override
   {
-    return m_n_values / m_n_channels;
+    return m_n_frames;
   }
 };
 
