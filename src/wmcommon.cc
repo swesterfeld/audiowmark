@@ -223,7 +223,7 @@ parse_payload (const string& bits)
       error ("audiowmark: cannot parse bits '%s'\n", bits.c_str());
       return {};
     }
-  if (Params::payload_short && bitvec.size() != Params::payload_size)
+  if ((Params::payload_short || Params::strict) && bitvec.size() != Params::payload_size)
     {
       error ("audiowmark: number of message bits must match payload size (%zd bits)\n", Params::payload_size);
       return {};
@@ -235,7 +235,7 @@ parse_payload (const string& bits)
     }
   if (bitvec.size() < Params::payload_size)
     {
-      /* expand message automatically; good for testing, maybe not so good for the final product */
+      /* expand message automatically; good for testing, not so good in production (disabled by --strict) */
       vector<int> expanded_bitvec;
       for (size_t i = 0; i < Params::payload_size; i++)
         expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
