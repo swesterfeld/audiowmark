@@ -65,6 +65,7 @@ print_usage()
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  -q, --quiet           disable information messages\n");
+  printf ("  --strict              treat (minor) problems as errors\n");
   printf ("\n");
   printf ("  --input-format raw    use raw stream as input\n");
   printf ("  --output-format raw   use raw stream as output\n");
@@ -486,6 +487,10 @@ parse_shared_options (ArgParser& ap)
   if (ap.parse_opt ("--linear"))
     {
       Params::mix = false;
+    }
+  if (ap.parse_opt ("--strict"))
+    {
+      Params::strict = true;
     }
   if (Params::have_key > 1)
     {
