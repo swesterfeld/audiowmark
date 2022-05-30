@@ -1,0 +1,33 @@
+# program locations
+
+AUDIOWMARK=@top_builddir@/src/audiowmark
+TEST_MSG=f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0
+
+# common shell functions
+
+die()
+{
+  echo "$0: $@"
+  exit 1
+}
+
+audiowmark_add()
+{
+  if [ "x$Q" == "x1" ]; then
+    AUDIOWMARK_Q="-q"
+  else
+    echo ==== audiowmark add "$@" ====
+  fi
+  $AUDIOWMARK $AUDIOWMARK_Q --strict add "$@" || die "failed to watermark $@"
+}
+
+audiowmark_cmp()
+{
+  if [ "x$Q" == "x1" ]; then
+    AUDIOWMARK_OUT="/dev/null"
+  else
+    AUDIOWMARK_OUT="/dev/stdout"
+    echo ==== audiowmark cmp "$@" ====
+  fi
+  $AUDIOWMARK --strict cmp "$@" > $AUDIOWMARK_OUT || die "failed to detect watermark $@"
+}
