@@ -28,6 +28,7 @@
 #include "wmcommon.hh"
 #include "shortcode.hh"
 #include "hls.hh"
+#include "resample.hh"
 
 #include <assert.h>
 
@@ -329,6 +330,47 @@ test_speed (int seed)
   double low = 0.85;
   double high = 1.15;
   printf ("%.6f\n", low + (rng() / double (UINT64_MAX)) * (high - low));
+  return 0;
+}
+
+int
+test_gen_noise (const string& out_file, double seconds, int rate)
+{
+  const int channels = 2;
+  const int bits = 16;
+
+  vector<float> noise;
+  Random rng (0, /* there is no stream for this test */ Random::Stream::data_up_down);
+  for (size_t i = 0; i < size_t (rate * seconds) * channels; i++)
+    noise.push_back (rng.random_double() * 2 - 1);
+
+  WavData out_wav_data (noise, channels, rate, bits);
+  Error err = out_wav_data.save (out_file);
+  if (err)
+    {
+      error ("audiowmark: error saving %s: %s\n", out_file.c_str(), err.message());
+      return 1;
+    }
+  return 0;
+}
+
+int
+test_change_speed (const string& in_file, const string& out_file, double speed)
+{
+  WavData in_data;
+  Error err = in_data.load (in_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", in_file.c_str(), err.message());
+      return 1;
+    }
+  WavData out_data = resample_ratio (in_data, 1 / speed, in_data.sample_rate());
+  err = out_data.save (out_file);
+  if (err)
+    {
+      error ("audiowmark: error saving %s: %s\n", out_file.c_str(), err.message());
+      return 1;
+    }
   return 0;
 }
 
@@ -733,6 +775,20 @@ main (int argc, char **argv)
 
       if (ap.parse_args (1, args))
         return test_speed (atoi (args[0].c_str()));
+    }
+  else if (ap.parse_cmd ("test-gen-noise"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (3, args))
+        return test_gen_noise (args[0], atof (args[1].c_str()), atoi (args[2].c_str()));
+    }
+  else if (ap.parse_cmd ("test-change-speed"))
+    {
+      parse_shared_options (ap);
+
+      if (ap.parse_args (3, args))
+        return test_change_speed (args[0], args[1], atof (args[2].c_str()));
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;

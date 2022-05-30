@@ -1,7 +1,6 @@
 release todo:
 - provide better diagnostics for command line options
 - merge infinite wav header generator
-- make check
 
 speed detection possible improvements:
 - would n-best search make detect-speed-patient better?
