@@ -33,9 +33,9 @@ do
   do
     if [ "x$MODE" == "x0" ]; then
       MODE_ARGS=""
-    elif [ "x$PMODE" == "x1" ]; then
+    elif [ "x$MODE" == "x1" ]; then
       MODE_ARGS="AWM_SPEED_PATIENT=1"
-    elif [ "x$PMODE" == "x2" ]; then
+    elif [ "x$MODE" == "x2" ]; then
       MODE_ARGS="AWM_TRY_SPEED=1"
     fi
     for STRENGTH in $STRENGTHS
@@ -50,7 +50,7 @@ do
         echo
       done
       # full file
-      FILE="speed-full-$STRENGTH-$PMODE-$SEED"
+      FILE="speed-full-$STRENGTH-$MODE-$SEED"
       echo "$FILE:"
       echo -e "\t( cd ..; AWM_RAND_PATTERN=1 AWM_SET=huge2 AWM_PARAMS='--strength $STRENGTH' AWM_SPEED=1 $MODE_ARGS AWM_SPEED_PRE_MP3=128 AWM_SEEDS=$SEED AWM_FILE='t-$FILE' ber-test.sh mp3 128 ) >x$FILE"
       echo -e "\tmv x$FILE $FILE"
