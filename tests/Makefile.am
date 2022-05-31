@@ -1,4 +1,4 @@
-check: detect-speed-test block-decoder-test clip-decoder-test
+check: detect-speed-test block-decoder-test clip-decoder-test pipe-test
 
 EXTRA_DIST = detect-speed-test.sh block-decoder-test.sh clip-decoder-test.sh
 
@@ -10,3 +10,6 @@ block-decoder-test:
 
 clip-decoder-test:
 	Q=1 $(top_srcdir)/tests/clip-decoder-test.sh
+
+pipe-test:
+	Q=1 $(top_srcdir)/tests/pipe-test.sh

@@ -7,7 +7,7 @@ TEST_MSG=f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0
 
 die()
 {
-  echo "$0: $@"
+  echo >&2 "$0: $@"
   exit 1
 }
 
@@ -16,7 +16,7 @@ audiowmark_add()
   if [ "x$Q" == "x1" ]; then
     AUDIOWMARK_Q="-q"
   else
-    echo ==== audiowmark add "$@" ====
+    echo >&2 ==== audiowmark add "$@" ====
   fi
   $AUDIOWMARK $AUDIOWMARK_Q --strict add "$@" || die "failed to watermark $@"
 }
@@ -27,7 +27,7 @@ audiowmark_cmp()
     AUDIOWMARK_OUT="/dev/null"
   else
     AUDIOWMARK_OUT="/dev/stdout"
-    echo ==== audiowmark cmp "$@" ====
+    echo >&2 ==== audiowmark cmp "$@" ====
   fi
   $AUDIOWMARK --strict cmp "$@" > $AUDIOWMARK_OUT || die "failed to detect watermark $@"
 }
