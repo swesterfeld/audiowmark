@@ -1,6 +1,8 @@
-check: detect-speed-test block-decoder-test clip-decoder-test pipe-test short-payload-test
+check: detect-speed-test block-decoder-test clip-decoder-test \
+       pipe-test short-payload-test sync-test
 
-EXTRA_DIST = detect-speed-test.sh block-decoder-test.sh clip-decoder-test.sh pipe-test.sh short-payload-test.sh
+EXTRA_DIST = detect-speed-test.sh block-decoder-test.sh clip-decoder-test.sh \
+       pipe-test.sh short-payload-test.sh sync-test.sh
 
 detect-speed-test:
 	Q=1 $(top_srcdir)/tests/detect-speed-test.sh
@@ -16,3 +18,6 @@ pipe-test:
 
 short-payload-test:
 	Q=1 $(top_srcdir)/tests/short-payload-test.sh
+
+sync-test:
+	Q=1 $(top_srcdir)/tests/sync-test.sh
