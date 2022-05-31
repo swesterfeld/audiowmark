@@ -391,6 +391,15 @@ gen_key (const string& outfile)
   return 0;
 }
 
+static bool
+is_option (const string& arg)
+{
+  /* single -     is not treated as option (stdin / stdout)
+   * --foo or -f  is not treated as option
+   */
+  return (arg.size() > 1) && arg[0] == '-';
+}
+
 class ArgParser
 {
   vector<string> m_args;
@@ -483,7 +492,7 @@ public:
       {
         for (auto a : m_args)
           {
-            if (a.size() && a[0] == '-')
+            if (is_option (a))
               return false;
           }
         out_args = m_args;
@@ -691,7 +700,7 @@ parse_positional (ArgParser& ap, Args ... arg_names)
   string command = ap.command();
   for (auto arg : ap.remaining_args())
     {
-      if (arg.size() && arg[0] == '-')
+      if (is_option (arg))
         {
           error ("audiowmark: unsupported option '%s' for command '%s' (use audiowmark -h)\n", arg.c_str(), command.c_str());
           exit (1);
@@ -831,7 +840,7 @@ main (int argc, char **argv)
   else if (ap.remaining_args().size())
     {
       string s = ap.remaining_args().front();
-      if (s.size() && s[0] == '-')
+      if (is_option (s))
         {
           error ("audiowmark: unsupported global option '%s' (use audiowmark -h)\n", s.c_str());
         }
