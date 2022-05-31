@@ -1,5 +1,4 @@
 release todo:
-- provide better diagnostics for command line options
 - merge infinite wav header generator
 
 speed detection possible improvements:

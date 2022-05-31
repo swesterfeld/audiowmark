@@ -58,17 +58,19 @@ print_usage()
   printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
   printf ("    audiowmark gen-key <key_file>\n");
   printf ("\n");
-  printf ("Options to be used for get & cmp:\n");
+  printf ("Global options:\n");
+  printf ("  -q, --quiet             disable information messages\n");
+  printf ("  --strict                treat (minor) problems as errors\n");
+  printf ("\n");
+  printf ("Options to be used for get / cmp:\n");
   printf ("  --detect-speed          detect and correct replay speed difference\n");
   printf ("  --detect-speed-patient  slower, more accurate speed detection\n");
   printf ("  --json <file>           write JSON results into file\n");
   printf ("\n");
-  printf ("Global options:\n");
+  printf ("Options for add / get / cmp:\n");
   printf ("  --key <file>            load watermarking key from file\n");
   printf ("  --short <bits>          enable short payload mode\n");
   printf ("  --strength <s>          set watermark strength              [%.6g]\n", Params::water_delta * 1000);
-  printf ("  -q, --quiet             disable information messages\n");
-  printf ("  --strict                treat (minor) problems as errors\n");
   printf ("\n");
   printf ("  --input-format raw      use raw stream as input\n");
   printf ("  --output-format raw     use raw stream as output\n");
@@ -94,12 +96,13 @@ print_usage_hls()
   printf ("\n");
   printf ("Global options:\n");
   printf ("  -q, --quiet           disable information messages\n");
-  printf ("  --bit-rate            set AAC bitrate\n");
+  printf ("  --strict              treat (minor) problems as errors\n");
   printf ("\n");
   printf ("Watermarking options:\n");
   printf ("  --strength <s>        set watermark strength              [%.6g]\n", Params::water_delta * 1000);
   printf ("  --short <bits>        enable short payload mode\n");
   printf ("  --key <file>          load watermarking key from file\n");
+  printf ("  --bit-rate            set AAC bitrate\n");
 }
 
 Format
@@ -391,6 +394,7 @@ gen_key (const string& outfile)
 class ArgParser
 {
   vector<string> m_args;
+  string         m_command;
   bool
   starts_with (const string& s, const string& start)
   {
@@ -405,20 +409,11 @@ public:
   bool
   parse_cmd (const string& cmd)
   {
-    for (auto it = m_args.begin(); it != m_args.end(); it++)
+    if (!m_args.empty() && m_args[0] == cmd)
       {
-        if (!it->empty() && (*it)[0] != '-')
-          {
-            if (*it == cmd)
-              {
-                m_args.erase (it);
-                return true;
-              }
-            else /* first positional arg is not cmd */
-              {
-                return false;
-              }
-          }
+        m_args.erase (m_args.begin());
+        m_command = cmd;
+        return true;
       }
     return false;
   }
@@ -486,10 +481,25 @@ public:
   {
     if (m_args.size() == expected_count)
       {
+        for (auto a : m_args)
+          {
+            if (a.size() && a[0] == '-')
+              return false;
+          }
         out_args = m_args;
         return true;
       }
     return false;
+  }
+  vector<string>
+  remaining_args() const
+  {
+    return m_args;
+  }
+  string
+  command() const
+  {
+    return m_command;
   }
 };
 
@@ -527,10 +537,6 @@ parse_shared_options (ArgParser& ap)
   if (ap.parse_opt ("--linear"))
     {
       Params::mix = false;
-    }
-  if (ap.parse_opt ("--strict"))
-    {
-      Params::strict = true;
     }
   if (Params::have_key > 1)
     {
@@ -672,6 +678,34 @@ parse_get_options (ArgParser& ap)
     }
 }
 
+template <class ... Args>
+vector<string>
+parse_positional (ArgParser& ap, Args ... arg_names)
+{
+  vector<string> vs {arg_names...};
+
+  vector<string> args;
+  if (ap.parse_args (vs.size(), args))
+    return args;
+
+  string command = ap.command();
+  for (auto arg : ap.remaining_args())
+    {
+      if (arg.size() && arg[0] == '-')
+        {
+          error ("audiowmark: unsupported option '%s' for command '%s' (use audiowmark -h)\n", arg.c_str(), command.c_str());
+          exit (1);
+        }
+    }
+
+  error ("audiowmark: error parsing arguments for command '%s' (use audiowmark -h)\n\n", command.c_str());
+  string msg = "usage: audiowmark " + command + " [options...]";
+  for (auto s : vs)
+    msg += " <" + s + ">";
+  error ("%s\n", msg.c_str());
+  exit (1);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -697,50 +731,54 @@ main (int argc, char **argv)
     {
       set_log_level (Log::WARNING);
     }
+  if (ap.parse_opt ("--strict"))
+    {
+      Params::strict = true;
+    }
   if (ap.parse_cmd ("hls-add"))
     {
       parse_shared_options (ap);
 
       ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
 
-      if (ap.parse_args (3, args))
-        return hls_add (args[0], args[1], args[2]);
+      args = parse_positional (ap, "input_ts", "output_ts", "message_hex");
+      return hls_add (args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("hls-prepare"))
     {
       ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
 
-      if (ap.parse_args (4, args))
-        return hls_prepare (args[0], args[1], args[2], args[3]);
+      args = parse_positional (ap, "input_dir", "output_dir", "playlist_name", "audio_master");
+      return hls_prepare (args[0], args[1], args[2], args[3]);
     }
   else if (ap.parse_cmd ("add"))
     {
       parse_shared_options (ap);
       parse_add_options (ap);
 
-      if (ap.parse_args (3, args))
-        return add_watermark (args[0], args[1], args[2]);
+      args = parse_positional (ap, "input_wav", "watermarked_wav", "message_hex");
+      return add_watermark (args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("get"))
     {
       parse_shared_options (ap);
       parse_get_options (ap);
 
-      if (ap.parse_args (1, args))
-        return get_watermark (args[0], /* no ber */ "");
+      args = parse_positional (ap, "watermarked_wav");
+      return get_watermark (args[0], /* no ber */ "");
     }
   else if (ap.parse_cmd ("cmp"))
     {
       parse_shared_options (ap);
       parse_get_options (ap);
 
-      if (ap.parse_args (2, args))
-        return get_watermark (args[0], args[1]);
+      args = parse_positional (ap, "watermarked_wav", "message_hex");
+      return get_watermark (args[0], args[1]);
     }
   else if (ap.parse_cmd ("gen-key"))
     {
-      if (ap.parse_args (1, args))
-        return gen_key (args[0]);
+      args = parse_positional (ap, "key_file");
+      return gen_key (args[0]);
     }
   else if (ap.parse_cmd ("gentest"))
     {
@@ -789,6 +827,19 @@ main (int argc, char **argv)
 
       if (ap.parse_args (3, args))
         return test_change_speed (args[0], args[1], atof (args[2].c_str()));
+    }
+  else if (ap.remaining_args().size())
+    {
+      string s = ap.remaining_args().front();
+      if (s.size() && s[0] == '-')
+        {
+          error ("audiowmark: unsupported global option '%s' (use audiowmark -h)\n", s.c_str());
+        }
+      else
+        {
+          error ("audiowmark: unsupported command '%s' (use audiowmark -h)\n", s.c_str());
+        }
+      return 1;
     }
   error ("audiowmark: error parsing commandline args (use audiowmark -h)\n");
   return 1;
