@@ -378,6 +378,26 @@ test_change_speed (const string& in_file, const string& out_file, double speed)
 }
 
 int
+test_resample (const string& in_file, const string& out_file, int new_rate)
+{
+  WavData in_data;
+  Error err = in_data.load (in_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", in_file.c_str(), err.message());
+      return 1;
+    }
+  WavData out_data = resample (in_data, new_rate);
+  err = out_data.save (out_file);
+  if (err)
+    {
+      error ("audiowmark: error saving %s: %s\n", out_file.c_str(), err.message());
+      return 1;
+    }
+  return 0;
+}
+
+int
 gen_key (const string& outfile)
 {
   FILE *f = fopen (outfile.c_str(), "w");
@@ -836,6 +856,13 @@ main (int argc, char **argv)
 
       if (ap.parse_args (3, args))
         return test_change_speed (args[0], args[1], atof (args[2].c_str()));
+    }
+  else if (ap.parse_cmd ("test-resample"))
+    {
+      parse_shared_options (ap);
+
+      args = parse_positional (ap, "input_wav", "output_wav", "new_rate");
+      return test_resample (args[0], args[1], atoi (args[2].c_str()));
     }
   else if (ap.remaining_args().size())
     {
