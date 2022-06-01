@@ -13,7 +13,7 @@ die()
 
 audiowmark()
 {
-  if [ "x$Q" == "x1" ]; then
+  if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
     AUDIOWMARK_Q="-q"
   else
     echo >&2 ==== audiowmark "$@" ====
@@ -23,7 +23,7 @@ audiowmark()
 
 audiowmark_add()
 {
-  if [ "x$Q" == "x1" ]; then
+  if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
     AUDIOWMARK_Q="-q"
   else
     echo >&2 ==== audiowmark add "$@" ====
@@ -33,7 +33,7 @@ audiowmark_add()
 
 audiowmark_cmp()
 {
-  if [ "x$Q" == "x1" ]; then
+  if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
     AUDIOWMARK_OUT="/dev/null"
   else
     AUDIOWMARK_OUT="/dev/stdout"
