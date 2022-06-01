@@ -13,7 +13,11 @@ die()
 
 audiowmark()
 {
-  echo >&2 ==== audiowmark "$@" ====
+  if [ "x$Q" == "x1" ]; then
+    AUDIOWMARK_Q="-q"
+  else
+    echo >&2 ==== audiowmark "$@" ====
+  fi
   $AUDIOWMARK --strict "$@" || die "failed to run audiowmark $@"
 }
 
