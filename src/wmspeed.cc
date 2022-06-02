@@ -386,29 +386,41 @@ SpeedSync::compare (double relative_speed)
   result_scores.push_back (best_score);
 }
 
+/*
+ * The scores from speed search are usually a bit noisy, so the local maximum from the scores
+ * vector is not necessarily the best choice.
+ *
+ * To get rid of the noise to some degree, this function smoothes the scores using a
+ * cosine window and then finds the local maximum of this smooth function.
+ */
 static double
-score_average_best (const vector<SpeedSync::Score>& scores)
+score_smooth_find_best (const vector<SpeedSync::Score>& in_scores, double step, double distance)
 {
-  /* output best result, or: if there is not a unique best result, average all best results */
-
-  double best_quality = 0;
-  for (auto score : scores)
-    best_quality = max (best_quality, score.quality);
+  auto scores = in_scores;
+  sort (scores.begin(), scores.end(), [] (auto s1, auto s2) { return s1.speed < s2.speed; });
 
   double best_speed = 0;
-  int speed_count = 0;
-  for (auto score : scores)
-    {
-      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
+  double best_quality = 0;
 
-      if (score.quality >= best_quality * factor)
+  for (double speed = scores.front().speed; speed < scores.back().speed; speed += 0.000001)
+    {
+      double quality_sum = 0;
+      double quality_div = 0;
+
+      for (auto s : scores)
         {
-          best_speed += score.speed;
-          speed_count++;
+          double w = window_cos ((s.speed - speed) / (step * distance));
+
+          quality_sum += s.quality * w;
+          quality_div += w;
+        }
+      quality_sum /= quality_div;
+      if (quality_sum > best_quality)
+        {
+          best_speed = speed;
+          best_quality = quality_sum;
         }
     }
-  if (speed_count)
-    best_speed /= speed_count;
 
   return best_speed;
 }
@@ -641,8 +653,9 @@ detect_speed (const WavData& in_data, bool print_results)
     {
       .seconds        = 50,
       .step           = 1.00005,
-      .n_steps        = 10,
+      .n_steps        = 40,
     };
+  const double scan3_smooth_distance = 20;
 
   // SpeedSearch::debug_range (scan1);
 
@@ -678,8 +691,7 @@ detect_speed (const WavData& in_data, bool print_results)
 
       scores = speed_search.refine_search (scan3, scores[0].speed);
     }
-
-  double best_speed = score_average_best (scores);
+  double best_speed = score_smooth_find_best (scores, 1 - scan3.step, scan3_smooth_distance);
 
   if (print_results)
     {
