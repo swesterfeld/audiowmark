@@ -645,8 +645,11 @@ decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
           if (match_count != Params::expect_matches)
             return 1;
         }
-      if (!match_count)
-        return 1;
+      else
+        {
+          if (!match_count)
+            return 1;
+        }
     }
   return 0;
 }
