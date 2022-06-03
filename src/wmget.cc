@@ -639,6 +639,12 @@ decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
 
       block_decoder.print_debug_sync();
 
+      if (Params::expect_matches >= 0)
+        {
+          printf ("expect_matches %d\n", Params::expect_matches);
+          if (match_count != Params::expect_matches)
+            return 1;
+        }
       if (!match_count)
         return 1;
     }

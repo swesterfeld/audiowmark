@@ -801,6 +801,8 @@ main (int argc, char **argv)
       parse_shared_options (ap);
       parse_get_options (ap);
 
+      ap.parse_opt ("--expect-matches", Params::expect_matches);
+
       args = parse_positional (ap, "watermarked_wav", "message_hex");
       return get_watermark (args[0], args[1]);
     }

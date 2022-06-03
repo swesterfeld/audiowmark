@@ -41,6 +41,7 @@ int    Params::test_cut        = 0; // for sync test
 bool   Params::test_no_sync    = false; // disable sync
 bool   Params::test_no_limiter = false; // disable limiter
 int    Params::test_truncate   = 0;
+int    Params::expect_matches  = -1;
 
 Format Params::input_format     = Format::AUTO;
 Format Params::output_format    = Format::AUTO;

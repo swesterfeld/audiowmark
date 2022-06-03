@@ -71,6 +71,7 @@ public:
   static           bool test_no_sync;
   static           bool test_no_limiter;
   static           int test_truncate;
+  static           int expect_matches;
 
   static           Format input_format;
   static           Format output_format;
