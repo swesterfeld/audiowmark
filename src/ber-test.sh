@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# set -Eeuo pipefail # -x
+set -Eeo pipefail
+
 TRANSFORM=$1
 if [ "x$AWM_TRUNCATE" != "x" ]; then
   AWM_REPORT=truncv
@@ -22,6 +25,12 @@ fi
 if [ "x$AWM_PATTERN_BITS" == "x" ]; then
   AWM_PATTERN_BITS=128
 fi
+
+audiowmark_cmp()
+{
+  # ignore non-zero exit code by audiowmark cmp
+  audiowmark cmp "$@" || true
+}
 
 {
   if [ "x$AWM_SET" == "xsmall" ]; then
@@ -80,7 +89,7 @@ do
 
       [ -z $SPEED_SEED ] && SPEED_SEED=0
       SPEED=$(audiowmark test-speed $SPEED_SEED --test-key $SEED)
-      ((SPEED_SEED++))
+      SPEED_SEED=$((SPEED_SEED + 1))
       echo in_speed $SPEED
 
       sox -D -V1 ${AWM_FILE}.wav ${AWM_FILE}.speed.wav speed $SPEED
@@ -134,29 +143,29 @@ do
       for CLIP in $(seq $AWM_MULTI_CLIP)
       do
         audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
-        audiowmark cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
+        audiowmark_cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
         rm ${OUT_FILE}.clip.wav
         echo
       done
     elif [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
       do
-        audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
+        audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
         echo
       done
     else
-      audiowmark cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
+      audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
       echo
     fi
     rm -f ${AWM_FILE}.wav $OUT_FILE # cleanup temp files
   done
 done | {
   if [ "x$AWM_REPORT" == "xfer" ]; then
-    awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+    awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xferv" ]; then
-    awk 'BEGIN { bad = n = 0 } { print "###", $0; } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / n; }'
+    awk 'BEGIN { bad = n = 0 } { print "###", $0; } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xsync" ]; then
-    awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / n; }'
+    awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xsyncv" ]; then
     awk '{ print "###", $0; } $1 == "sync_match" { correct += $2; missing += 3 - $2; incorrect += $3-$2; print "correct:", correct, "missing:", missing, "incorrect:", incorrect; }'
   elif [ "x$AWM_REPORT" == "xtruncv" ]; then
