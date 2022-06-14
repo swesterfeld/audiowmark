@@ -561,10 +561,12 @@ select_n_best_scores (vector<SpeedSync::Score>& scores, size_t n)
       const double q1 = get_quality (x - 1);
       const double q2 = get_quality (x);
       const double q3 = get_quality (x + 1);
-      const double q4 = get_quality (x + 2);
 
-      if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
-        lmax_scores.push_back (scores[x]);
+      if (q1 <= q2 && q2 >= q3)
+        {
+          lmax_scores.push_back (scores[x]);
+          x++; // score with quality q3 cannot be a local maximum
+        }
     }
   sort (lmax_scores.begin(), lmax_scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
 
