@@ -349,23 +349,7 @@ SpeedSync::compare (double relative_speed)
         {
           const auto& bv = bit_values[bit];
 
-          /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
-          double raw_bit;
-          if (bv.umag == 0 || bv.dmag == 0)
-            {
-              raw_bit = 0;
-            }
-          else if (bv.umag < bv.dmag)
-            {
-              raw_bit = 1 - bv.umag / bv.dmag;
-            }
-          else
-            {
-              raw_bit = bv.dmag / bv.umag - 1;
-            }
-          const int expect_data_bit = bit & 1; /* expect 010101 */
-          const double q = expect_data_bit ? raw_bit : -raw_bit;
-          sync_quality += q * bv.count;
+          sync_quality += SyncFinder::bit_quality (bv.umag, bv.dmag, bit) * bv.count;
           bit_count += bv.count;
         }
       if (bit_count)
@@ -373,7 +357,7 @@ SpeedSync::compare (double relative_speed)
           sync_quality /= bit_count;
           sync_quality = fabs (sync_quality);
           //sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
-          //printf ("%d %f\n", offset, fabs (sync_quality));
+
           if (sync_quality > best_score.quality)
             {
               best_score.quality = sync_quality;

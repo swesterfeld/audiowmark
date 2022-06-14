@@ -99,6 +99,8 @@ private:
 public:
   std::vector<Score> search (const WavData& wav_data, Mode mode);
   std::vector<std::vector<FrameBit>> get_sync_bits (const WavData& wav_data, Mode mode);
+
+  static double bit_quality (float umag, float dmag, int bit);
 private:
   void sync_fft (const WavData& wav_data,
                  size_t index,
