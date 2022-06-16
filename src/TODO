@@ -2,7 +2,6 @@ release todo:
 - merge infinite wav header generator
 
 speed detection possible improvements:
-- would n-best search make detect-speed-patient better?
 - refine with 128 sync step instead of 256?
 - detect silence instead of total volume?
 - split big region into two smaller ones?

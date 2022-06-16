@@ -628,12 +628,20 @@ detect_speed (const WavData& in_data, bool print_results)
     };
   const SpeedScanParams scan1 = Params::detect_speed_patient ? scan1_patient : scan1_normal;
 
-  const SpeedScanParams scan2 /* second pass: improve approximation (not necessary for patient speed detection) */
+  const SpeedScanParams scan2_normal /* second pass: improve approximation */
     {
       .seconds        = 50,
       .step           = 1.00035,
       .n_steps        = 1,
     };
+  const SpeedScanParams scan2_patient
+    {
+      .seconds        = 50,
+      .step           = 1.000175,
+      .n_steps        = 1,
+    };
+  const SpeedScanParams scan2 = Params::detect_speed_patient ? scan2_patient : scan2_normal;
+
   const SpeedScanParams scan3 /* third pass: fast refine (not always perfect) */
     {
       .seconds        = 50,
@@ -653,37 +661,39 @@ detect_speed (const WavData& in_data, bool print_results)
   /* initial search using grid */
   scores = speed_search.run_search (scan1, { 1.0 });
 
+  /* improve 5 best matches */
+  select_n_best_scores (scores, 5);
+
+  vector<double> speeds;
+  for (auto score : scores)
+    speeds.push_back (score.speed);
+
+  scores = speed_search.run_search (scan2, speeds);
+
+  /* improve or refine best match */
+  select_n_best_scores (scores, 1);
   if (Params::detect_speed_patient)
     {
-      /* improve best match */
-      select_n_best_scores (scores, 1);
-
+      // slower version: prepare magnitudes again, according to best speed
       scores = speed_search.run_search (scan3, { scores[0].speed });
     }
   else
     {
-      /* improve 5 best matches */
-      select_n_best_scores (scores, 5);
-
-      vector<double> speeds;
-      for (auto score : scores)
-        speeds.push_back (score.speed);
-
-      scores = speed_search.run_search (scan2, speeds);
-
-      /* refine best match */
-      select_n_best_scores (scores, 1);
-
+      // faster version: keep already computed magnitudes
       scores = speed_search.refine_search (scan3, scores[0].speed);
     }
   double best_speed = score_smooth_find_best (scores, 1 - scan3.step, scan3_smooth_distance);
+
+  double best_quality = 0;
+  for (auto score : scores)
+    best_quality = max (best_quality, score.quality);
 
   if (print_results)
     {
       double delta = -1;
       if (Params::test_speed > 0)
         delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
-      printf ("detect_speed %f %.4f   ", best_speed, delta);
+      printf ("detect_speed %f %f %.4f   ", best_speed, best_quality, delta);
 
       double total = 0.0;
       for (auto t : speed_search.get_times())
@@ -693,16 +703,5 @@ detect_speed (const WavData& in_data, bool print_results)
         }
       printf (" %.3f\n", total);
     }
-#if 0
-  if (print_results)
-    {
-      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
-        scan_params.seconds,
-        best_speed,
-        best_quality,
-        100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
-        t1 - t0, t2 - t1);
-    }
-#endif
   return best_speed;
 }
