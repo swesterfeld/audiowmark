@@ -28,8 +28,13 @@ fi
 
 audiowmark_cmp()
 {
-  # ignore non-zero exit code by audiowmark cmp
-  audiowmark cmp "$@" || true
+  audiowmark cmp "$@" || {
+    if [ "x$AWM_FAIL_DIR" ]; then
+      mkdir -p $AWM_FAIL_DIR
+      SUM=$(sha1sum $1 | awk '{print $1;}')
+      cp -av $1 $AWM_FAIL_DIR/${AWM_FILE}.${SUM}.wav
+    fi
+  }
 }
 
 {
