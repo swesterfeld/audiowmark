@@ -130,6 +130,8 @@ public:
 
   std::vector<std::vector<std::complex<float>>> run_fft (const std::vector<float>& samples, size_t start_index);
   std::vector<std::vector<std::complex<float>>> fft_range (const std::vector<float>& samples, size_t start_index, size_t frame_count);
+
+  static std::vector<float> gen_normalized_window (size_t n_values);
 };
 
 struct MixEntry

@@ -59,26 +59,33 @@ FFTAnalyzer::FFTAnalyzer (int n_channels) :
   m_n_channels (n_channels),
   m_fft_processor (Params::frame_size)
 {
-  /* generate analysis window */
-  m_window.resize (Params::frame_size);
+  m_window = gen_normalized_window (Params::frame_size);
+}
 
+/* safe to call from any thread */
+vector<float>
+FFTAnalyzer::gen_normalized_window (size_t n_values)
+{
+  vector<float> window (n_values);
+
+  /* generate analysis window */
   double window_weight = 0;
-  for (size_t i = 0; i < Params::frame_size; i++)
+  for (size_t i = 0; i < n_values; i++)
     {
-      const double fsize_2 = Params::frame_size / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      const double win = window_hamming ((i - fsize_2) / fsize_2);
+      const double n_values_2 = n_values / 2.0;
+      // const double win =  window_cos ((i - n_values_2) / n_values_2);
+      const double win = window_hamming ((i - n_values_2) / n_values_2);
       //const double win = 1;
-      m_window[i] = win;
+      window[i] = win;
       window_weight += win;
     }
 
   /* normalize window using window weight */
-  for (size_t i = 0; i < Params::frame_size; i++)
+  for (size_t i = 0; i < n_values; i++)
     {
-      m_window[i] *= 2.0 / window_weight;
+      window[i] *= 2.0 / window_weight;
     }
-
+  return window;
 }
 
 vector<vector<complex<float>>>
