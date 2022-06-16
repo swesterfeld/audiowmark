@@ -81,7 +81,6 @@ private:
   std::vector<std::vector<FrameBit>> sync_bits;
 
   void    init_up_down (const WavData& wav_data, Mode mode);
-  double  normalize_sync_quality (double raw_quality);
   double  sync_decode (const WavData& wav_data, const size_t start_frame,
                        const std::vector<float>& fft_out_db,
                        const std::vector<char>&  have_frames,
@@ -101,6 +100,7 @@ public:
   std::vector<std::vector<FrameBit>> get_sync_bits (const WavData& wav_data, Mode mode);
 
   static double bit_quality (float umag, float dmag, int bit);
+  static double normalize_sync_quality (double raw_quality);
 private:
   void sync_fft (const WavData& wav_data,
                  size_t index,

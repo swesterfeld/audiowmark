@@ -76,6 +76,7 @@ SyncFinder::init_up_down (const WavData& wav_data, Mode mode)
     }
 }
 
+/* safe to call from any thread */
 double
 SyncFinder::normalize_sync_quality (double raw_quality)
 {
@@ -89,6 +90,7 @@ SyncFinder::normalize_sync_quality (double raw_quality)
   return raw_quality / min (Params::water_delta, 0.080) / 2.9;
 }
 
+/* safe to call from any thread */
 double
 SyncFinder::bit_quality (float umag, float dmag, int bit)
 {
