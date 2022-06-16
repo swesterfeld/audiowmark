@@ -232,9 +232,10 @@ SyncFinder::sync_select_by_threshold (vector<Score>& sync_scores)
           if (i + 1 < sync_scores.size())
             q_next = sync_scores[i + 1].quality;
 
-          if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+          if (sync_scores[i].quality >= q_last && sync_scores[i].quality >= q_next)
             {
               selected_scores.emplace_back (sync_scores[i]);
+              i++; // score with quality q_next cannot be a local maximum
             }
         }
     }
