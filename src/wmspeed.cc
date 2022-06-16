@@ -355,8 +355,7 @@ SpeedSync::compare (double relative_speed)
       if (bit_count)
         {
           sync_quality /= bit_count;
-          sync_quality = fabs (sync_quality);
-          //sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
+          sync_quality = fabs (SyncFinder::normalize_sync_quality (sync_quality));
 
           if (sync_quality > best_score.quality)
             {
