@@ -415,7 +415,7 @@ static bool
 is_option (const string& arg)
 {
   /* single -     is not treated as option (stdin / stdout)
-   * --foo or -f  is not treated as option
+   * --foo or -f  is treated as option
    */
   return (arg.size() > 1) && arg[0] == '-';
 }
