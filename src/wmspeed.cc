@@ -634,6 +634,7 @@ detect_speed (const WavData& in_data, bool print_results)
       .n_steps        = 40,
     };
   const double scan3_smooth_distance = 20;
+  const double speed_sync_threshold = 0.4;
 
   // SpeedSearch::debug_range (scan1);
 
@@ -688,5 +689,9 @@ detect_speed (const WavData& in_data, bool print_results)
         }
       printf (" %.3f\n", total);
     }
-  return best_speed;
+
+  if (best_quality > speed_sync_threshold)
+    return best_speed;
+  else
+    return 1;
 }
