@@ -29,7 +29,7 @@ fi
 audiowmark_cmp()
 {
   audiowmark cmp "$@" || {
-    if [ "x$AWM_FAIL_DIR" ]; then
+    if [ "x$AWM_FAIL_DIR" != "x" ]; then
       mkdir -p $AWM_FAIL_DIR
       SUM=$(sha1sum $1 | awk '{print $1;}')
       cp -av $1 $AWM_FAIL_DIR/${AWM_FILE}.${SUM}.wav
