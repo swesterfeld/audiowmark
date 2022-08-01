@@ -320,12 +320,20 @@ SpeedSync::compare (double relative_speed)
 
   int start_mi1 = sync_bits.size();
   int start_mi2 = sync_bits.size();
+  int start_mi3 = sync_bits.size();
   for (int offset = -pad_start; offset < 0; offset++)
     {
       BitValue bit_values[Params::sync_bits];
 
+      /*
+       * we need to compare 3 blocks here:
+       *  - one block is necessary because we need to test all offsets (-pad_start..0)
+       *  - two more blocks are necessary since speed detection ScanParams uses 50 seconds at most,
+       *    and short payload (12 bits) has a block length of slightly over 30 seconds
+       */
       compare_bits<false> (bit_values, relative_speed, &start_mi1, offset);
       compare_bits<true>  (bit_values, relative_speed, &start_mi2, offset + frames_per_block * steps_per_frame);
+      compare_bits<false> (bit_values, relative_speed, &start_mi3, offset + frames_per_block * steps_per_frame * 2);
 
       double sync_quality = 0;
       int bit_count = 0;
