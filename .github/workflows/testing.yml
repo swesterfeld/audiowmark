@@ -1,0 +1,11 @@
+# https://rhysd.github.io/actionlint/
+
+name: Testing
+on: [push]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Test Build
+      run: misc/dbuild.sh
