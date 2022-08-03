@@ -48,6 +48,7 @@ public:
   static           int  have_key;
 
   static           bool detect_speed;
+  static           bool detect_speed_patient;
   static           double try_speed;               // manual speed correction
   static           double test_speed;              // for debugging --detect-speed
 
@@ -70,6 +71,7 @@ public:
   static           bool test_no_sync;
   static           bool test_no_limiter;
   static           int test_truncate;
+  static           int expect_matches;
 
   static           Format input_format;
   static           Format output_format;
@@ -128,6 +130,8 @@ public:
 
   std::vector<std::vector<std::complex<float>>> run_fft (const std::vector<float>& samples, size_t start_index);
   std::vector<std::vector<std::complex<float>>> fft_range (const std::vector<float>& samples, size_t start_index, size_t frame_count);
+
+  static std::vector<float> gen_normalized_window (size_t n_values);
 };
 
 struct MixEntry
@@ -146,6 +150,8 @@ int frame_count (const WavData& wav_data);
 
 int sync_frame_pos (int f);
 int data_frame_pos (int f);
+
+std::vector<int> parse_payload (const std::string& str);
 
 template<class T> std::vector<T>
 randomize_bit_order (const std::vector<T>& bit_vec, bool encode)

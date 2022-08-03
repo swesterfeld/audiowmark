@@ -69,7 +69,6 @@ struct SpeedScanParams
   double step           = 0;
   int    n_steps        = 0;
   int    n_center_steps = 0;
-  bool   interpolate    = false;
 };
 
 class MagMatrix
@@ -117,43 +116,74 @@ public:
     double speed = 0;
     double quality = 0;
   };
+  struct SyncBit
+  {
+    int bit = 0;
+    int frame = 0;
+    std::vector<int> up;
+    std::vector<int> down;
+  };
+  struct BitValue
+  {
+    float umag = 0;
+    float dmag = 0;
+    int count = 0;
+  };
 private:
-  vector<vector<SyncFinder::FrameBit>> sync_bits;
+  vector<SyncBit> sync_bits;
   MagMatrix sync_matrix;
 
-  void prepare_mags();
+  void prepare_mags (const SpeedScanParams& scan_params);
   void compare (double relative_speed);
+  template<bool B2>
+  void compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset);
 
   std::mutex mutex;
   vector<Score> result_scores;
   const WavData& in_data;
-  const SpeedScanParams scan_params;
   const double center;
   const int    frames_per_block;
+
 public:
-  SpeedSync (const WavData& in_data, const SpeedScanParams& scan_params, double center) :
+  SpeedSync (const WavData& in_data, double center) :
     in_data (in_data),
-    scan_params (scan_params),
     center (center),
     frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
   {
     // constructor is run in the main thread; everything that is not thread-safe must happen here
     SyncFinder sync_finder;
 
-    sync_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
+    auto sync_finder_bits = sync_finder.get_sync_bits (in_data, SyncFinder::Mode::BLOCK);
+    for (size_t bit = 0; bit < sync_finder_bits.size(); bit++)
+      {
+        for (const auto& frame_bit : sync_finder_bits[bit])
+          {
+            SyncBit sb;
+
+            sb.bit    = bit;
+            sb.frame  = frame_bit.frame;
+            sb.up     = frame_bit.up;
+            sb.down   = frame_bit.down;
+
+            sync_bits.push_back (sb);
+          }
+      }
+    std::sort (sync_bits.begin(), sync_bits.end(), [](const auto& s1, const auto& s2) { return s1.frame < s2.frame; });
   }
   void
-  start_prepare_job (ThreadPool& thread_pool)
+  start_prepare_job (ThreadPool& thread_pool, const SpeedScanParams& scan_params)
   {
-    thread_pool.add_job ([this]() { prepare_mags(); });
+    thread_pool.add_job ([this, &scan_params]() { prepare_mags (scan_params); });
   }
 
   void
-  start_search_jobs (ThreadPool& thread_pool)
+  start_search_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params, double speed)
   {
+    result_scores.clear();
+
     for (int p = -scan_params.n_steps; p <= scan_params.n_steps; p++)
       {
-        const double relative_speed = pow (scan_params.step, p);
+        const double relative_speed = pow (scan_params.step, p) * speed / center;
 
         thread_pool.add_job ([relative_speed, this]() { compare (relative_speed); });
       }
@@ -164,10 +194,15 @@ public:
   {
     return result_scores;
   }
+  double
+  center_speed() const
+  {
+    return center;
+  }
 };
 
 void
-SpeedSync::prepare_mags()
+SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
 {
   WavData in_data_trc (truncate (in_data, scan_params.seconds / center));
 
@@ -177,24 +212,7 @@ SpeedSync::prepare_mags()
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;
 
-  double window_weight = 0;
-  float window[sub_frame_size];
-  for (size_t i = 0; i < sub_frame_size; i++)
-    {
-      const double fsize_2 = sub_frame_size / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      /* FIXME: is this the best choice */
-      const double win = window_hamming ((i - fsize_2) / fsize_2);
-      //const double win = 1;
-      window[i] = win;
-      window_weight += win;
-    }
-
-  /* normalize window using window weight */
-  for (size_t i = 0; i < sub_frame_size; i++)
-    {
-      window[i] *= 2.0 / window_weight;
-    }
+  vector<float> window = FFTAnalyzer::gen_normalized_window (sub_frame_size);
 
   FFTProcessor fft_processor (sub_frame_size);
 
@@ -203,7 +221,7 @@ SpeedSync::prepare_mags()
 
   /* set mag matrix size */
   int n_sync_rows = 0;
-  int n_sync_cols = sync_bits[0].size() * sync_bits.size();
+  int n_sync_cols = sync_bits.size();
   for (size_t ppos = 0; ppos + sub_frame_size < in_data_sub.n_frames(); ppos += sub_sync_search_step)
     n_sync_rows++;
   sync_matrix.resize (n_sync_rows, n_sync_cols);
@@ -231,20 +249,16 @@ SpeedSync::prepare_mags()
               fft_out_db.push_back (db_from_complex (out[i * 2], out[i * 2 + 1], min_db));
             }
         }
-      for (size_t bit = 0; bit < sync_bits.size(); bit++)
+      for (const auto& sync_bit : sync_bits)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[bit];
-          for (const auto& frame_bit : frame_bits)
-            {
-              float umag = 0, dmag = 0;
+          float umag = 0, dmag = 0;
 
-              for (size_t i = 0; i < frame_bit.up.size(); i++)
-                {
-                  umag += fft_out_db[frame_bit.up[i]];
-                  dmag += fft_out_db[frame_bit.down[i]];
-                }
-              sync_matrix (row, col++) = MagMatrix::Mags {umag, dmag};
+          for (size_t i = 0; i < sync_bit.up.size(); i++)
+            {
+              umag += fft_out_db[sync_bit.up[i]];
+              dmag += fft_out_db[sync_bit.down[i]];
             }
+          sync_matrix (row, col++) = MagMatrix::Mags {umag, dmag};
         }
       assert (col == n_sync_cols);
       row++;
@@ -253,77 +267,89 @@ SpeedSync::prepare_mags()
   assert (row == n_sync_rows);
 }
 
+template<bool B2> void
+SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset)
+{
+  const int steps_per_frame = Params::frame_size / Params::sync_search_step;
+  const double relative_speed_inv = 1 / relative_speed;
+
+  /* search start */
+  int mi = *start_mi;
+  while (mi > 0)
+    {
+      int index = offset + sync_bits[mi - 1].frame * steps_per_frame;
+      if (index < 0)
+        break;
+
+      mi--;
+    }
+  *start_mi = mi;
+
+  for (auto si = sync_bits.begin() + mi; si != sync_bits.end(); si++)
+    {
+      int index = (offset + si->frame * steps_per_frame) * relative_speed_inv + 0.5;
+      if (index >= sync_matrix.rows())
+        return;
+
+      auto& bv = bit_values[si->bit];
+      auto mags = sync_matrix (index, mi);
+      if (B2)
+        {
+          bv.umag += mags.dmag;
+          bv.dmag += mags.umag;
+        }
+      else
+        {
+          bv.umag += mags.umag;
+          bv.dmag += mags.dmag;
+        }
+      bv.count++;
+
+      mi++;
+    }
+}
+
 void
 SpeedSync::compare (double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
   const int pad_start = frames_per_block * steps_per_frame + /* add a bit of overlap to handle boundaries */ steps_per_frame;
-  const double relative_speed_inv = 1 / relative_speed;
   Score best_score;
 
   assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
 
+  int start_mi1 = sync_bits.size();
+  int start_mi2 = sync_bits.size();
+  int start_mi3 = sync_bits.size();
   for (int offset = -pad_start; offset < 0; offset++)
     {
+      BitValue bit_values[Params::sync_bits];
+
+      /*
+       * we need to compare 3 blocks here:
+       *  - one block is necessary because we need to test all offsets (-pad_start..0)
+       *  - two more blocks are necessary since speed detection ScanParams uses 50 seconds at most,
+       *    and short payload (12 bits) has a block length of slightly over 30 seconds
+       */
+      compare_bits<false> (bit_values, relative_speed, &start_mi1, offset);
+      compare_bits<true>  (bit_values, relative_speed, &start_mi2, offset + frames_per_block * steps_per_frame);
+      compare_bits<false> (bit_values, relative_speed, &start_mi3, offset + frames_per_block * steps_per_frame * 2);
+
       double sync_quality = 0;
-      int mi = 0;
-      int frame_bit_count = 0;
       int bit_count = 0;
-      for (size_t sync_bit = 0; sync_bit < Params::sync_bits; sync_bit++)
+
+      for (size_t bit = 0; bit < Params::sync_bits; bit++)
         {
-          const vector<SyncFinder::FrameBit>& frame_bits = sync_bits[sync_bit];
+          const auto& bv = bit_values[bit];
 
-          float umag = 0;
-          float dmag = 0;
-          for (size_t f = 0; f < Params::sync_frames_per_bit; f++)
-            {
-              int index = offset + frame_bits[f].frame * steps_per_frame;
-
-              const int index1 = lrint (index * relative_speed_inv);
-              if (index1 >= 0 && index1 < sync_matrix.rows())
-                {
-                  auto mags = sync_matrix (index1, mi);
-                  umag += mags.umag;
-                  dmag += mags.dmag;
-                  frame_bit_count++;
-                }
-              index += frames_per_block * steps_per_frame;
-
-              const int index2 = lrint (index * relative_speed_inv);
-              if (index2 >= 0 && index2 < sync_matrix.rows())
-                {
-                  auto mags = sync_matrix (index2, mi);
-                  umag += mags.dmag;
-                  dmag += mags.umag;
-                  frame_bit_count++;
-                }
-              mi++;
-            }
-          /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
-          double raw_bit;
-          if (umag == 0 || dmag == 0)
-            {
-              raw_bit = 0;
-            }
-          else if (umag < dmag)
-            {
-              raw_bit = 1 - umag / dmag;
-            }
-          else
-            {
-              raw_bit = dmag / umag - 1;
-            }
-          const int expect_data_bit = sync_bit & 1; /* expect 010101 */
-          const double q = expect_data_bit ? raw_bit : -raw_bit;
-          sync_quality += q * frame_bit_count;
-          bit_count += frame_bit_count;
+          sync_quality += SyncFinder::bit_quality (bv.umag, bv.dmag, bit) * bv.count;
+          bit_count += bv.count;
         }
       if (bit_count)
         {
           sync_quality /= bit_count;
-          sync_quality = fabs (sync_quality);
-          //sync_quality = fabs (sync_finder.normalize_sync_quality (sync_quality));
-          //printf ("%d %f\n", offset, fabs (sync_quality));
+          sync_quality = fabs (SyncFinder::normalize_sync_quality (sync_quality));
+
           if (sync_quality > best_score.quality)
             {
               best_score.quality = sync_quality;
@@ -336,56 +362,132 @@ SpeedSync::compare (double relative_speed)
   result_scores.push_back (best_score);
 }
 
-class QInterpolator  // quadratic interpolation between three data values
+/*
+ * The scores from speed search are usually a bit noisy, so the local maximum from the scores
+ * vector is not necessarily the best choice.
+ *
+ * To get rid of the noise to some degree, this function smoothes the scores using a
+ * cosine window and then finds the local maximum of this smooth function.
+ */
+static double
+score_smooth_find_best (const vector<SpeedSync::Score>& in_scores, double step, double distance)
 {
-  double a, b, c;
+  auto scores = in_scores;
+  sort (scores.begin(), scores.end(), [] (auto s1, auto s2) { return s1.speed < s2.speed; });
 
+  double best_speed = 0;
+  double best_quality = 0;
+
+  for (double speed = scores.front().speed; speed < scores.back().speed; speed += 0.000001)
+    {
+      double quality_sum = 0;
+      double quality_div = 0;
+
+      for (auto s : scores)
+        {
+          double w = window_cos ((s.speed - speed) / (step * distance));
+
+          quality_sum += s.quality * w;
+          quality_div += w;
+        }
+      quality_sum /= quality_div;
+      if (quality_sum > best_quality)
+        {
+          best_speed = speed;
+          best_quality = quality_sum;
+        }
+    }
+
+  return best_speed;
+}
+
+class SpeedSearch
+{
+  ThreadPool thread_pool;
+  vector<std::unique_ptr<SpeedSync>> speed_sync;
+  const WavData& in_data;
+  double clip_location;
+
+  double start_time;
+  vector<double> times;
+
+  SpeedSync *
+  find_closest_speed_sync (double speed)
+  {
+    auto it = std::min_element (speed_sync.begin(), speed_sync.end(), [&](auto& x, auto& y)
+      {
+        return fabs (x->center_speed() - speed) < fabs (y->center_speed() - speed);
+      });
+    return (*it).get();
+  }
+
+  void
+  timer_start()
+  {
+    start_time = get_time();
+  }
+  void
+  timer_report()
+  {
+    auto t = get_time();
+    times.push_back (t - start_time);
+    start_time = t;
+  }
 public:
-  QInterpolator (double y1, double y2, double y3)
+  SpeedSearch (const WavData& in_data, double clip_location) :
+    in_data (in_data),
+    clip_location (clip_location)
   {
-    a = (y1 + y3) / 2 - y2;
-    b = (y3 - y1) / 2;
-    c = y2;
   }
-  double
-  eval (double x)
+  vector<double>
+  get_times()
   {
-    return ((a * x) + b) * x + c;
+    return times;
   }
-  double
-  x_max()
+  static void
+  debug_range (const SpeedScanParams& scan_params)
   {
-    return -b / (2 * a);
+    auto bound = [&] (float f) {
+      return 100 * pow (scan_params.step, f * (scan_params.n_center_steps * (scan_params.n_steps * 2 + 1) + scan_params.n_steps));
+    };
+    printf ("range = [ %.2f .. %.2f ]\n", bound (-1), bound (1));
   }
+
+  vector<SpeedSync::Score> run_search (const SpeedScanParams& scan_params, const vector<double>& speeds);
+  vector<SpeedSync::Score> refine_search (const SpeedScanParams& scan_params, double speed);
 };
 
-static double
-speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_data, const SpeedScanParams& scan_params, double speed, bool print_results)
+vector<SpeedSync::Score>
+SpeedSearch::run_search (const SpeedScanParams& scan_params, const vector<double>& speeds)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
   WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
 
-  auto t0 = get_time();
+  speed_sync.clear();
 
-  vector<std::unique_ptr<SpeedSync>> speed_sync;
-  for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+  for (auto speed : speeds)
     {
-      double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
+      for (int c = -scan_params.n_center_steps; c <= scan_params.n_center_steps; c++)
+        {
+          double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
 
-      speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, scan_params, c_speed));
+          speed_sync.push_back (std::make_unique<SpeedSync> (in_clip, c_speed));
+        }
     }
 
-  for (auto& s : speed_sync)
-    s->start_prepare_job (thread_pool);
-  thread_pool.wait_all();
-
-  auto t1 = get_time();
+  timer_start();
 
   for (auto& s : speed_sync)
-    s->start_search_jobs (thread_pool);
+    s->start_prepare_job (thread_pool, scan_params);
   thread_pool.wait_all();
 
-  auto t2 = get_time();
+  timer_report();
+
+  for (auto& s : speed_sync)
+    s->start_search_jobs (thread_pool, scan_params, s->center_speed());
+  thread_pool.wait_all();
+
+  timer_report();
 
   vector<SpeedSync::Score> scores;
   for (auto& s : speed_sync)
@@ -393,62 +495,60 @@ speed_scan (ThreadPool& thread_pool, double clip_location, const WavData& in_dat
       vector<SpeedSync::Score> step_scores = s->get_scores();
       scores.insert (scores.end(), step_scores.begin(), step_scores.end());
     }
+  return scores;
+}
 
+vector<SpeedSync::Score>
+SpeedSearch::refine_search (const SpeedScanParams& scan_params, double speed)
+{
+  SpeedSync *center_speed_sync = find_closest_speed_sync (speed);
+
+  timer_start();
+
+  center_speed_sync->start_search_jobs (thread_pool, scan_params, speed);
+  thread_pool.wait_all();
+
+  timer_report();
+
+  return center_speed_sync->get_scores();
+}
+
+
+static void
+select_n_best_scores (vector<SpeedSync::Score>& scores, size_t n)
+{
   sort (scores.begin(), scores.end(), [](auto a, auto b) { return a.speed < b.speed; });
-  if (scan_params.interpolate)
+
+  auto get_quality = [&] (int pos) // handle corner cases
     {
-      /* typically, the location of a quality peak is between two values, so we try to estimate
-       * the "true" quality at the peak by quadratic interpolation between the data points
+      if (pos >= 0 && size_t (pos) < scores.size())
+        return scores[pos].quality;
+      else
+        return 0.0;
+    };
+
+  vector<SpeedSync::Score> lmax_scores;
+  for (int x = 0; size_t (x) < scores.size(); x++)
+    {
+      /* check for peaks
+       *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
+       *  - double peak : two values have equal quality, this must be larger than left and right neighbour
        */
-      for (size_t x = 1; x + 2 < scores.size(); x++)
-        {
-          /* check for peaks
-           *  - single peak : quality of the middle value is larger than the quality of the left and right neighbour
-           *  - double peak : two values have equal quality, this must be larger than left and right neighbour
-           */
-          const double q1 = scores[x - 1].quality;
-          const double q2 = scores[x].quality;
-          const double q3 = scores[x + 1].quality;
-          const double q4 = scores[x + 2].quality;
-          if ((q1 < q2 && q2 > q3) || (q1 < q2 && q2 == q3 && q3 > q4))
-            {
-              QInterpolator quality_interp (q1, q2, q3);
+      const double q1 = get_quality (x - 1);
+      const double q2 = get_quality (x);
+      const double q3 = get_quality (x + 1);
 
-              scores[x].quality = quality_interp.eval (quality_interp.x_max());
-            }
+      if (q1 <= q2 && q2 >= q3)
+        {
+          lmax_scores.push_back (scores[x]);
+          x++; // score with quality q3 cannot be a local maximum
         }
     }
-  /* output best result, or: if there is not a unique best result, average all best results */
+  sort (lmax_scores.begin(), lmax_scores.end(), [](auto a, auto b) { return a.quality > b.quality; });
 
-  double best_quality = 0;
-  for (auto score : scores)
-    best_quality = max (best_quality, score.quality);
-
-  double best_speed = 0;
-  int speed_count = 0;
-  for (auto score : scores)
-    {
-      const double factor = 0.99; /* all matches which are closer than this are considered relevant */
-
-      if (score.quality >= best_quality * factor)
-        {
-          best_speed += score.speed;
-          speed_count++;
-        }
-    }
-  if (speed_count)
-    best_speed /= speed_count;
-
-  if (print_results)
-    {
-      printf ("detect_speed %.0f %f %f %f %.3f %.3f\n",
-        scan_params.seconds,
-        best_speed,
-        best_quality,
-        100 * fabs (best_speed - Params::test_speed) / Params::test_speed,
-        t1 - t0, t2 - t1);
-    }
-  return best_speed;
+  if (lmax_scores.size() > n)
+    lmax_scores.resize (n);
+  scores = lmax_scores;
 }
 
 static vector<double>
@@ -505,33 +605,101 @@ detect_speed (const WavData& in_data, bool print_results)
   if (in_seconds < 0.25)
     return 1;
 
-  ThreadPool thread_pool;
-
-  /* first pass: find approximation for speed */
-  const SpeedScanParams scan1
+  const SpeedScanParams scan1_normal /* first pass: find approximation: speed approximately 0.8..1.25 */
     {
       .seconds        = 25,
-
-      /* step / n_steps / n_center_steps settings: speed approximately 0.8..1.25 */
       .step           = 1.0007,
       .n_steps        = 5,
       .n_center_steps = 28,
-      .interpolate    = true
     };
-  const int    clip_candidates = 5;
-  const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
+  const SpeedScanParams scan1_patient
+    {
+      .seconds        = 50,
+      .step           = 1.00035,
+      .n_steps        = 11,
+      .n_center_steps = 28,
+    };
+  const SpeedScanParams scan1 = Params::detect_speed_patient ? scan1_patient : scan1_normal;
 
-  double speed = speed_scan (thread_pool, clip_location, in_data, scan1, /* start speed */ 1.0, print_results);
+  const SpeedScanParams scan2_normal /* second pass: improve approximation */
+    {
+      .seconds        = 50,
+      .step           = 1.00035,
+      .n_steps        = 1,
+    };
+  const SpeedScanParams scan2_patient
+    {
+      .seconds        = 50,
+      .step           = 1.000175,
+      .n_steps        = 1,
+    };
+  const SpeedScanParams scan2 = Params::detect_speed_patient ? scan2_patient : scan2_normal;
 
-  /* second pass: fast refine (not always perfect) */
-  const SpeedScanParams scan2
+  const SpeedScanParams scan3 /* third pass: fast refine (not always perfect) */
     {
       .seconds        = 50,
       .step           = 1.00005,
-      .n_steps        = 20,
-      .n_center_steps = 0,
-      .interpolate    = false
+      .n_steps        = 40,
     };
-  speed = speed_scan (thread_pool, clip_location, in_data, scan2, speed, print_results);
-  return speed;
+  const double scan3_smooth_distance = 20;
+  const double speed_sync_threshold = 0.4;
+
+  // SpeedSearch::debug_range (scan1);
+
+  const int    clip_candidates = 5;
+  const double clip_location = get_best_clip_location (in_data, scan1.seconds, clip_candidates);
+
+  vector<SpeedSync::Score> scores;
+  SpeedSearch speed_search (in_data, clip_location);
+
+  /* initial search using grid */
+  scores = speed_search.run_search (scan1, { 1.0 });
+
+  /* improve 5 best matches */
+  select_n_best_scores (scores, 5);
+
+  vector<double> speeds;
+  for (auto score : scores)
+    speeds.push_back (score.speed);
+
+  scores = speed_search.run_search (scan2, speeds);
+
+  /* improve or refine best match */
+  select_n_best_scores (scores, 1);
+  if (Params::detect_speed_patient)
+    {
+      // slower version: prepare magnitudes again, according to best speed
+      scores = speed_search.run_search (scan3, { scores[0].speed });
+    }
+  else
+    {
+      // faster version: keep already computed magnitudes
+      scores = speed_search.refine_search (scan3, scores[0].speed);
+    }
+  double best_speed = score_smooth_find_best (scores, 1 - scan3.step, scan3_smooth_distance);
+
+  double best_quality = 0;
+  for (auto score : scores)
+    best_quality = max (best_quality, score.quality);
+
+  if (print_results)
+    {
+      double delta = -1;
+      if (Params::test_speed > 0)
+        delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
+      printf ("detect_speed %f %f %.4f   ", best_speed, best_quality, delta);
+
+      double total = 0.0;
+      for (auto t : speed_search.get_times())
+        {
+          total += t;
+          printf (" %.3f", t);
+        }
+      printf (" %.3f\n", total);
+    }
+
+  if (best_quality > speed_sync_threshold)
+    return best_speed;
+  else
+    return 1;
 }

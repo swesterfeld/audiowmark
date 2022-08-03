@@ -20,6 +20,10 @@
 #include "convcode.hh"
 #include "shortcode.hh"
 
+using std::string;
+using std::vector;
+using std::complex;
+
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
 bool   Params::mix             = true;
@@ -27,6 +31,7 @@ bool   Params::hard            = false; // hard decode bits? (soft decoding is b
 bool   Params::snr             = false; // compute/show snr while adding watermark
 bool   Params::strict          = false;
 bool   Params::detect_speed    = false;
+bool   Params::detect_speed_patient = false;
 double Params::try_speed       = -1;
 double Params::test_speed      = -1;
 int    Params::have_key        = 0;
@@ -36,6 +41,7 @@ int    Params::test_cut        = 0; // for sync test
 bool   Params::test_no_sync    = false; // disable sync
 bool   Params::test_no_limiter = false; // disable limiter
 int    Params::test_truncate   = 0;
+int    Params::expect_matches  = -1;
 
 Format Params::input_format     = Format::AUTO;
 Format Params::output_format    = Format::AUTO;
@@ -45,37 +51,41 @@ RawFormat Params::raw_output_format;
 
 int    Params::hls_bit_rate = 0;
 
-std::string Params::json_output;
-std::string Params::input_label;
-std::string Params::output_label;
-
-using std::vector;
-using std::complex;
+string Params::json_output;
+string Params::input_label;
+string Params::output_label;
 
 FFTAnalyzer::FFTAnalyzer (int n_channels) :
   m_n_channels (n_channels),
   m_fft_processor (Params::frame_size)
 {
-  /* generate analysis window */
-  m_window.resize (Params::frame_size);
+  m_window = gen_normalized_window (Params::frame_size);
+}
 
+/* safe to call from any thread */
+vector<float>
+FFTAnalyzer::gen_normalized_window (size_t n_values)
+{
+  vector<float> window (n_values);
+
+  /* generate analysis window */
   double window_weight = 0;
-  for (size_t i = 0; i < Params::frame_size; i++)
+  for (size_t i = 0; i < n_values; i++)
     {
-      const double fsize_2 = Params::frame_size / 2.0;
-      // const double win =  window_cos ((i - fsize_2) / fsize_2);
-      const double win = window_hamming ((i - fsize_2) / fsize_2);
+      const double n_values_2 = n_values / 2.0;
+      // const double win =  window_cos ((i - n_values_2) / n_values_2);
+      const double win = window_hamming ((i - n_values_2) / n_values_2);
       //const double win = 1;
-      m_window[i] = win;
+      window[i] = win;
       window_weight += win;
     }
 
   /* normalize window using window weight */
-  for (size_t i = 0; i < Params::frame_size; i++)
+  for (size_t i = 0; i < n_values; i++)
     {
-      m_window[i] *= 2.0 / window_weight;
+      window[i] *= 2.0 / window_weight;
     }
-
+  return window;
 }
 
 vector<vector<complex<float>>>
@@ -210,4 +220,34 @@ int
 frame_count (const WavData& wav_data)
 {
   return wav_data.n_values() / wav_data.n_channels() / Params::frame_size;
+}
+
+vector<int>
+parse_payload (const string& bits)
+{
+  auto bitvec = bit_str_to_vec (bits);
+  if (bitvec.empty())
+    {
+      error ("audiowmark: cannot parse bits '%s'\n", bits.c_str());
+      return {};
+    }
+  if ((Params::payload_short || Params::strict) && bitvec.size() != Params::payload_size)
+    {
+      error ("audiowmark: number of message bits must match payload size (%zd bits)\n", Params::payload_size);
+      return {};
+    }
+  if (bitvec.size() > Params::payload_size)
+    {
+      error ("audiowmark: number of bits in message '%s' larger than payload size\n", bits.c_str());
+      return {};
+    }
+  if (bitvec.size() < Params::payload_size)
+    {
+      /* expand message automatically; good for testing, not so good in production (disabled by --strict) */
+      vector<int> expanded_bitvec;
+      for (size_t i = 0; i < Params::payload_size; i++)
+        expanded_bitvec.push_back (bitvec[i % bitvec.size()]);
+      bitvec = expanded_bitvec;
+    }
+  return bitvec;
 }

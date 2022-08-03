@@ -76,6 +76,7 @@ SyncFinder::init_up_down (const WavData& wav_data, Mode mode)
     }
 }
 
+/* safe to call from any thread */
 double
 SyncFinder::normalize_sync_quality (double raw_quality)
 {
@@ -87,6 +88,29 @@ SyncFinder::normalize_sync_quality (double raw_quality)
    * to 0.0 for non-sync blocks
    */
   return raw_quality / min (Params::water_delta, 0.080) / 2.9;
+}
+
+/* safe to call from any thread */
+double
+SyncFinder::bit_quality (float umag, float dmag, int bit)
+{
+  const int expect_data_bit = bit & 1; /* expect 010101 */
+
+  /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
+  double raw_bit;
+  if (umag == 0 || dmag == 0)
+    {
+      raw_bit = 0;
+    }
+  else if (umag < dmag)
+    {
+      raw_bit = 1 - umag / dmag;
+    }
+  else
+    {
+      raw_bit = dmag / umag - 1;
+    }
+  return expect_data_bit ? raw_bit : -raw_bit;
 }
 
 double
@@ -118,24 +142,7 @@ SyncFinder::sync_decode (const WavData& wav_data, const size_t start_frame,
               frame_bit_count++;
             }
         }
-      /* convert avoiding bias, raw_bit < 0 => 0 bit received; raw_bit > 0 => 1 bit received */
-      double raw_bit;
-      if (umag == 0 || dmag == 0)
-        {
-          raw_bit = 0;
-        }
-      else if (umag < dmag)
-        {
-          raw_bit = 1 - umag / dmag;
-        }
-      else
-        {
-          raw_bit = dmag / umag - 1;
-        }
-
-      const int expect_data_bit = bit & 1; /* expect 010101 */
-      const double q = expect_data_bit ? raw_bit : -raw_bit;
-      sync_quality += q * frame_bit_count;
+      sync_quality += bit_quality (umag, dmag, bit) * frame_bit_count;
       bit_count += frame_bit_count;
     }
   if (bit_count)
@@ -227,9 +234,10 @@ SyncFinder::sync_select_by_threshold (vector<Score>& sync_scores)
           if (i + 1 < sync_scores.size())
             q_next = sync_scores[i + 1].quality;
 
-          if (sync_scores[i].quality > q_last && sync_scores[i].quality > q_next)
+          if (sync_scores[i].quality >= q_last && sync_scores[i].quality >= q_next)
             {
               selected_scores.emplace_back (sync_scores[i]);
+              i++; // score with quality q_next cannot be a local maximum
             }
         }
     }

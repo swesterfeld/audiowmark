@@ -102,7 +102,7 @@ AC_LANG_POP([C++])
 # Less cluttered build output
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile tests/Makefile tests/test-common.sh])
 AC_OUTPUT
 
 # Output summary message
