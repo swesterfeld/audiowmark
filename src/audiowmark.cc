@@ -813,51 +813,51 @@ main (int argc, char **argv)
     }
   else if (ap.parse_cmd ("gentest"))
     {
-      if (ap.parse_args (2, args))
-        return gentest (args[0], args[1]);
+      args = parse_positional (ap, "input_wav", "output_wav");
+      return gentest (args[0], args[1]);
     }
   else if (ap.parse_cmd ("cut-start"))
     {
-      if (ap.parse_args (3, args))
-        return cut_start (args[0], args[1], args[2]);
+      args = parse_positional (ap, "input_wav", "output_wav", "cut_samples");
+      return cut_start (args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("test-subtract"))
     {
-      if (ap.parse_args (3, args))
-        return test_subtract (args[0], args[1], args[2]);
+      args = parse_positional (ap, "input1_wav", "input2_wav", "output_wav");
+      return test_subtract (args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("test-snr"))
     {
-      if (ap.parse_args (2, args))
-        return test_snr (args[0], args[1]);
+      args = parse_positional (ap, "orig_wav", "watermarked_wav");
+      return test_snr (args[0], args[1]);
     }
   else if (ap.parse_cmd ("test-clip"))
     {
       parse_shared_options (ap);
 
-      if (ap.parse_args (4, args))
-        return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+      args = parse_positional (ap, "input_wav", "output_wav", "seed", "seconds");
+      return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
     }
   else if (ap.parse_cmd ("test-speed"))
     {
       parse_shared_options (ap);
 
-      if (ap.parse_args (1, args))
-        return test_speed (atoi (args[0].c_str()));
+      args = parse_positional (ap, "seed");
+      return test_speed (atoi (args[0].c_str()));
     }
   else if (ap.parse_cmd ("test-gen-noise"))
     {
       parse_shared_options (ap);
 
-      if (ap.parse_args (3, args))
-        return test_gen_noise (args[0], atof (args[1].c_str()), atoi (args[2].c_str()));
+      args = parse_positional (ap, "output_wav", "seconds", "sample_rate");
+      return test_gen_noise (args[0], atof (args[1].c_str()), atoi (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-change-speed"))
     {
       parse_shared_options (ap);
 
-      if (ap.parse_args (3, args))
-        return test_change_speed (args[0], args[1], atof (args[2].c_str()));
+      args = parse_positional (ap, "input_wav", "output_wav", "speed");
+      return test_change_speed (args[0], args[1], atof (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-resample"))
     {
