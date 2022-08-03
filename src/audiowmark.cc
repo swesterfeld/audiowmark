@@ -62,7 +62,7 @@ print_usage()
   printf ("  -q, --quiet             disable information messages\n");
   printf ("  --strict                treat (minor) problems as errors\n");
   printf ("\n");
-  printf ("Options to be used for get / cmp:\n");
+  printf ("Options for get / cmp:\n");
   printf ("  --detect-speed          detect and correct replay speed difference\n");
   printf ("  --detect-speed-patient  slower, more accurate speed detection\n");
   printf ("  --json <file>           write JSON results into file\n");
