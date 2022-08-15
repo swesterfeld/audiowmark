@@ -280,24 +280,36 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
   const int OFFSET = BLOCK * frames_per_block * steps_per_frame;
   const double relative_speed_inv = 1 / relative_speed;
 
+  auto begin = cmp_states.end();
+  auto end = cmp_states.end();
   for (size_t mi = 0; mi < sync_bits.size(); mi++)
     {
-      auto start = std::lower_bound (cmp_states.begin(), cmp_states.end(), 0,
-        [&] (auto& cs, auto idx)
-          {
-            int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
-            return index < idx;
-          });
-
-      for (auto it = start; it != cmp_states.end(); it++)
+      while (begin > cmp_states.begin())
         {
-          CmpState& cs = *it;
-          int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          auto prev = begin - 1;
 
-          if (index >= sync_matrix.rows())
+          int index = (prev->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          if (index < 0)
             break;
 
-          auto& bv = cs.bit_values[sync_bits[mi].bit];
+          begin = prev;
+        }
+      while (end > cmp_states.begin())
+        {
+          auto prev = end - 1;
+
+          int index = (prev->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          if (index < sync_matrix.rows())
+            break;
+
+          end = prev;
+        }
+
+      for (auto it = begin; it != end; it++)
+        {
+          int index = (it->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+
+          auto& bv = it->bit_values[sync_bits[mi].bit];
           auto mags = sync_matrix (index, mi);
           if (BLOCK & 1)
             {
