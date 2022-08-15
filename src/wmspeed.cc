@@ -282,28 +282,34 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
 
   for (size_t mi = 0; mi < sync_bits.size(); mi++)
     {
-      for (auto& cs : cmp_states)
-        {
-          int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
-          if (index >= 0)
-            {
-              if (index >= sync_matrix.rows())
-                break;
+      auto start = std::lower_bound (cmp_states.begin(), cmp_states.end(), 0,
+        [&] (auto& cs, auto idx)
+          {
+            int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+            return index < idx;
+          });
 
-              auto& bv = cs.bit_values[sync_bits[mi].bit];
-              auto mags = sync_matrix (index, mi);
-              if (BLOCK & 1)
-                {
-                  bv.umag += mags.dmag;
-                  bv.dmag += mags.umag;
-                }
-              else
-                {
-                  bv.umag += mags.umag;
-                  bv.dmag += mags.dmag;
-                }
-              bv.count++;
+      for (auto it = start; it != cmp_states.end(); it++)
+        {
+          CmpState& cs = *it;
+          int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+
+          if (index >= sync_matrix.rows())
+            break;
+
+          auto& bv = cs.bit_values[sync_bits[mi].bit];
+          auto mags = sync_matrix (index, mi);
+          if (BLOCK & 1)
+            {
+              bv.umag += mags.dmag;
+              bv.dmag += mags.umag;
             }
+          else
+            {
+              bv.umag += mags.umag;
+              bv.dmag += mags.dmag;
+            }
+          bv.count++;
         }
     }
 }
