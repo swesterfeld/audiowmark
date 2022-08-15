@@ -87,7 +87,8 @@ public:
   Mags&
   operator() (int row, int col)
   {
-    return m_data[row * m_cols + col];
+    //return m_data[row * m_cols + col];
+    return m_data[col * m_rows + row];
   }
   void
   resize (int rows, int cols)
@@ -129,14 +130,19 @@ public:
     float dmag = 0;
     int count = 0;
   };
+  struct CmpState
+  {
+    int offset = 0;
+    BitValue bit_values[Params::sync_bits];
+  };
 private:
   vector<SyncBit> sync_bits;
   MagMatrix sync_matrix;
 
   void prepare_mags (const SpeedScanParams& scan_params);
   void compare (double relative_speed);
-  template<bool B2>
-  void compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset);
+  template<int BLOCK>
+  void compare_bits (vector<CmpState>& cmp_states, double relative_speed);
 
   std::mutex mutex;
   vector<Score> result_scores;
@@ -267,45 +273,38 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
   assert (row == n_sync_rows);
 }
 
-template<bool B2> void
-SpeedSync::compare_bits (BitValue *bit_values, double relative_speed, int *start_mi, int offset)
+template<int BLOCK> void
+SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
+  const int OFFSET = BLOCK * frames_per_block * steps_per_frame;
   const double relative_speed_inv = 1 / relative_speed;
 
-  /* search start */
-  int mi = *start_mi;
-  while (mi > 0)
+  for (size_t mi = 0; mi < sync_bits.size(); mi++)
     {
-      int index = offset + sync_bits[mi - 1].frame * steps_per_frame;
-      if (index < 0)
-        break;
-
-      mi--;
-    }
-  *start_mi = mi;
-
-  for (auto si = sync_bits.begin() + mi; si != sync_bits.end(); si++)
-    {
-      int index = (offset + si->frame * steps_per_frame) * relative_speed_inv + 0.5;
-      if (index >= sync_matrix.rows())
-        return;
-
-      auto& bv = bit_values[si->bit];
-      auto mags = sync_matrix (index, mi);
-      if (B2)
+      for (auto& cs : cmp_states)
         {
-          bv.umag += mags.dmag;
-          bv.dmag += mags.umag;
-        }
-      else
-        {
-          bv.umag += mags.umag;
-          bv.dmag += mags.dmag;
-        }
-      bv.count++;
+          int index = (cs.offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          if (index >= 0)
+            {
+              if (index >= sync_matrix.rows())
+                break;
 
-      mi++;
+              auto& bv = cs.bit_values[sync_bits[mi].bit];
+              auto mags = sync_matrix (index, mi);
+              if (BLOCK & 1)
+                {
+                  bv.umag += mags.dmag;
+                  bv.dmag += mags.umag;
+                }
+              else
+                {
+                  bv.umag += mags.umag;
+                  bv.dmag += mags.dmag;
+                }
+              bv.count++;
+            }
+        }
     }
 }
 
@@ -314,33 +313,36 @@ SpeedSync::compare (double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
   const int pad_start = frames_per_block * steps_per_frame + /* add a bit of overlap to handle boundaries */ steps_per_frame;
-  Score best_score;
 
   assert (steps_per_frame * Params::sync_search_step == Params::frame_size);
 
-  int start_mi1 = sync_bits.size();
-  int start_mi2 = sync_bits.size();
-  int start_mi3 = sync_bits.size();
-  for (int offset = -pad_start; offset < 0; offset++)
+  vector<CmpState> cmp_states;
+  for (int offset =  -pad_start; offset < 0; offset++)
     {
-      BitValue bit_values[Params::sync_bits];
+      CmpState cs;
+      cs.offset = offset;
+      cmp_states.push_back (cs);
+    }
 
-      /*
-       * we need to compare 3 blocks here:
-       *  - one block is necessary because we need to test all offsets (-pad_start..0)
-       *  - two more blocks are necessary since speed detection ScanParams uses 50 seconds at most,
-       *    and short payload (12 bits) has a block length of slightly over 30 seconds
-       */
-      compare_bits<false> (bit_values, relative_speed, &start_mi1, offset);
-      compare_bits<true>  (bit_values, relative_speed, &start_mi2, offset + frames_per_block * steps_per_frame);
-      compare_bits<false> (bit_values, relative_speed, &start_mi3, offset + frames_per_block * steps_per_frame * 2);
+  /*
+   * we need to compare 3 blocks here:
+   *  - one block is necessary because we need to test all offsets (-pad_start..0)
+   *  - two more blocks are necessary since speed detection ScanParams uses 50 seconds at most,
+   *    and short payload (12 bits) has a block length of slightly over 30 seconds
+   */
+  compare_bits<0> (cmp_states, relative_speed);
+  compare_bits<1> (cmp_states, relative_speed);
+  compare_bits<2> (cmp_states, relative_speed);
 
+  Score best_score;
+  for (const auto& cs : cmp_states)
+    {
       double sync_quality = 0;
       int bit_count = 0;
 
       for (size_t bit = 0; bit < Params::sync_bits; bit++)
         {
-          const auto& bv = bit_values[bit];
+          const auto& bv = cs.bit_values[bit];
 
           sync_quality += SyncFinder::bit_quality (bv.umag, bv.dmag, bit) * bv.count;
           bit_count += bv.count;
@@ -357,7 +359,6 @@ SpeedSync::compare (double relative_speed)
             }
         }
     }
-  //printf ("%f %f\n", best_score.speed, best_score.quality);
   std::lock_guard<std::mutex> lg (mutex);
   result_scores.push_back (best_score);
 }
