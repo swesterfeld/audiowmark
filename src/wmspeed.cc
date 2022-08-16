@@ -291,7 +291,7 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
         {
           auto prev = begin - 1;
 
-          int index = (prev->offset + frame_offset) >> OFFSET_SHIFT;
+          int index = prev->offset + frame_offset;
           if (index < 0)
             break;
 
