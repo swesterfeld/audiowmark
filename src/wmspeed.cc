@@ -136,6 +136,8 @@ public:
     BitValue bit_values[Params::sync_bits];
   };
 private:
+  static constexpr int OFFSET_SHIFT = 16;
+
   vector<SyncBit> sync_bits;
   MagMatrix sync_matrix;
 
@@ -277,18 +279,19 @@ template<int BLOCK> void
 SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
 {
   const int steps_per_frame = Params::frame_size / Params::sync_search_step;
-  const int OFFSET = BLOCK * frames_per_block * steps_per_frame;
   const double relative_speed_inv = 1 / relative_speed;
 
   auto begin = cmp_states.end();
   auto end = cmp_states.end();
   for (size_t mi = 0; mi < sync_bits.size(); mi++)
     {
+      const int frame_offset = ((BLOCK * frames_per_block + sync_bits[mi].frame) * steps_per_frame * relative_speed_inv + 0.5) * (1 << OFFSET_SHIFT);
+
       while (begin > cmp_states.begin())
         {
           auto prev = begin - 1;
 
-          int index = (prev->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          int index = (prev->offset + frame_offset) >> OFFSET_SHIFT;
           if (index < 0)
             break;
 
@@ -298,7 +301,7 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
         {
           auto prev = end - 1;
 
-          int index = (prev->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          int index = (prev->offset + frame_offset) >> OFFSET_SHIFT;
           if (index < sync_matrix.rows())
             break;
 
@@ -307,7 +310,7 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
 
       for (auto it = begin; it != end; it++)
         {
-          int index = (it->offset + OFFSET + sync_bits[mi].frame * steps_per_frame) * relative_speed_inv + 0.5;
+          int index = (it->offset + frame_offset) >> OFFSET_SHIFT;
 
           auto& bv = it->bit_values[sync_bits[mi].bit];
           auto mags = sync_matrix (index, mi);
@@ -338,7 +341,7 @@ SpeedSync::compare (double relative_speed)
   for (int offset =  -pad_start; offset < 0; offset++)
     {
       CmpState cs;
-      cs.offset = offset;
+      cs.offset = offset * ((1 << OFFSET_SHIFT) / relative_speed);
       cmp_states.push_back (cs);
     }
 
