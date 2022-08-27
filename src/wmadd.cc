@@ -214,9 +214,9 @@ public:
   {
     const size_t synth_frame_sz = Params::frame_size * n_channels;
     /* move frame 1 and frame 2 to frame 0 and frame 1 */
-    std::copy (&synth_samples[synth_frame_sz], &synth_samples[synth_frame_sz * 3], &synth_samples[0]);
+    std::copy (synth_samples.begin() + synth_frame_sz, synth_samples.end(), synth_samples.begin());
     /* zero out frame 2 */
-    std::fill (&synth_samples[synth_frame_sz * 2], &synth_samples[synth_frame_sz * 3], 0);
+    std::fill (synth_samples.begin() + synth_frame_sz * 2, synth_samples.end(), 0);
     for (int ch = 0; ch < n_channels; ch++)
       {
         /* mix watermark signal to output frame */
@@ -418,7 +418,7 @@ public:
       }
 
     uint start = 0;
-    do
+    while (start != frames.size() / n_channels)
       {
         const int out_count = Params::frame_size;
         float out[out_count * n_channels];
@@ -435,7 +435,6 @@ public:
 
         start = frames.size() / n_channels - m_resampler.inp_count;
       }
-    while (start != frames.size() / n_channels);
   }
   vector<float>
   read_frames (size_t frames)

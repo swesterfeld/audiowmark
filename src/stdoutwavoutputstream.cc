@@ -136,7 +136,7 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
 
   m_raw_converter->to_raw (samples, output_bytes);
 
-  fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
+  fwrite (output_bytes.data(), 1, output_bytes.size(), stdout);
   if (ferror (stdout))
     return Error ("write sample data failed");
 
