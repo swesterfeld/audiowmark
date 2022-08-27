@@ -87,7 +87,6 @@ public:
   Mags&
   operator() (int row, int col)
   {
-    //return m_data[row * m_cols + col];
     return m_data[col * m_rows + row];
   }
   void
@@ -291,6 +290,11 @@ SpeedSync::compare_bits (vector<CmpState>& cmp_states, double relative_speed)
         {
           auto prev = begin - 1;
 
+          /*
+           * don't use OFFSET_SHIFT here; just ensure that index is positive
+           * to ensure that shifted value will properly round to nearest frame
+           * later on
+           */
           int index = prev->offset + frame_offset;
           if (index < 0)
             break;
