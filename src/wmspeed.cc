@@ -669,6 +669,7 @@ detect_speed (const WavData& in_data, bool print_results)
     };
   const double scan3_smooth_distance = 20;
   const double speed_sync_threshold = 0.4;
+  const int    n_best = Params::detect_speed_patient ? 15 : 5;
 
   // SpeedSearch::debug_range (scan1);
 
@@ -681,8 +682,8 @@ detect_speed (const WavData& in_data, bool print_results)
   /* initial search using grid */
   scores = speed_search.run_search (scan1, { 1.0 });
 
-  /* improve 5 best matches */
-  select_n_best_scores (scores, 5);
+  /* improve N best matches */
+  select_n_best_scores (scores, n_best);
 
   vector<double> speeds;
   for (auto score : scores)
