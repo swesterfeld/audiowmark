@@ -90,6 +90,27 @@ AC_DEFINE_UNQUOTED(HAVE_FFMPEG, $HAVE_FFMPEG, [whether ffmpeg libs are available
 AM_CONDITIONAL([COND_WITH_FFMPEG], [test "x$with_ffmpeg" != "xno"])
 dnl -------------------------------------------------------------------------
 
+dnl -------------------- address sanitizer ----------------------------------
+AC_ARG_ENABLE([asan], [AS_HELP_STRING([--enable-asan], [build using address sanitizer])],
+[
+  CXXFLAGS="$CXXFLAGS -fsanitize=address -fno-omit-frame-pointer -fstack-protector-all -fno-inline"
+  LDFLAGS="$LDFLAGS -lasan"
+],
+[
+  enable_asan=no
+])
+dnl -------------------------------------------------------------------------
+
+dnl -------------------- glibcxx assertions ----------------------------------
+AC_ARG_ENABLE(debug-cxx,AS_HELP_STRING([--enable-debug-cxx], [setup compiler flags to do C++ STL debug checks]),
+[
+  CXXFLAGS="$CXXFLAGS -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC"
+],
+[
+  enable_debug_cxx=no
+])
+dnl -------------------------------------------------------------------------
+
 # need c++14 mode
 AX_CXX_COMPILE_STDCXX_14(ext)
 
@@ -111,4 +132,6 @@ echo
 echo "---------------------------------------------------------------------------"
 echo "$PACKAGE_NAME $PACKAGE_VERSION"
 echo "---------------------------------------------------------------------------"
-echo " * use ffmpeg libs: $with_ffmpeg (required for HLS)"
+echo "  Use address sanitizer. .: $enable_asan (for debugging)"
+echo "  Use stdc++ debug mode  .: $enable_debug_cxx (for debugging)"
+echo "  Use ffmpeg libs. . . . .: $with_ffmpeg (required for HLS)"

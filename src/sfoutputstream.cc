@@ -110,7 +110,7 @@ SFOutputStream::write_frames (const vector<float>& samples)
     }
 
   sf_count_t frames = samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (m_sndfile, &isamples[0], frames);
+  sf_count_t count = sf_writef_int (m_sndfile, isamples.data(), frames);
 
   if (sf_error (m_sndfile))
     return Error (sf_strerror (m_sndfile));

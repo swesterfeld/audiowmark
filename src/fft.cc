@@ -26,9 +26,27 @@ using std::vector;
 using std::complex;
 using std::map;
 
+static struct FFTPlanMap
+{
+  std::map<size_t, fftwf_plan> fft_plan;
+  std::map<size_t, fftwf_plan> ifft_plan;
+
+  ~FFTPlanMap()
+  {
+    auto free_plans = [] (auto& pmap)
+      {
+        for (auto it = pmap.begin(); it != pmap.end(); it++)
+          {
+            fftwf_destroy_plan (it->second);
+          }
+        pmap.clear();
+      };
+    free_plans (fft_plan);
+    free_plans (ifft_plan);
+  }
+} fft_plan_map;
+
 static std::mutex fft_planner_mutex;
-static std::map<size_t, fftwf_plan> fft_plan_map;
-static std::map<size_t, fftwf_plan> ifft_plan_map;
 
 FFTProcessor::FFTProcessor (size_t N)
 {
@@ -40,11 +58,11 @@ FFTProcessor::FFTProcessor (size_t N)
   m_out = static_cast<float *> (fftwf_malloc (sizeof (float) * N_2));
 
   /* plan if not done already */
-  fftwf_plan& pfft = fft_plan_map[N];
+  fftwf_plan& pfft = fft_plan_map.fft_plan[N];
   if (!pfft)
     pfft = fftwf_plan_dft_r2c_1d (N, m_in, (fftwf_complex *) m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 
-  fftwf_plan& pifft = ifft_plan_map[N];
+  fftwf_plan& pifft = fft_plan_map.ifft_plan[N];
   if (!pifft)
     pifft = fftwf_plan_dft_c2r_1d (N, (fftwf_complex *) m_in, m_out, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 
