@@ -112,6 +112,17 @@ AC_ARG_ENABLE([ubsan], [AS_HELP_STRING([--enable-ubsan], [build using undefined 
 ])
 dnl -------------------------------------------------------------------------
 
+dnl -------------------- thread sanitizer -----------------------------------
+AC_ARG_ENABLE([tsan], [AS_HELP_STRING([--enable-tsan], [build using thread sanitizer])],
+[
+  CXXFLAGS="$CXXFLAGS -fsanitize=thread -fno-omit-frame-pointer -fstack-protector-all -fno-inline"
+  LDFLAGS="$LDFLAGS -ltsan"
+],
+[
+  enable_tsan=no
+])
+dnl -------------------------------------------------------------------------
+
 dnl -------------------- glibcxx assertions ----------------------------------
 AC_ARG_ENABLE(debug-cxx,AS_HELP_STRING([--enable-debug-cxx], [setup compiler flags to do C++ STL debug checks]),
 [
@@ -145,5 +156,6 @@ echo "$PACKAGE_NAME $PACKAGE_VERSION"
 echo "---------------------------------------------------------------------------"
 echo "  Use address sanitizer. . . . . . . .: $enable_asan (for debugging)"
 echo "  Use undefined behaviour sanitizer. .: $enable_ubsan (for debugging)"
+echo "  Use thread sanitizer.. . . . . . . .: $enable_tsan (for debugging)"
 echo "  Use stdc++ debug mode. . . . . . . .: $enable_debug_cxx (for debugging)"
 echo "  Use ffmpeg libs. . . . . . . . . . .: $with_ffmpeg (required for HLS)"
