@@ -8,7 +8,7 @@ fi
 
 set -e
 
-HLS_DIR=hls-test
+HLS_DIR=hls-test-dir.$$
 mkdir -p $HLS_DIR
 
 # generate input sample
@@ -38,11 +38,11 @@ ffmpeg $FFMPEG_Q -y -i $HLS_DIR/as0m/out.m3u8 $HLS_DIR/test-output.wav
 # detect watermark from wav
 audiowmark_cmp --expect-matches 5 $HLS_DIR/test-output.wav $TEST_MSG
 
-rm hls-test/as0*/*.ts
-rm hls-test/as0*/out.m3u8
-rmdir hls-test/as0*
-rm hls-test/test-*.wav
-rm hls-test/replay.m3u8
-rmdir hls-test
+rm $HLS_DIR/as0*/*.ts
+rm $HLS_DIR/as0*/out.m3u8
+rmdir $HLS_DIR/as0*
+rm $HLS_DIR/test-*.wav
+rm $HLS_DIR/replay.m3u8
+rmdir $HLS_DIR
 
 exit 0
