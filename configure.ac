@@ -1,11 +1,11 @@
-AC_INIT([audiowmark], [0.6.0])
+AC_INIT([audiowmark],[0.6.0])
 AC_CONFIG_SRCDIR([src/audiowmark.cc])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
-AC_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CXX
-AC_PROG_LIBTOOL
+LT_INIT
 
 dnl
 dnl sndfile
