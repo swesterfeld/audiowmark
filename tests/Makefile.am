@@ -4,7 +4,7 @@ check: detect-speed-test block-decoder-test clip-decoder-test \
 
 EXTRA_DIST = detect-speed-test.sh block-decoder-test.sh clip-decoder-test.sh \
        pipe-test.sh short-payload-test.sh sync-test.sh sample-rate-test.sh \
-       key-test.sh
+       key-test.sh hls-test.sh
 
 detect-speed-test:
 	Q=1 $(top_srcdir)/tests/detect-speed-test.sh

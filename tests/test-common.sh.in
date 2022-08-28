@@ -18,7 +18,7 @@ audiowmark()
   else
     echo >&2 ==== audiowmark "$@" ====
   fi
-  $AUDIOWMARK --strict "$@" || die "failed to run audiowmark $@"
+  $AUDIOWMARK $AUDIOWMARK_Q --strict "$@" || die "failed to run audiowmark $@"
 }
 
 audiowmark_add()
