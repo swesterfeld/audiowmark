@@ -101,6 +101,17 @@ AC_ARG_ENABLE([asan], [AS_HELP_STRING([--enable-asan], [build using address sani
 ])
 dnl -------------------------------------------------------------------------
 
+dnl -------------------- undefined behaviour sanitizer ----------------------
+AC_ARG_ENABLE([ubsan], [AS_HELP_STRING([--enable-ubsan], [build using undefined behaviour sanitizer])],
+[
+  CXXFLAGS="$CXXFLAGS -fsanitize=undefined -fno-omit-frame-pointer -fstack-protector-all -fno-inline"
+  LDFLAGS="$LDFLAGS -lubsan"
+],
+[
+  enable_ubsan=no
+])
+dnl -------------------------------------------------------------------------
+
 dnl -------------------- glibcxx assertions ----------------------------------
 AC_ARG_ENABLE(debug-cxx,AS_HELP_STRING([--enable-debug-cxx], [setup compiler flags to do C++ STL debug checks]),
 [
@@ -132,6 +143,7 @@ echo
 echo "---------------------------------------------------------------------------"
 echo "$PACKAGE_NAME $PACKAGE_VERSION"
 echo "---------------------------------------------------------------------------"
-echo "  Use address sanitizer. .: $enable_asan (for debugging)"
-echo "  Use stdc++ debug mode  .: $enable_debug_cxx (for debugging)"
-echo "  Use ffmpeg libs. . . . .: $with_ffmpeg (required for HLS)"
+echo "  Use address sanitizer. . . . . . . .: $enable_asan (for debugging)"
+echo "  Use undefined behaviour sanitizer. .: $enable_ubsan (for debugging)"
+echo "  Use stdc++ debug mode. . . . . . . .: $enable_debug_cxx (for debugging)"
+echo "  Use ffmpeg libs. . . . . . . . . . .: $with_ffmpeg (required for HLS)"
