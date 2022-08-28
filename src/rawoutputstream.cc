@@ -88,6 +88,9 @@ RawOutputStream::write_frames (const vector<float>& samples)
 {
   assert (m_state == State::OPEN);
 
+  if (samples.empty())
+    return Error::Code::NONE;
+
   vector<unsigned char> bytes;
   m_raw_converter->to_raw (samples, bytes);
 
