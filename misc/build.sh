@@ -23,10 +23,10 @@ build()
 # Tests using gcc
 export CC=gcc CXX=g++
 
-build
+build --with-ffmpeg
 make -j `nproc` distcheck
 
 # Tests clang
 export CC=clang CXX=clang++
 
-build
+build --with-ffmpeg
