@@ -29,6 +29,7 @@ extern "C" {
 #include <libswresample/swresample.h>
 #include <libavutil/avassert.h>
 #include <libavutil/timestamp.h>
+#include <libavcodec/avcodec.h>
 }
 
 class HLSOutputStream : public AudioOutputStream {
@@ -64,8 +65,8 @@ class HLSOutputStream : public AudioOutputStream {
   };
   State             m_state = State::NEW;
 
-  Error add_stream (AVCodec **codec, enum AVCodecID codec_id);
-  Error open_audio (AVCodec *codec, AVDictionary *opt_arg);
+  Error add_stream (const AVCodec **codec, enum AVCodecID codec_id);
+  Error open_audio (const AVCodec *codec, AVDictionary *opt_arg);
   AVFrame *get_audio_frame();
   enum class EncResult {
     OK,

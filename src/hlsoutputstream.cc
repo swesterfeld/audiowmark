@@ -76,7 +76,7 @@ HLSOutputStream::~HLSOutputStream()
 
 /* Add an output stream. */
 Error
-HLSOutputStream::add_stream (AVCodec **codec, enum AVCodecID codec_id)
+HLSOutputStream::add_stream (const AVCodec **codec, enum AVCodecID codec_id)
 {
   /* find the encoder */
   *codec = avcodec_find_encoder (codec_id);
@@ -170,7 +170,7 @@ HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_
 
 
 Error
-HLSOutputStream::open_audio (AVCodec *codec, AVDictionary *opt_arg)
+HLSOutputStream::open_audio (const AVCodec *codec, AVDictionary *opt_arg)
 {
   int nb_samples;
   int ret;
@@ -385,7 +385,7 @@ HLSOutputStream::open (const string& out_filename, size_t cut_aac_frames, size_t
     return Error (av_err2str (ret));
 
   AVDictionary *opt = nullptr;
-  AVCodec *audio_codec;
+  const AVCodec *audio_codec;
   Error err = add_stream (&audio_codec, AV_CODEC_ID_AAC);
   if (err)
     return err;
