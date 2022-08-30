@@ -197,6 +197,10 @@ HLSOutputStream::open_audio (const AVCodec *codec, AVDictionary *opt_arg)
   if (err)
     return err;
 
+  m_tmp_pkt = av_packet_alloc();
+  if (!m_tmp_pkt)
+    return Error ("could not allocate AVPacket");
+
   /* copy the stream parameters to the muxer */
   ret = avcodec_parameters_from_context (m_st->codecpar, m_enc);
   if (ret < 0)
@@ -261,11 +265,8 @@ HLSOutputStream::write_frame (const AVRational *time_base, AVStream *st, AVPacke
 HLSOutputStream::EncResult
 HLSOutputStream::write_audio_frame (Error& err)
 {
-  AVPacket pkt = { 0 }; // data and size must be 0;
   AVFrame *frame;
   int ret;
-
-  av_init_packet (&pkt);
 
   frame = get_audio_frame();
   if (frame)
@@ -315,7 +316,7 @@ HLSOutputStream::write_audio_frame (Error& err)
     }
   for (;;)
     {
-      ret = avcodec_receive_packet (m_enc, &pkt);
+      ret = avcodec_receive_packet (m_enc, m_tmp_pkt);
       if (ret == AVERROR (EAGAIN))
         {
           return EncResult::OK; // encoder needs more data to produce something
@@ -337,7 +338,7 @@ HLSOutputStream::write_audio_frame (Error& err)
         }
       else if (m_keep_aac_frames)
         {
-          ret = write_frame (&m_enc->time_base, m_st, &pkt);
+          ret = write_frame (&m_enc->time_base, m_st, m_tmp_pkt);
           if (ret < 0)
             {
               err = Error (string_printf ("error while writing audio frame: %s", av_err2str (ret)));
@@ -354,6 +355,7 @@ HLSOutputStream::close_stream()
   avcodec_free_context (&m_enc);
   av_frame_free (&m_frame);
   av_frame_free (&m_tmp_frame);
+  av_packet_free (&m_tmp_pkt);
   swr_free (&m_swr_ctx);
 }
 

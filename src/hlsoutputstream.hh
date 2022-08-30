@@ -44,6 +44,7 @@ class HLSOutputStream : public AudioOutputStream {
 
   AVFrame          *m_frame = nullptr;
   AVFrame          *m_tmp_frame = nullptr;
+  AVPacket         *m_tmp_pkt = nullptr;
 
   size_t            m_cut_aac_frames = 0;
   size_t            m_keep_aac_frames = 0;
