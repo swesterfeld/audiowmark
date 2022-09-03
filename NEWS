@@ -1,3 +1,24 @@
+Overview of Changes in audiowmark-0.6.1:
+
+* improve speed detection/correction
+  - performance optimizations to make --detect-speed faster
+  - improve accuracy of speed detection
+  - make it work properly with short payload
+  - add second, slower / more accurate algorithm (--detect-speed-patient)
+* fix segfaults during hls-prepare (#11)
+* read all input if a process provides audio on stdin to avoid SIGPIPE (#19)
+* improve infrastructure for testing audiowmark
+  - run some scripts for 'make check' to ensure everything works correctly
+  - add CI which builds/tests audiowmark automatically using github actions
+  - support various sanitizer builds / STL C++ debug builds
+  - fix some issues triggered by sanitizers
+* add --strict option: provide strict and more permissive mode
+  - "input frames != output frames" is only an error if --strict is used
+  - enforce payload size if --strict is used
+* improve command line parsing error messages
+* documentation updates
+* minor fixes
+
 Overview of Changes in audiowmark-0.6.0:
 
 * implement speed detection/correction (--detect-speed)
