@@ -88,7 +88,7 @@ function add_watermark
   ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$orig_wav" || die "extracting audio from video failed (ffmpeg)"
   # watermark
   [ -z "$QUIET" ] && echo >&2 "Audio Codec: $(audio_encode_options "$in_file")"
-  audiowmark "${AUDIOWMARK_ARGS[@]}" add "$orig_wav" "$wm_wav" "$bits" \
+  audiowmark add "${AUDIOWMARK_ARGS[@]}" "$orig_wav" "$wm_wav" "$bits" \
              --set-input-label "$in_file" --set-output-label "$out_file" || die "watermark generation failed (audiowmark)"
   # rejoin
   ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -i "$wm_wav" -c:v copy $(audio_encode_options "$in_file") -map 0:v:0 -map 1:a:0 "$out_file" || \
@@ -113,7 +113,7 @@ function get_watermark
   # get audio as wav
   ffmpeg $FFMPEG_VERBOSE -y -i "$in_file" -f wav "$wav" || die "extracting audio from video failed (ffmpeg)"
   # get watermark
-  audiowmark "${AUDIOWMARK_ARGS[@]}" get "$wav" || die "retrieving watermark from audio failed (audiowmark)"
+  audiowmark get "${AUDIOWMARK_ARGS[@]}" "$wav" || die "retrieving watermark from audio failed (audiowmark)"
 }
 
 function show_help_and_exit
