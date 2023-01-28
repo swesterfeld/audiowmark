@@ -49,7 +49,9 @@ public:
   Random (uint64_t seed, Stream stream);
   ~Random();
 
-  uint64_t
+  typedef uint64_t result_type;
+
+  result_type
   operator()()
   {
     if (buffer_pos == buffer.size())
@@ -57,12 +59,12 @@ public:
 
     return buffer[buffer_pos++];
   }
-  static constexpr uint64_t
+  static constexpr result_type
   min()
   {
     return 0;
   }
-  static constexpr uint64_t
+  static constexpr result_type
   max()
   {
     return UINT64_MAX;
