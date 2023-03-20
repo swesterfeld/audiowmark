@@ -87,9 +87,16 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
     }
   else
     {
+      SFOutputStream::OutFormat out_format;
+
+      if (Params::output_format == Format::RF64)
+        out_format = SFOutputStream::OutFormat::RF64;
+      else
+        out_format = SFOutputStream::OutFormat::WAV;
+
       SFOutputStream *sfostream = new SFOutputStream();
       out_stream.reset (sfostream);
-      err = sfostream->open (filename, n_channels, sample_rate, bit_depth);
+      err = sfostream->open (filename, n_channels, sample_rate, bit_depth, out_format);
       if (err)
         return nullptr;
     }
