@@ -743,10 +743,10 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
           auto msg = string_printf ("unexpected EOF; input frames (%zd) != output frames (%zd)", expect_frames, total_output_frames);
           if (Params::strict)
             {
-              warning ("audiowmark: error: %s\n", msg.c_str());
+              error ("audiowmark: error: %s\n", msg.c_str());
               return 1;
             }
-          error ("audiowmark: warning: %s\n", msg.c_str());
+          warning ("audiowmark: warning: %s\n", msg.c_str());
         }
     }
 
