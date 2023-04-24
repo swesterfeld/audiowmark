@@ -112,6 +112,9 @@ parse_format (const string& str)
     return Format::RAW;
   if (str == "auto")
     return Format::AUTO;
+  if (str == "rf64")
+    return Format::RF64;
+
   error ("audiowmark: unsupported format '%s'\n", str.c_str());
   exit (1);
 }
@@ -656,6 +659,11 @@ parse_add_options (ArgParser& ap)
   if (ap.parse_opt ("--test-no-limiter"))
     {
       Params::test_no_limiter = true;
+    }
+  if (Params::input_format == Format::RF64)
+    {
+      error ("audiowmark: using rf64 as input format has no effect\n");
+      exit (1);
     }
 }
 

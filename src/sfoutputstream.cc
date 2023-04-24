@@ -53,6 +53,8 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
      {
        case OutFormat::WAV:  sfinfo.format = SF_FORMAT_WAV;
                              break;
+       case OutFormat::RF64: sfinfo.format = SF_FORMAT_RF64;
+                             break;
        case OutFormat::FLAC: sfinfo.format = SF_FORMAT_FLAC;
                              break;
        default:              assert (false);

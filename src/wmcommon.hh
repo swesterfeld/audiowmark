@@ -28,7 +28,7 @@
 
 #include <assert.h>
 
-enum class Format { AUTO = 1, RAW = 2 };
+enum class Format { AUTO = 1, RAW = 2, RF64 = 3 };
 
 class Params
 {

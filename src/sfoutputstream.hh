@@ -28,7 +28,7 @@
 class SFOutputStream : public AudioOutputStream
 {
 public:
-  enum class OutFormat { WAV, FLAC };
+  enum class OutFormat { WAV, RF64, FLAC };
 
 private:
   SFVirtualData m_virtual_data;
