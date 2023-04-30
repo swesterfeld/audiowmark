@@ -111,12 +111,8 @@ vec_to_hex_str (const vector<unsigned char>& vec)
 {
   string s;
   for (auto byte : vec)
-    {
-      char buffer[256];
+    s += string_printf ("%02x", byte);
 
-      sprintf (buffer, "%02x", byte);
-      s += buffer;
-    }
   return s;
 }
 
