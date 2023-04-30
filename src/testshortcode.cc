@@ -21,6 +21,7 @@
 
 #include <sys/time.h>
 #include <assert.h>
+#include <stdint.h>
 
 #include "shortcode.hh"
 
