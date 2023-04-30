@@ -274,7 +274,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, vector<Score>& sy
 
   for (const auto& score : sync_scores)
     {
-      //printf ("%zd %s %f", sync_scores[i].index, find_closest_sync (sync_scores[i].index), sync_scores[i].quality);
+      //printf ("%zd %s %f", score.index, find_closest_sync (score.index), score.quality);
 
       // refine match
       double best_quality       = score.quality;
@@ -409,12 +409,14 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
 const char*
 SyncFinder::find_closest_sync (size_t index)
 {
-  int best_error = 0xffff;
+  int wm_length = (mark_data_frame_count() + mark_sync_frame_count()) * Params::frame_size;
+  int wm_offset = Params::frames_pad_start * Params::frame_size;
+  int best_error = wm_length * 2;
   int best = 0;
 
   for (int i = 0; i < 100; i++)
     {
-      int error = abs (int (index) - int (i * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+      int error = abs (int (index) - (wm_offset + i * wm_length));
       if (error < best_error)
         {
           best = i;
@@ -422,6 +424,6 @@ SyncFinder::find_closest_sync (size_t index)
         }
     }
   static char buffer[1024]; // this code is for debugging only, so this should be ok
-  sprintf (buffer, "n:%d offset:%d", best, int (index) - int (best * Params::sync_bits * Params::sync_frames_per_bit * Params::frame_size));
+  sprintf (buffer, "n:%d offset:%d", best, int (index) - (wm_offset + best * wm_length));
   return buffer;
 }
