@@ -108,7 +108,7 @@ private:
                  std::vector<float>& fft_out_db,
                  std::vector<char>& have_frames,
                  const std::vector<char>& want_frames);
-  const char *find_closest_sync (size_t index);
+  std::string find_closest_sync (size_t index);
 };
 
 #endif
