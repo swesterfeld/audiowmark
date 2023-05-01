@@ -583,6 +583,10 @@ parse_shared_options (ArgParser& ap)
     {
       Params::payload_size = i;
     }
+  if (ap.parse_opt ("--threshold", f))
+    {
+      Params::sync_threshold2 = f;
+    }
 }
 
 void

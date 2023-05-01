@@ -25,6 +25,7 @@ using std::vector;
 using std::complex;
 
 size_t Params::frame_size      = 1024;
+double Params::sync_threshold2 = 0.7;
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
 bool   Params::mix             = true;
