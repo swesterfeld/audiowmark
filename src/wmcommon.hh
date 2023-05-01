@@ -33,7 +33,7 @@ enum class Format { AUTO = 1, RAW = 2, RF64 = 3 };
 class Params
 {
 public:
-  static constexpr size_t frame_size      = 1024;
+  static           size_t frame_size;
   static           int    frames_per_bit;
   static constexpr size_t bands_per_frame = 30;
   static constexpr int max_band          = 100;

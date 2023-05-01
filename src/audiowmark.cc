@@ -575,6 +575,10 @@ parse_shared_options (ArgParser& ap)
       error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
       exit (1);
     }
+  if (ap.parse_opt ("--frame-size", i))
+    {
+      Params::frame_size = i;
+    }
 }
 
 void

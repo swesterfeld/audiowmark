@@ -24,6 +24,7 @@ using std::string;
 using std::vector;
 using std::complex;
 
+size_t Params::frame_size      = 1024;
 int    Params::frames_per_bit  = 2;
 double Params::water_delta     = 0.01;
 bool   Params::mix             = true;
