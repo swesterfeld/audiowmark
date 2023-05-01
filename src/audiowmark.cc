@@ -579,6 +579,10 @@ parse_shared_options (ArgParser& ap)
     {
       Params::frame_size = i;
     }
+  if (ap.parse_opt ("--payload-size", i))
+    {
+      Params::payload_size = i;
+    }
 }
 
 void
