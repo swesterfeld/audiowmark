@@ -1,15 +1,9 @@
 FROM gcc:latest
 
-RUN apt-get update && apt-get install -y build-essential
-RUN apt-get install -y libfftw3-dev
-RUN apt-get install -y libsndfile1-dev
-RUN apt-get install -y automake
-RUN apt-get install -y autoconf
-RUN apt-get install -y libtool
-RUN apt-get install -y autoconf-archive
-RUN apt-get install -y libgcrypt20-dev
-RUN apt-get install -y libzita-resampler-dev
-RUN apt-get install -y libmpg123-dev
+RUN apt-get update && apt-get install -y \
+  build-essential automake autoconf libtool autoconf-archive gettext \
+  libfftw3-dev libsndfile1-dev libgcrypt20-dev libzita-resampler-dev \
+  libmpg123-dev
 
 ADD . /audiowmark
 WORKDIR /audiowmark
