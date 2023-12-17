@@ -68,7 +68,7 @@ apply_frame_mod (const vector<FrameMod>& frame_mod, const vector<complex<float>>
 
       int data_bit_sign = (frame_mod[i] == FrameMod::UP) ? 1 : -1;
       /*
-       * for up bands, we want do use [for a 1 bit]  (pow (mag, 1 - water_delta))
+       * for up bands, we want to use [for a 1 bit]  (pow (mag, 1 - water_delta))
        *
        * this actually increases the amount of energy because mag is less than 1.0
        */
