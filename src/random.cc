@@ -52,7 +52,6 @@ gcrypt_init()
 }
 
 
-static vector<unsigned char> aes_key (16); // 128 bits
 static constexpr auto        GCRY_CIPHER = GCRY_CIPHER_AES128;
 
 static void
@@ -95,20 +94,20 @@ print (const string& label, const vector<unsigned char>& data)
 }
 #endif
 
-Random::Random (uint64_t start_seed, Stream stream)
+Random::Random (const Key& key, uint64_t start_seed, Stream stream)
 {
   gcrypt_init();
 
   gcry_error_t gcry_ret = gcry_cipher_open (&aes_ctr_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_CTR, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
 
-  gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, &aes_key[0], aes_key.size());
+  gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, key.aes_key(), Key::SIZE);
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
   gcry_ret = gcry_cipher_open (&seed_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
 
-  gcry_ret = gcry_cipher_setkey (seed_cipher, &aes_key[0], aes_key.size());
+  gcry_ret = gcry_cipher_setkey (seed_cipher, key.aes_key(), Key::SIZE);
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
   seed (start_seed, stream);
@@ -120,19 +119,19 @@ Random::seed (uint64_t seed, Stream stream)
   buffer_pos = 0;
   buffer.clear();
 
-  unsigned char plain_text[aes_key.size()];
-  unsigned char cipher_text[aes_key.size()];
+  unsigned char plain_text[Key::SIZE];
+  unsigned char cipher_text[Key::SIZE];
 
   memset (plain_text, 0, sizeof (plain_text));
   uint64_to_buffer (seed, &plain_text[0]);
 
   plain_text[8] = uint8_t (stream);
 
-  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], aes_key.size(),
-                                                            &plain_text[0],  aes_key.size());
+  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], Key::SIZE,
+                                                            &plain_text[0],  Key::SIZE);
   die_on_error ("gcry_cipher_encrypt", gcry_ret);
 
-  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], aes_key.size());
+  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], Key::SIZE);
   die_on_error ("gcry_cipher_setctr", gcry_ret);
 }
 
@@ -172,14 +171,42 @@ Random::die_on_error (const char *func, gcry_error_t err)
     }
 }
 
-void
-Random::set_global_test_key (uint64_t key)
+string
+Random::gen_key()
 {
-  uint64_to_buffer (key, &aes_key[0]);
+  gcrypt_init();
+
+  vector<unsigned char> key (16);
+  gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
+  return vec_to_hex_str (key);
+}
+
+uint64_t
+Random::seed_from_hash (const vector<float>& floats)
+{
+  unsigned char hash[20];
+  gcry_md_hash_buffer (GCRY_MD_SHA1, hash, &floats[0], floats.size() * sizeof (float));
+  return uint64_from_buffer (hash);
+}
+
+Key::Key() :
+  m_aes_key (SIZE)
+{
+}
+
+Key::~Key()
+{
+  std::fill (m_aes_key.begin(), m_aes_key.end(), 0);
 }
 
 void
-Random::load_global_key (const string& key_file)
+Key::set_test_key (uint64_t key)
+{
+  uint64_to_buffer (key, m_aes_key.data());
+}
+
+void
+Key::load_key (const string& key_file)
 {
   FILE *f = fopen (key_file.c_str(), "r");
   if (!f)
@@ -207,12 +234,12 @@ Random::load_global_key (const string& key_file)
         {
           /* line containing aes key */
           vector<unsigned char> key = hex_str_to_vec (match[1].str());
-          if (key.size() != aes_key.size())
+          if (key.size() != Key::SIZE)
             {
-              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
+              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, Key::SIZE * 8);
               exit (1);
             }
-          aes_key = key;
+          m_aes_key = key;
           keys++;
         }
       else
@@ -236,20 +263,9 @@ Random::load_global_key (const string& key_file)
     }
 }
 
-string
-Random::gen_key()
+const unsigned char *
+Key::aes_key() const
 {
-  gcrypt_init();
-
-  vector<unsigned char> key (16);
-  gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
-  return vec_to_hex_str (key);
-}
-
-uint64_t
-Random::seed_from_hash (const vector<float>& floats)
-{
-  unsigned char hash[20];
-  gcry_md_hash_buffer (GCRY_MD_SHA1, hash, &floats[0], floats.size() * sizeof (float));
-  return uint64_from_buffer (hash);
+  assert (m_aes_key.size() == SIZE);
+  return m_aes_key.data();
 }

@@ -83,7 +83,7 @@ apply_frame_mod (const vector<FrameMod>& frame_mod, const vector<complex<float>>
 }
 
 static void
-mark_data (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
+mark_data (const Key& key, vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
 {
   assert (bitvec.size() == mark_data_frame_count() / Params::frames_per_bit);
   assert (frame_mod.size() >= mark_data_frame_count());
@@ -92,7 +92,7 @@ mark_data (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
 
   if (Params::mix)
     {
-      vector<MixEntry> mix_entries = gen_mix_entries();
+      vector<MixEntry> mix_entries = gen_mix_entries (key);
 
       for (int f = 0; f < frame_count; f++)
         {
@@ -113,11 +113,11 @@ mark_data (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
     }
   else
     {
-      UpDownGen up_down_gen (Random::Stream::data_up_down);
+      UpDownGen up_down_gen (key, Random::Stream::data_up_down);
 
       for (int f = 0; f < frame_count; f++)
         {
-          size_t index = data_frame_pos (f);
+          size_t index = data_frame_pos (key, f);
 
           prepare_frame_mod (up_down_gen, f, frame_mod[index], bitvec[f / Params::frames_per_bit]);
         }
@@ -125,17 +125,17 @@ mark_data (vector<vector<FrameMod>>& frame_mod, const vector<int>& bitvec)
 }
 
 static void
-mark_sync (vector<vector<FrameMod>>& frame_mod, int ab)
+mark_sync (const Key& key, vector<vector<FrameMod>>& frame_mod, int ab)
 {
   const int frame_count = mark_sync_frame_count();
   assert (frame_mod.size() >= mark_sync_frame_count());
 
-  UpDownGen up_down_gen (Random::Stream::sync_up_down);
+  UpDownGen up_down_gen (key, Random::Stream::sync_up_down);
 
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
-      size_t index = sync_frame_pos (f);
+      size_t index = sync_frame_pos (key, f);
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
       prepare_frame_mod (up_down_gen, f, frame_mod[index], data_bit);
@@ -143,7 +143,7 @@ mark_sync (vector<vector<FrameMod>>& frame_mod, int ab)
 }
 
 static void
-init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vector<int>& bitvec)
+init_frame_mod_vec (const Key& key, vector<vector<FrameMod>>& frame_mod_vec, int ab, const vector<int>& bitvec)
 {
   frame_mod_vec.resize (mark_sync_frame_count() + mark_data_frame_count());
 
@@ -152,10 +152,10 @@ init_frame_mod_vec (vector<vector<FrameMod>>& frame_mod_vec, int ab, const vecto
 
   /* forward error correction */
   ConvBlockType block_type  = ab ? ConvBlockType::b : ConvBlockType::a;
-  vector<int>   bitvec_fec  = randomize_bit_order (code_encode (block_type, bitvec), /* encode */ true);
+  vector<int>   bitvec_fec  = randomize_bit_order (key, code_encode (block_type, bitvec), /* encode */ true);
 
-  mark_sync (frame_mod_vec, ab);
-  mark_data (frame_mod_vec, bitvec_fec);
+  mark_sync (key, frame_mod_vec, ab);
+  mark_data (key, frame_mod_vec, bitvec_fec);
 }
 
 /* synthesizes a watermark stream (overlap add with synthesis window)
@@ -292,7 +292,7 @@ public:
     frame_number = 2 * frames_per_block - Params::frames_pad_start;
   }
   vector<float>
-  run (const vector<float>& samples)
+  run (const Key& key, const vector<float>& samples)
   {
     assert (samples.size() == Params::frame_size * n_channels);
 
@@ -302,7 +302,7 @@ public:
     for (int ch = 0; ch < n_channels; ch++)
       fft_delta_spect.push_back (vector<complex<float>> (fft_out.back().size()));
 
-    const vector<FrameMod>& frame_mod = get_frame_mod();
+    const vector<FrameMod>& frame_mod = get_frame_mod (key);
     for (int ch = 0; ch < n_channels; ch++)
       apply_frame_mod (frame_mod, fft_out[ch], fft_delta_spect[ch]);
 
@@ -321,20 +321,20 @@ public:
     return wm_synth.skip (zeros);
   }
   const vector<FrameMod>&
-  get_frame_mod()
+  get_frame_mod (const Key& key)
   {
     const size_t f = frame_number % (frames_per_block * 2);
     if (f >= frames_per_block) /* B block */
       {
         if (frame_mod_vec_b.empty())
-          init_frame_mod_vec (frame_mod_vec_b, 1, bitvec);
+          init_frame_mod_vec (key, frame_mod_vec_b, 1, bitvec);
 
         return frame_mod_vec_b[f - frames_per_block];
       }
     else /* A block */
       {
         if (frame_mod_vec_a.empty())
-          init_frame_mod_vec (frame_mod_vec_a, 0, bitvec);
+          init_frame_mod_vec (key, frame_mod_vec_a, 0, bitvec);
 
         return frame_mod_vec_a[f];
       }
@@ -529,12 +529,12 @@ public:
       return true;
   }
   vector<float>
-  run (const vector<float>& samples)
+  run (const Key& key, const vector<float>& samples)
   {
     if (!need_resampler)
       {
         /* cheap case: if no resampling is necessary, just generate the watermark signal */
-        return wm_gen.run (samples);
+        return wm_gen.run (key, samples);
       }
 
     /* resample to the watermark sample rate */
@@ -544,7 +544,7 @@ public:
         vector<float> r_samples = in_resampler->read_frames (Params::frame_size);
 
         /* generate watermark at normalized sample rate */
-        vector<float> wm_samples = wm_gen.run (r_samples);
+        vector<float> wm_samples = wm_gen.run (key, r_samples);
 
         /* resample back to the original sample rate of the audio file */
         out_resampler->write_frames (wm_samples);
@@ -588,7 +588,7 @@ info_format (const string& label, const RawFormat& format)
 }
 
 int
-add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits, size_t zero_frames)
+add_stream_watermark (const Key& key, AudioInputStream *in_stream, AudioOutputStream *out_stream, const string& bits, size_t zero_frames)
 {
   auto bitvec = parse_payload (bits);
   if (bitvec.empty())
@@ -687,7 +687,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
           samples.resize (Params::frame_size * n_channels);
         }
       audio_buffer.write_frames (samples);
-      samples = wm_resampler.run (samples);
+      samples = wm_resampler.run (key, samples);
       size_t to_read = samples.size() / n_channels;
       vector<float> orig_samples  = audio_buffer.read_frames (to_read);
       assert (samples.size() == orig_samples.size());
@@ -760,7 +760,7 @@ add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream
 }
 
 int
-add_watermark (const string& infile, const string& outfile, const string& bits)
+add_watermark (const Key& key, const string& infile, const string& outfile, const string& bits)
 {
   /* open input stream */
   Error err;
@@ -789,7 +789,7 @@ add_watermark (const string& infile, const string& outfile, const string& bits)
   if (Params::output_format == Format::RAW)
     info_format ("Raw Output", Params::raw_output_format);
 
-  return add_stream_watermark (in_stream.get(), out_stream.get(), bits, 0);
+  return add_stream_watermark (key, in_stream.get(), out_stream.get(), bits, 0);
 }
 
 

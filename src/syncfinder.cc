@@ -27,7 +27,7 @@ using std::string;
 using std::min;
 
 void
-SyncFinder::init_up_down (const WavData& wav_data, Mode mode)
+SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
 {
   sync_bits.clear();
 
@@ -37,7 +37,7 @@ SyncFinder::init_up_down (const WavData& wav_data, Mode mode)
   const int block_count = mode == Mode::CLIP ? 2 : 1;
   size_t n_bands = Params::max_band - Params::min_band + 1;
 
-  UpDownGen up_down_gen (Random::Stream::sync_up_down);
+  UpDownGen up_down_gen (key, Random::Stream::sync_up_down);
   for (int bit = 0; bit < Params::sync_bits; bit++)
     {
       vector<FrameBit> frame_bits;
@@ -49,7 +49,7 @@ SyncFinder::init_up_down (const WavData& wav_data, Mode mode)
           for (int block = 0; block < block_count; block++)
             {
               FrameBit frame_bit;
-              frame_bit.frame = sync_frame_pos (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
+              frame_bit.frame = sync_frame_pos (key, f + bit * Params::sync_frames_per_bit) + block * first_block_end;
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
                   if (block == 0)
@@ -254,7 +254,7 @@ SyncFinder::sync_select_n_best (vector<Score>& sync_scores, size_t n)
 }
 
 void
-SyncFinder::search_refine (const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
+SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
 {
   vector<float> fft_db;
   vector<char>  have_frames;
@@ -268,9 +268,9 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, vector<Score>& sy
   vector<char> want_frames (total_frame_count);
   for (size_t f = 0; f < mark_sync_frame_count(); f++)
     {
-      want_frames[sync_frame_pos (f)] = 1;
+      want_frames[sync_frame_pos (key, f)] = 1;
       if (mode == Mode::CLIP)
-        want_frames[first_block_end + sync_frame_pos (f)] = 1;
+        want_frames[first_block_end + sync_frame_pos (key, f)] = 1;
     }
 
   for (const auto& score : sync_scores)
@@ -326,12 +326,12 @@ SyncFinder::fake_sync (const WavData& wav_data, Mode mode)
 }
 
 vector<SyncFinder::Score>
-SyncFinder::search (const WavData& wav_data, Mode mode)
+SyncFinder::search (const Key& key, const WavData& wav_data, Mode mode)
 {
   if (Params::test_no_sync)
     return fake_sync (wav_data, mode);
 
-  init_up_down (wav_data, mode);
+  init_up_down (key, wav_data, mode);
 
   if (mode == Mode::CLIP)
     {
@@ -350,15 +350,15 @@ SyncFinder::search (const WavData& wav_data, Mode mode)
   if (mode == Mode::CLIP)
     sync_select_n_best (sync_scores, 5);
 
-  search_refine (wav_data, mode, sync_scores);
+  search_refine (key, wav_data, mode, sync_scores);
 
   return sync_scores;
 }
 
 vector<vector<SyncFinder::FrameBit>>
-SyncFinder::get_sync_bits (const WavData& wav_data, Mode mode)
+SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
 {
-  init_up_down (wav_data, mode);
+  init_up_down (key, wav_data, mode);
   return sync_bits;
 }
 

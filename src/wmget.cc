@@ -61,13 +61,13 @@ normalize_soft_bits (const vector<float>& soft_bits)
 }
 
 static vector<float>
-mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
+mix_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   vector<float> raw_bit_vec;
 
   const int frame_count = mark_data_frame_count();
 
-  vector<MixEntry> mix_entries = gen_mix_entries();
+  vector<MixEntry> mix_entries = gen_mix_entries (key);
 
   double umag = 0, dmag = 0;
   for (int f = 0; f < frame_count; f++)
@@ -98,9 +98,9 @@ mix_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
 }
 
 static vector<float>
-linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
+linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
 {
-  UpDownGen     up_down_gen (Random::Stream::data_up_down);
+  UpDownGen     up_down_gen (key, Random::Stream::data_up_down);
   vector<float> raw_bit_vec;
 
   const int frame_count = mark_data_frame_count();
@@ -110,7 +110,7 @@ linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
     {
       for (int ch = 0; ch < n_channels; ch++)
         {
-          const size_t index = data_frame_pos (f) * n_channels + ch;
+          const size_t index = data_frame_pos (key, f) * n_channels + ch;
           UpDownArray up, down;
           up_down_gen.get (f, up, down);
 
@@ -309,12 +309,12 @@ class BlockDecoder
   vector<SyncFinder::Score> sync_scores; // stored here for sync debugging
 public:
   void
-  run (const WavData& wav_data, ResultSet& result_set)
+  run (const Key& key, const WavData& wav_data, ResultSet& result_set)
   {
     int total_count = 0;
 
     SyncFinder sync_finder;
-    sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::BLOCK);
+    sync_scores = sync_finder.search (key, wav_data, SyncFinder::Mode::BLOCK);
 
     vector<float> raw_bit_vec_all (code_size (ConvBlockType::ab, Params::payload_size));
     vector<int>   raw_bit_vec_norm (2);
@@ -339,15 +339,15 @@ public:
             vector<float> raw_bit_vec;
             if (Params::mix)
               {
-                raw_bit_vec = mix_decode (fft_range_out, wav_data.n_channels());
+                raw_bit_vec = mix_decode (key, fft_range_out, wav_data.n_channels());
               }
             else
               {
-                raw_bit_vec = linear_decode (fft_range_out, wav_data.n_channels());
+                raw_bit_vec = linear_decode (key, fft_range_out, wav_data.n_channels());
               }
             assert (raw_bit_vec.size() == code_size (ConvBlockType::a, Params::payload_size));
 
-            raw_bit_vec = randomize_bit_order (raw_bit_vec, /* encode */ false);
+            raw_bit_vec = randomize_bit_order (key, raw_bit_vec, /* encode */ false);
 
             /* ---- deal with this pattern ---- */
             float decode_error = 0;
@@ -466,18 +466,18 @@ class ClipDecoder
   const int frames_per_block = 0;
 
   vector<float>
-  mix_or_linear_decode (vector<vector<complex<float>>>& fft_out, int n_channels)
+  mix_or_linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
   {
     if (Params::mix)
-      return mix_decode (fft_out, n_channels);
+      return mix_decode (key, fft_out, n_channels);
     else
-      return linear_decode (fft_out, n_channels);
+      return linear_decode (key, fft_out, n_channels);
   }
   void
-  run_padded (const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
+  run_padded (const Key& key, const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
   {
     SyncFinder                sync_finder;
-    vector<SyncFinder::Score> sync_scores = sync_finder.search (wav_data, SyncFinder::Mode::CLIP);
+    vector<SyncFinder::Score> sync_scores = sync_finder.search (key, wav_data, SyncFinder::Mode::CLIP);
     FFTAnalyzer               fft_analyzer (wav_data.n_channels());
 
     for (auto sync_score : sync_scores)
@@ -488,8 +488,8 @@ class ClipDecoder
         auto fft_range_out2 = fft_analyzer.fft_range (wav_data.samples(), index + count * Params::frame_size, count);
         if (fft_range_out1.size() && fft_range_out2.size())
           {
-            const auto raw_bit_vec1 = randomize_bit_order (mix_or_linear_decode (fft_range_out1, wav_data.n_channels()), /* encode */ false);
-            const auto raw_bit_vec2 = randomize_bit_order (mix_or_linear_decode (fft_range_out2, wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec1 = randomize_bit_order (key, mix_or_linear_decode (key, fft_range_out1, wav_data.n_channels()), /* encode */ false);
+            const auto raw_bit_vec2 = randomize_bit_order (key, mix_or_linear_decode (key, fft_range_out2, wav_data.n_channels()), /* encode */ false);
             const size_t bits_per_block = raw_bit_vec1.size();
             vector<float> raw_bit_vec;
             for (size_t i = 0; i < bits_per_block; i++)
@@ -519,7 +519,7 @@ class ClipDecoder
   }
   enum class Pos { START, END };
   void
-  run_block (const WavData& wav_data, ResultSet& result_set, Pos pos)
+  run_block (const Key& key, const WavData& wav_data, ResultSet& result_set, Pos pos)
   {
     const size_t n = (frames_per_block + 5) * Params::frame_size * wav_data.n_channels();
 
@@ -561,7 +561,7 @@ class ClipDecoder
     ext_samples.insert (ext_samples.end(),   pad_samples_end, 0);
 
     WavData l_wav_data (ext_samples, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
-    run_padded (l_wav_data, result_set, time_offset);
+    run_padded (key, l_wav_data, result_set, time_offset);
    }
 public:
   ClipDecoder() :
@@ -569,19 +569,19 @@ public:
   {
   }
   void
-  run (const WavData& wav_data, ResultSet& result_set)
+  run (const Key& key, const WavData& wav_data, ResultSet& result_set)
   {
     const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
     if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
       {
-        run_block (wav_data, result_set, Pos::START);
-        run_block (wav_data, result_set, Pos::END);
+        run_block (key, wav_data, result_set, Pos::START);
+        run_block (key, wav_data, result_set, Pos::END);
       }
   }
 };
 
 static int
-decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
+decode_and_report (const Key& key, const WavData& wav_data, const vector<int>& orig_bits)
 {
   ResultSet result_set;
   double speed = 1.0;
@@ -598,7 +598,7 @@ decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
   if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
     {
       if (Params::detect_speed || Params::detect_speed_patient)
-        speed = detect_speed (wav_data, !orig_bits.empty());
+        speed = detect_speed (key, wav_data, !orig_bits.empty());
       else
         speed = Params::try_speed;
 
@@ -611,19 +611,19 @@ decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
 
           result_set.set_speed_pattern (true);
           BlockDecoder block_decoder;
-          block_decoder.run (wav_data_speed, result_set);
+          block_decoder.run (key, wav_data_speed, result_set);
 
           ClipDecoder clip_decoder;
-          clip_decoder.run (wav_data_speed, result_set);
+          clip_decoder.run (key, wav_data_speed, result_set);
           result_set.set_speed_pattern (false);
         }
     }
 
   BlockDecoder block_decoder;
-  block_decoder.run (wav_data, result_set);
+  block_decoder.run (key, wav_data, result_set);
 
   ClipDecoder clip_decoder;
-  clip_decoder.run (wav_data, result_set);
+  clip_decoder.run (key, wav_data, result_set);
 
   result_set.sort_by_time();
 
@@ -655,7 +655,7 @@ decode_and_report (const WavData& wav_data, const vector<int>& orig_bits)
 }
 
 int
-get_watermark (const string& infile, const string& orig_pattern)
+get_watermark (const Key& key, const string& infile, const string& orig_pattern)
 {
   vector<int> orig_bitvec;
   if (!orig_pattern.empty())
@@ -686,10 +686,10 @@ get_watermark (const string& infile, const string& orig_pattern)
     }
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
-      return decode_and_report (wav_data, orig_bitvec);
+      return decode_and_report (key, wav_data, orig_bitvec);
     }
   else
     {
-      return decode_and_report (resample (wav_data, Params::mark_sample_rate), orig_bitvec);
+      return decode_and_report (key, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
     }
 }

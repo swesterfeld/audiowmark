@@ -116,14 +116,14 @@ public:
 };
 
 int
-mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
+mark_zexpand (const Key& key, WavData& wav_data, size_t zero_frames, const string& bits)
 {
   WDInputStream in_stream (&wav_data);
 
   WavData wav_data_out ({ /* no samples */ }, wav_data.n_channels(), wav_data.sample_rate(), wav_data.bit_depth());
   WDOutputStream out_stream (&wav_data_out);
 
-  int rc = add_stream_watermark (&in_stream, &out_stream, bits, zero_frames);
+  int rc = add_stream_watermark (key, &in_stream, &out_stream, bits, zero_frames);
   if (rc != 0)
     return rc;
 
@@ -133,7 +133,7 @@ mark_zexpand (WavData& wav_data, size_t zero_frames, const string& bits)
 }
 
 int
-test_seek (const string& in, const string& out, int pos, const string& bits)
+test_seek (const Key& key, const string& in, const string& out, int pos, const string& bits)
 {
   vector<float> samples;
   WavData wav_data;
@@ -148,7 +148,7 @@ test_seek (const string& in, const string& out, int pos, const string& bits)
   samples.erase (samples.begin(), samples.begin() + pos * wav_data.n_channels());
   wav_data.set_samples (samples);
 
-  int rc = mark_zexpand (wav_data, pos, bits);
+  int rc = mark_zexpand (key, wav_data, pos, bits);
   if (rc != 0)
     {
       return rc;
@@ -168,14 +168,14 @@ test_seek (const string& in, const string& out, int pos, const string& bits)
 }
 
 int
-seek_perf (int sample_rate, double seconds)
+seek_perf (const Key& key, int sample_rate, double seconds)
 {
   vector<float> samples (100);
   WavData wav_data (samples, 2, sample_rate, 16);
 
   double start_time = get_time();
 
-  int rc = mark_zexpand (wav_data, seconds * sample_rate, "0c");
+  int rc = mark_zexpand (key, wav_data, seconds * sample_rate, "0c");
   if (rc != 0)
     return rc;
 
@@ -191,13 +191,14 @@ seek_perf (int sample_rate, double seconds)
 int
 main (int argc, char **argv)
 {
+  Key global_key;
   if (argc == 6 && strcmp (argv[1], "test-seek") == 0)
     {
-      return test_seek (argv[2], argv[3], atoi (argv[4]), argv[5]);
+      return test_seek (global_key, argv[2], argv[3], atoi (argv[4]), argv[5]);
     }
   else if (argc == 4 && strcmp (argv[1], "seek-perf") == 0)
     {
-      return seek_perf (atoi (argv[2]), atof (argv[3]));
+      return seek_perf (global_key, atoi (argv[2]), atof (argv[3]));
     }
   else if (argc == 4 && strcmp (argv[1], "ff-decode") == 0)
     {

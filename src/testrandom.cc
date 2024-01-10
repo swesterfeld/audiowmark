@@ -26,7 +26,8 @@ using std::string;
 int
 main (int argc, char **argv)
 {
-  Random rng (0xf00f1234b00b5678U, Random::Stream::bit_order);
+  Key key;
+  Random rng (key, 0xf00f1234b00b5678U, Random::Stream::bit_order);
   for (size_t i = 0; i < 20; i++)
     {
       uint64_t x = rng();

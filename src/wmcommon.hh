@@ -45,7 +45,6 @@ public:
   static           bool mix;
   static           bool hard;                      // hard decode bits? (soft decoding is better)
   static           bool snr;                       // compute/show snr while adding watermark
-  static           int  have_key;
 
   static           bool detect_speed;
   static           bool detect_speed_patient;
@@ -94,9 +93,9 @@ class UpDownGen
   std::vector<int>  bands_reorder;
 
 public:
-  UpDownGen (Random::Stream random_stream) :
+  UpDownGen (const Key& key, Random::Stream random_stream) :
     random_stream (random_stream),
-    random (0, random_stream),
+    random (key, 0, random_stream),
     bands_reorder (Params::max_band - Params::min_band + 1)
   {
     UpDownArray x;
@@ -141,27 +140,27 @@ struct MixEntry
   int  down;
 };
 
-std::vector<MixEntry> gen_mix_entries();
+std::vector<MixEntry> gen_mix_entries (const Key& key);
 
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
 
 int frame_count (const WavData& wav_data);
 
-int sync_frame_pos (int f);
-int data_frame_pos (int f);
+int sync_frame_pos (const Key& key, int f);
+int data_frame_pos (const Key& key, int f);
 
 std::vector<int> parse_payload (const std::string& str);
 
 template<class T> std::vector<T>
-randomize_bit_order (const std::vector<T>& bit_vec, bool encode)
+randomize_bit_order (const Key& key, const std::vector<T>& bit_vec, bool encode)
 {
   std::vector<unsigned int> order;
 
   for (size_t i = 0; i < bit_vec.size(); i++)
     order.push_back (i);
 
-  Random random (/* seed */ 0, Random::Stream::bit_order);
+  Random random (key, /* seed */ 0, Random::Stream::bit_order);
   random.shuffle (order);
 
   std::vector<T> out_bits (bit_vec.size());
@@ -214,8 +213,8 @@ db_from_complex (std::complex<float> f, float min_dB)
   return db_from_complex (f.real(), f.imag(), min_dB);
 }
 
-int add_stream_watermark (AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);
-int add_watermark (const std::string& infile, const std::string& outfile, const std::string& bits);
-int get_watermark (const std::string& infile, const std::string& orig_pattern);
+int add_stream_watermark (const Key& key, AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);
+int add_watermark (const Key& key, const std::string& infile, const std::string& outfile, const std::string& bits);
+int get_watermark (const Key& key, const std::string& infile, const std::string& orig_pattern);
 
 #endif /* AUDIOWMARK_WM_COMMON_HH */

@@ -20,6 +20,7 @@
 
 #include "convcode.hh"
 #include "wavdata.hh"
+#include "random.hh"
 
 /*
  * The SyncFinder class searches for sync bits in an input WavData. It is used
@@ -80,7 +81,7 @@ public:
 private:
   std::vector<std::vector<FrameBit>> sync_bits;
 
-  void    init_up_down (const WavData& wav_data, Mode mode);
+  void    init_up_down (const Key& key, const WavData& wav_data, Mode mode);
   double  sync_decode (const WavData& wav_data, const size_t start_frame,
                        const std::vector<float>& fft_out_db,
                        const std::vector<char>&  have_frames,
@@ -89,15 +90,15 @@ private:
   std::vector<Score> search_approx (const WavData& wav_data, Mode mode);
   void sync_select_by_threshold (std::vector<Score>& sync_scores);
   void sync_select_n_best (std::vector<Score>& sync_scores, size_t n);
-  void search_refine (const WavData& wav_data, Mode mode, std::vector<Score>& sync_scores);
+  void search_refine (const Key& key, const WavData& wav_data, Mode mode, std::vector<Score>& sync_scores);
   std::vector<Score> fake_sync (const WavData& wav_data, Mode mode);
 
   // non-zero sample range: [wav_data_first, wav_data_last)
   size_t wav_data_first = 0;
   size_t wav_data_last = 0;
 public:
-  std::vector<Score> search (const WavData& wav_data, Mode mode);
-  std::vector<std::vector<FrameBit>> get_sync_bits (const WavData& wav_data, Mode mode);
+  std::vector<Score> search (const Key& key, const WavData& wav_data, Mode mode);
+  std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, const WavData& wav_data, Mode mode);
 
   static double bit_quality (float umag, float dmag, int bit);
   static double normalize_sync_quality (double raw_quality);

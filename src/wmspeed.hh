@@ -19,7 +19,8 @@
 #define AUDIOWMARK_WM_SPEED_HH
 
 #include "wavdata.hh"
+#include "random.hh"
 
-double detect_speed (const WavData& in_data, bool print_results);
+double detect_speed (const Key& key, const WavData& in_data, bool print_results);
 
 #endif /* AUDIOWMARK_WM_SPEED_HH */

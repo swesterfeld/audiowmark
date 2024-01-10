@@ -20,7 +20,7 @@
 
 #include <string>
 
-int hls_add (const std::string& infile, const std::string& outfile, const std::string& bits);
+int hls_add (const Key& key, const std::string& infile, const std::string& outfile, const std::string& bits);
 int hls_prepare (const std::string& in_dir, const std::string& out_dir, const std::string& filename, const std::string& audio_master);
 
 Error ff_decode (const std::string& filename, WavData& out_wav_data);
