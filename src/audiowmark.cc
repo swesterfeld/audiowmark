@@ -449,29 +449,38 @@ public:
       }
     return false;
   }
-  bool
-  parse_opt (const string& option, string& out_s)
+  vector<string>
+  parse_multi_opt (const string& option)
   {
-    bool found_option = false;
+    vector<string> values;
     auto it = m_args.begin();
     while (it != m_args.end())
       {
         auto next_it = it + 1;
         if (*it == option && next_it != m_args.end())   /* --option foo */
           {
-            out_s = *next_it;
+            values.push_back (*next_it);
             next_it = m_args.erase (it, it + 2);
-            found_option = true;
           }
         else if (starts_with (*it, (option + "=")))   /* --option=foo */
           {
-            out_s = it->substr (option.size() + 1);
+            values.push_back (it->substr (option.size() + 1));
             next_it = m_args.erase (it);
-            found_option = true;
           }
         it = next_it;
       }
-    return found_option;
+    return values;
+  }
+  bool
+  parse_opt (const string& option, string& out_s)
+  {
+    vector<string> values = parse_multi_opt (option);
+    if (values.size())
+      {
+        out_s = values.back();
+        return true;
+      }
+    return false;
   }
   bool
   parse_opt (const string& option, int& out_i)
@@ -559,6 +568,32 @@ parse_shared_options (ArgParser& ap)
     {
       Params::mix = false;
     }
+}
+
+vector<Key>
+parse_key_list (ArgParser& ap)
+{
+  vector<Key> key_list;
+  vector<string> key_files = ap.parse_multi_opt  ("--key");
+  for (auto f : key_files)
+    {
+      Key key;
+      key.load_key (f);
+      key_list.push_back (key);
+    }
+  vector<string> test_keys = ap.parse_multi_opt ("--test-key");
+  for (auto t : test_keys)
+    {
+      Key key;
+      key.set_test_key (atoi (t.c_str()));
+      key_list.push_back (key);
+    }
+  if (key_list.empty())
+    {
+      Key key; // default initialized with zero key
+      key_list.push_back (key);
+    }
+  return key_list;
 }
 
 Key
@@ -812,9 +847,9 @@ main (int argc, char **argv)
       parse_shared_options (ap);
       parse_get_options (ap);
 
-      Key key = parse_key (ap); // TODO: key list
+      vector<Key> key_list = parse_key_list (ap);
       args = parse_positional (ap, "watermarked_wav");
-      return get_watermark (key, args[0], /* no ber */ "");
+      return get_watermark (key_list, args[0], /* no ber */ "");
     }
   else if (ap.parse_cmd ("cmp"))
     {
@@ -823,9 +858,9 @@ main (int argc, char **argv)
 
       ap.parse_opt ("--expect-matches", Params::expect_matches);
 
-      Key key = parse_key (ap); // TODO: key list
+      vector<Key> key_list = parse_key_list (ap);
       args = parse_positional (ap, "watermarked_wav", "message_hex");
-      return get_watermark (key, args[0], args[1]);
+      return get_watermark (key_list, args[0], args[1]);
     }
   else if (ap.parse_cmd ("gen-key"))
     {

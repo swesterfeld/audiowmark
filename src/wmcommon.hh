@@ -215,6 +215,6 @@ db_from_complex (std::complex<float> f, float min_dB)
 
 int add_stream_watermark (const Key& key, AudioInputStream *in_stream, AudioOutputStream *out_stream, const std::string& bits, size_t zero_frames);
 int add_watermark (const Key& key, const std::string& infile, const std::string& outfile, const std::string& bits);
-int get_watermark (const Key& key, const std::string& infile, const std::string& orig_pattern);
+int get_watermark (const std::vector<Key>& key_list, const std::string& infile, const std::string& orig_pattern);
 
 #endif /* AUDIOWMARK_WM_COMMON_HH */

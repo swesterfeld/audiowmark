@@ -581,49 +581,52 @@ public:
 };
 
 static int
-decode_and_report (const Key& key, const WavData& wav_data, const vector<int>& orig_bits)
+decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
 {
   ResultSet result_set;
   double speed = 1.0;
 
-  /*
-   * The strategy for integrating speed detection into decoding is this:
-   *  - we always (unconditionally) try to decode the  watermark on the original wav data
-   *  - if detected speed is somewhat different than 1.0, we also try to decode stretched data
-   *  - we report all normal and speed results we get
-   *
-   * The reason to do it this way is that the detected speed may be wrong (on short clips)
-   * and we don't want to loose a successful clip decoder match in this case.
-   */
-  if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
+  for (auto key : key_list)
     {
-      if (Params::detect_speed || Params::detect_speed_patient)
-        speed = detect_speed (key, wav_data, !orig_bits.empty());
-      else
-        speed = Params::try_speed;
-
-      // speeds closer to 1.0 than this usually work without stretching before decode
-      if (speed < 0.9999 || speed > 1.0001)
+      /*
+       * The strategy for integrating speed detection into decoding is this:
+       *  - we always (unconditionally) try to decode the  watermark on the original wav data
+       *  - if detected speed is somewhat different than 1.0, we also try to decode stretched data
+       *  - we report all normal and speed results we get
+       *
+       * The reason to do it this way is that the detected speed may be wrong (on short clips)
+       * and we don't want to loose a successful clip decoder match in this case.
+       */
+      if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
         {
-          if (Params::json_output != "-")
-            printf ("speed %.6f\n", speed);
-          WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
+          if (Params::detect_speed || Params::detect_speed_patient)
+            speed = detect_speed (key, wav_data, !orig_bits.empty());
+          else
+            speed = Params::try_speed;
 
-          result_set.set_speed_pattern (true);
-          BlockDecoder block_decoder;
-          block_decoder.run (key, wav_data_speed, result_set);
+          // speeds closer to 1.0 than this usually work without stretching before decode
+          if (speed < 0.9999 || speed > 1.0001)
+            {
+              if (Params::json_output != "-")
+                printf ("speed %.6f\n", speed);
+              WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
 
-          ClipDecoder clip_decoder;
-          clip_decoder.run (key, wav_data_speed, result_set);
-          result_set.set_speed_pattern (false);
+              result_set.set_speed_pattern (true);
+              BlockDecoder block_decoder;
+              block_decoder.run (key, wav_data_speed, result_set);
+
+              ClipDecoder clip_decoder;
+              clip_decoder.run (key, wav_data_speed, result_set);
+              result_set.set_speed_pattern (false);
+            }
         }
+
+      BlockDecoder block_decoder;
+      block_decoder.run (key, wav_data, result_set);
+
+      ClipDecoder clip_decoder;
+      clip_decoder.run (key, wav_data, result_set);
     }
-
-  BlockDecoder block_decoder;
-  block_decoder.run (key, wav_data, result_set);
-
-  ClipDecoder clip_decoder;
-  clip_decoder.run (key, wav_data, result_set);
 
   result_set.sort_by_time();
 
@@ -637,7 +640,7 @@ decode_and_report (const Key& key, const WavData& wav_data, const vector<int>& o
     {
       int match_count = result_set.print_match_count (orig_bits);
 
-      block_decoder.print_debug_sync();
+      // block_decoder.print_debug_sync(); FIXME
 
       if (Params::expect_matches >= 0)
         {
@@ -655,7 +658,7 @@ decode_and_report (const Key& key, const WavData& wav_data, const vector<int>& o
 }
 
 int
-get_watermark (const Key& key, const string& infile, const string& orig_pattern)
+get_watermark (const vector<Key>& key_list, const string& infile, const string& orig_pattern)
 {
   vector<int> orig_bitvec;
   if (!orig_pattern.empty())
@@ -686,10 +689,10 @@ get_watermark (const Key& key, const string& infile, const string& orig_pattern)
     }
   if (wav_data.sample_rate() == Params::mark_sample_rate)
     {
-      return decode_and_report (key, wav_data, orig_bitvec);
+      return decode_and_report (key_list, wav_data, orig_bitvec);
     }
   else
     {
-      return decode_and_report (key, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
+      return decode_and_report (key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
     }
 }
