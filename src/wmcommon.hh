@@ -119,6 +119,16 @@ public:
   }
 };
 
+class BitPosGen
+{
+  std::vector<int> pos_vec;
+
+public:
+  BitPosGen (const Key& key);
+  int sync_frame (int f);
+  int data_frame (int f);
+};
+
 class FFTAnalyzer
 {
   int           m_n_channels = 0;
@@ -146,9 +156,6 @@ size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
 
 int frame_count (const WavData& wav_data);
-
-int sync_frame_pos (const Key& key, int f);
-int data_frame_pos (const Key& key, int f);
 
 std::vector<int> parse_payload (const std::string& str);
 

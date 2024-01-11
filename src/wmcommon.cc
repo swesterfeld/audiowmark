@@ -139,44 +139,28 @@ FFTAnalyzer::fft_range (const vector<float>& samples, size_t start_index, size_t
   return fft_out;
 }
 
-int
-frame_pos (const Key& key, int f, bool sync)
+BitPosGen::BitPosGen (const Key& key)
 {
-  static vector<int> pos_vec;
+  int frame_count = mark_data_frame_count() + mark_sync_frame_count();
+  for (int i = 0; i < frame_count; i++)
+    pos_vec.push_back (i);
 
-  if (pos_vec.empty())
-    {
-      int frame_count = mark_data_frame_count() + mark_sync_frame_count();
-      for (int i = 0; i < frame_count; i++)
-        pos_vec.push_back (i);
-
-      Random random (key, 0, Random::Stream::frame_position);
-      random.shuffle (pos_vec);
-    }
-  if (sync)
-    {
-      assert (f >= 0 && size_t (f) < mark_sync_frame_count());
-
-      return pos_vec[f];
-    }
-  else
-    {
-      assert (f >= 0 && size_t (f) < mark_data_frame_count());
-
-      return pos_vec[f + mark_sync_frame_count()];
-    }
+  Random random (key, 0, Random::Stream::frame_position);
+  random.shuffle (pos_vec);
 }
 
 int
-sync_frame_pos (const Key& key, int f)
+BitPosGen::sync_frame (int f)
 {
-  return frame_pos (key, f, true);
+  assert (f >= 0 && size_t (f) < mark_sync_frame_count());
+  return pos_vec[f];
 }
 
 int
-data_frame_pos (const Key& key, int f)
+BitPosGen::data_frame (int f)
 {
-  return frame_pos (key, f, false);
+  assert (f >= 0 && size_t (f) < mark_data_frame_count());
+  return pos_vec[f + mark_sync_frame_count()];
 }
 
 size_t
@@ -198,10 +182,11 @@ gen_mix_entries (const Key& key)
   vector<MixEntry> mix_entries (frame_count * Params::bands_per_frame);
 
   UpDownGen up_down_gen (key, Random::Stream::data_up_down);
+  BitPosGen bit_pos_gen (key);
   int entry = 0;
   for (int f = 0; f < frame_count; f++)
     {
-      const int index = data_frame_pos (key, f);
+      const int index = bit_pos_gen.data_frame (f);
       UpDownArray up, down;
       up_down_gen.get (f, up, down);
 

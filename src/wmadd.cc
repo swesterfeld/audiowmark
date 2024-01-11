@@ -114,10 +114,11 @@ mark_data (const Key& key, vector<vector<FrameMod>>& frame_mod, const vector<int
   else
     {
       UpDownGen up_down_gen (key, Random::Stream::data_up_down);
+      BitPosGen bit_pos_gen (key);
 
       for (int f = 0; f < frame_count; f++)
         {
-          size_t index = data_frame_pos (key, f);
+          size_t index = bit_pos_gen.data_frame (f);
 
           prepare_frame_mod (up_down_gen, f, frame_mod[index], bitvec[f / Params::frames_per_bit]);
         }
@@ -131,11 +132,12 @@ mark_sync (const Key& key, vector<vector<FrameMod>>& frame_mod, int ab)
   assert (frame_mod.size() >= mark_sync_frame_count());
 
   UpDownGen up_down_gen (key, Random::Stream::sync_up_down);
+  BitPosGen bit_pos_gen (key);
 
   // sync block always written in linear order (no mix)
   for (int f = 0; f < frame_count; f++)
     {
-      size_t index = sync_frame_pos (key, f);
+      size_t index = bit_pos_gen.sync_frame (f);
       int    data_bit = (f / Params::sync_frames_per_bit + ab) & 1; /* write 010101 for a block, 101010 for b block */
 
       prepare_frame_mod (up_down_gen, f, frame_mod[index], data_bit);

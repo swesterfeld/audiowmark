@@ -101,6 +101,7 @@ static vector<float>
 linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
 {
   UpDownGen     up_down_gen (key, Random::Stream::data_up_down);
+  BitPosGen     bit_pos_gen (key);
   vector<float> raw_bit_vec;
 
   const int frame_count = mark_data_frame_count();
@@ -110,7 +111,7 @@ linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_ch
     {
       for (int ch = 0; ch < n_channels; ch++)
         {
-          const size_t index = data_frame_pos (key, f) * n_channels + ch;
+          const size_t index = bit_pos_gen.data_frame (f) * n_channels + ch;
           UpDownArray up, down;
           up_down_gen.get (f, up, down);
 

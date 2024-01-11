@@ -38,6 +38,7 @@ SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
   size_t n_bands = Params::max_band - Params::min_band + 1;
 
   UpDownGen up_down_gen (key, Random::Stream::sync_up_down);
+  BitPosGen bit_pos_gen (key);
   for (int bit = 0; bit < Params::sync_bits; bit++)
     {
       vector<FrameBit> frame_bits;
@@ -49,7 +50,7 @@ SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
           for (int block = 0; block < block_count; block++)
             {
               FrameBit frame_bit;
-              frame_bit.frame = sync_frame_pos (key, f + bit * Params::sync_frames_per_bit) + block * first_block_end;
+              frame_bit.frame = bit_pos_gen.sync_frame (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
               for (int ch = 0; ch < wav_data.n_channels(); ch++)
                 {
                   if (block == 0)
@@ -259,6 +260,7 @@ SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, v
   vector<float> fft_db;
   vector<char>  have_frames;
   vector<Score> result_scores;
+  BitPosGen     bit_pos_gen (key);
 
   int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
   const int first_block_end = total_frame_count;
@@ -268,9 +270,9 @@ SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, v
   vector<char> want_frames (total_frame_count);
   for (size_t f = 0; f < mark_sync_frame_count(); f++)
     {
-      want_frames[sync_frame_pos (key, f)] = 1;
+      want_frames[bit_pos_gen.sync_frame (f)] = 1;
       if (mode == Mode::CLIP)
-        want_frames[first_block_end + sync_frame_pos (key, f)] = 1;
+        want_frames[first_block_end + bit_pos_gen.sync_frame (f)] = 1;
     }
 
   for (const auto& score : sync_scores)
