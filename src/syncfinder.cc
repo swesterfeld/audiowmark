@@ -19,6 +19,7 @@
 #include <algorithm>
 
 #include "syncfinder.hh"
+#include "threadpool.hh"
 #include "wmcommon.hh"
 
 using std::complex;
@@ -184,6 +185,7 @@ SyncFinder::scan_silence (const WavData& wav_data)
 void
 SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode)
 {
+  ThreadPool    thread_pool;
   vector<float> fft_db;
   vector<char>  have_frames;
 
@@ -195,20 +197,24 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
   for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
     {
       sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frames, /* want all frames */ {});
-      for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+      for (size_t k = 0; k < key_results.size(); k++)
         {
-          const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-          if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+          thread_pool.add_job ([this, k, sync_shift, total_frame_count, n_bands, &sync_bits, &wav_data, &fft_db, &have_frames, &key_results]()
             {
-              for (size_t k = 0; k < key_results.size(); k++)
+              for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
                 {
-                  ConvBlockType block_type;
-                  double quality = sync_decode (sync_bits[k], wav_data, start_frame, fft_db, have_frames, &block_type);
-                  // printf ("%zd %f\n", sync_index, quality);
-                  key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                  const size_t sync_index = start_frame * Params::frame_size + sync_shift;
+                  if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+                    {
+                      ConvBlockType block_type;
+                      double quality = sync_decode (sync_bits[k], wav_data, start_frame, fft_db, have_frames, &block_type);
+                      // printf ("%zd %f\n", sync_index, quality);
+                      key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                    }
                 }
-            }
+            });
         }
+      thread_pool.wait_all();
     }
   for (auto& key_result : key_results)
     sort (key_result.sync_scores.begin(), key_result.sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });

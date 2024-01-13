@@ -84,7 +84,6 @@ public:
     std::vector<Score> sync_scores;
   };
 private:
-
   std::vector<std::vector<FrameBit>> init_up_down (const Key& key, const WavData& wav_data, Mode mode);
 
   double  sync_decode (const std::vector<std::vector<FrameBit>>& sync_bits,
