@@ -26,10 +26,10 @@ using std::vector;
 using std::string;
 using std::min;
 
-void
+vector<vector<SyncFinder::FrameBit>>
 SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
 {
-  sync_bits.clear();
+  vector<vector<SyncFinder::FrameBit>> sync_bits;
 
   // "long" blocks consist of two "normal" blocks, which means
   //   the sync bits pattern is repeated after the end of the first block
@@ -76,6 +76,7 @@ SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
       std::sort (frame_bits.begin(), frame_bits.end(), [] (FrameBit& f1, FrameBit& f2) { return f1.frame < f2.frame; });
       sync_bits.push_back (frame_bits);
     }
+  return sync_bits;
 }
 
 /* safe to call from any thread */
@@ -116,7 +117,8 @@ SyncFinder::bit_quality (float umag, float dmag, int bit)
 }
 
 double
-SyncFinder::sync_decode (const WavData& wav_data, const size_t start_frame,
+SyncFinder::sync_decode (const vector<vector<FrameBit>>& sync_bits,
+                         const WavData& wav_data, const size_t start_frame,
                          const vector<float>& fft_out_db,
                          const vector<char>&  have_frames,
                          ConvBlockType *block_type)
@@ -179,12 +181,22 @@ SyncFinder::scan_silence (const WavData& wav_data)
     wav_data_last--;
 }
 
-vector<SyncFinder::Score>
-SyncFinder::search_approx (const WavData& wav_data, Mode mode)
+vector<SyncFinder::KeyResult>
+SyncFinder::search_approx (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode)
 {
   vector<float> fft_db;
   vector<char>  have_frames;
-  vector<Score> sync_scores;
+
+  vector<KeyResult> key_results;
+
+  for (const auto& key : key_list)
+    {
+      KeyResult key_result;
+      key_result.key = key;
+      key_result.sync_bits = init_up_down (key, wav_data, mode);
+
+      key_results.push_back (key_result);
+    }
 
   // compute multiple time-shifted fft vectors
   size_t n_bands = Params::max_band - Params::min_band + 1;
@@ -199,15 +211,20 @@ SyncFinder::search_approx (const WavData& wav_data, Mode mode)
           const size_t sync_index = start_frame * Params::frame_size + sync_shift;
           if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
             {
-              ConvBlockType block_type;
-              double quality = sync_decode (wav_data, start_frame, fft_db, have_frames, &block_type);
-              // printf ("%zd %f\n", sync_index, quality);
-              sync_scores.emplace_back (Score { sync_index, quality, block_type });
+              for (auto& key_result : key_results)
+                {
+                  ConvBlockType block_type;
+                  double quality = sync_decode (key_result.sync_bits, wav_data, start_frame, fft_db, have_frames, &block_type);
+                  // printf ("%zd %f\n", sync_index, quality);
+                  key_result.sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                }
             }
         }
     }
-  sort (sync_scores.begin(), sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
-  return sync_scores;
+  for (auto& key_result : key_results)
+    sort (key_result.sync_scores.begin(), key_result.sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
+
+  return key_results;
 }
 
 void
@@ -255,12 +272,12 @@ SyncFinder::sync_select_n_best (vector<Score>& sync_scores, size_t n)
 }
 
 void
-SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, vector<Score>& sync_scores)
+SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result)
 {
   vector<float> fft_db;
   vector<char>  have_frames;
   vector<Score> result_scores;
-  BitPosGen     bit_pos_gen (key);
+  BitPosGen     bit_pos_gen (key_result.key);
 
   int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
   const int first_block_end = total_frame_count;
@@ -275,7 +292,7 @@ SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, v
         want_frames[first_block_end + bit_pos_gen.sync_frame (f)] = 1;
     }
 
-  for (const auto& score : sync_scores)
+  for (const auto& score : key_result.sync_scores)
     {
       //printf ("%zd %s %f", score.index, find_closest_sync (score.index).c_str(), score.quality);
 
@@ -292,7 +309,7 @@ SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, v
           if (fft_db.size())
             {
               ConvBlockType block_type;
-              double        q = sync_decode (wav_data, 0, fft_db, have_frames, &block_type);
+              double        q = sync_decode (key_result.sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
 
               if (q > best_quality)
                 {
@@ -305,11 +322,11 @@ SyncFinder::search_refine (const Key& key, const WavData& wav_data, Mode mode, v
       if (best_quality > Params::sync_threshold2)
         result_scores.push_back (Score { best_index, best_quality, best_block_type });
     }
-  sync_scores = result_scores;
+  key_result.sync_scores = result_scores;
 }
 
-vector<SyncFinder::Score>
-SyncFinder::fake_sync (const WavData& wav_data, Mode mode)
+vector<SyncFinder::KeyResult>
+SyncFinder::fake_sync (const vector<Key>& key_list, const WavData& wav_data, Mode mode)
 {
   vector<Score> result_scores;
 
@@ -324,16 +341,22 @@ SyncFinder::fake_sync (const WavData& wav_data, Mode mode)
         result_scores.push_back (Score { expect_index, 1.0, (ab++ & 1) ? ConvBlockType::b : ConvBlockType::a });
     }
 
-  return result_scores;
+  vector<KeyResult> key_results;
+  for (auto key : key_list)
+    {
+      KeyResult key_result;
+      key_result.key = key;
+      key_result.sync_scores = result_scores;
+      key_results.push_back (key_result);
+    }
+  return key_results;
 }
 
-vector<SyncFinder::Score>
-SyncFinder::search (const Key& key, const WavData& wav_data, Mode mode)
+vector<SyncFinder::KeyResult>
+SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode mode)
 {
   if (Params::test_no_sync)
-    return fake_sync (wav_data, mode);
-
-  init_up_down (key, wav_data, mode);
+    return fake_sync (key_list, wav_data, mode);
 
   if (mode == Mode::CLIP)
     {
@@ -346,22 +369,25 @@ SyncFinder::search (const Key& key, const WavData& wav_data, Mode mode)
       wav_data_first = 0;
       wav_data_last  = wav_data.samples().size();
     }
-  vector<Score> sync_scores = search_approx (wav_data, mode);
 
-  sync_select_by_threshold (sync_scores);
-  if (mode == Mode::CLIP)
-    sync_select_n_best (sync_scores, 5);
+  vector<KeyResult> key_results = search_approx (key_list, wav_data, mode);
+  for (auto& key_result : key_results)
+    {
+      /* find local maxima, select by threshold */
+      sync_select_by_threshold (key_result.sync_scores);
+      if (mode == Mode::CLIP)
+        sync_select_n_best (key_result.sync_scores, 5);
 
-  search_refine (key, wav_data, mode, sync_scores);
+      search_refine (wav_data, mode, key_result);
+    }
 
-  return sync_scores;
+  return key_results;
 }
 
 vector<vector<SyncFinder::FrameBit>>
 SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
 {
-  init_up_down (key, wav_data, mode);
-  return sync_bits;
+  return init_up_down (key, wav_data, mode);
 }
 
 void
