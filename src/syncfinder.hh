@@ -80,9 +80,8 @@ public:
   };
   struct KeyResult
   {
-    Key                                 key;
-    std::vector<std::vector<FrameBit>>  sync_bits;
-    std::vector<Score>                  sync_scores;
+    Key                key;
+    std::vector<Score> sync_scores;
   };
 private:
 
@@ -94,10 +93,10 @@ private:
                        const std::vector<char>&  have_frames,
                        ConvBlockType *block_type);
   void scan_silence (const WavData& wav_data);
-  std::vector<KeyResult> search_approx (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
+  void search_approx (std::vector<KeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
   void sync_select_by_threshold (std::vector<Score>& sync_scores);
   void sync_select_n_best (std::vector<Score>& sync_scores, size_t n);
-  void search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result);
+  void search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const std::vector<std::vector<FrameBit>>& sync_bits);
   std::vector<KeyResult> fake_sync (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
 
   // non-zero sample range: [wav_data_first, wav_data_last)

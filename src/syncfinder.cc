@@ -181,22 +181,11 @@ SyncFinder::scan_silence (const WavData& wav_data)
     wav_data_last--;
 }
 
-vector<SyncFinder::KeyResult>
-SyncFinder::search_approx (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode)
+void
+SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode)
 {
   vector<float> fft_db;
   vector<char>  have_frames;
-
-  vector<KeyResult> key_results;
-
-  for (const auto& key : key_list)
-    {
-      KeyResult key_result;
-      key_result.key = key;
-      key_result.sync_bits = init_up_down (key, wav_data, mode);
-
-      key_results.push_back (key_result);
-    }
 
   // compute multiple time-shifted fft vectors
   size_t n_bands = Params::max_band - Params::min_band + 1;
@@ -211,20 +200,18 @@ SyncFinder::search_approx (const std::vector<Key>& key_list, const WavData& wav_
           const size_t sync_index = start_frame * Params::frame_size + sync_shift;
           if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
             {
-              for (auto& key_result : key_results)
+              for (size_t k = 0; k < key_results.size(); k++)
                 {
                   ConvBlockType block_type;
-                  double quality = sync_decode (key_result.sync_bits, wav_data, start_frame, fft_db, have_frames, &block_type);
+                  double quality = sync_decode (sync_bits[k], wav_data, start_frame, fft_db, have_frames, &block_type);
                   // printf ("%zd %f\n", sync_index, quality);
-                  key_result.sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                  key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
                 }
             }
         }
     }
   for (auto& key_result : key_results)
     sort (key_result.sync_scores.begin(), key_result.sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
-
-  return key_results;
 }
 
 void
@@ -272,7 +259,7 @@ SyncFinder::sync_select_n_best (vector<Score>& sync_scores, size_t n)
 }
 
 void
-SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result)
+SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const vector<vector<FrameBit>>& sync_bits)
 {
   vector<float> fft_db;
   vector<char>  have_frames;
@@ -309,7 +296,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
           if (fft_db.size())
             {
               ConvBlockType block_type;
-              double        q = sync_decode (key_result.sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
+              double        q = sync_decode (sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
 
               if (q > best_quality)
                 {
@@ -370,15 +357,26 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
       wav_data_last  = wav_data.samples().size();
     }
 
-  vector<KeyResult> key_results = search_approx (key_list, wav_data, mode);
-  for (auto& key_result : key_results)
+  vector<KeyResult>                 key_results;
+  vector<vector<vector<FrameBit>>>  sync_bits;
+
+  for (const auto& key : key_list)
+    {
+      KeyResult key_result;
+      key_result.key = key;
+      key_results.push_back (key_result);
+      sync_bits.push_back (init_up_down (key, wav_data, mode));
+    }
+
+  search_approx (key_results, sync_bits, wav_data, mode);
+  for (size_t k = 0; k < key_results.size(); k++)
     {
       /* find local maxima, select by threshold */
-      sync_select_by_threshold (key_result.sync_scores);
+      sync_select_by_threshold (key_results[k].sync_scores);
       if (mode == Mode::CLIP)
-        sync_select_n_best (key_result.sync_scores, 5);
+        sync_select_n_best (key_results[k].sync_scores, 5);
 
-      search_refine (wav_data, mode, key_result);
+      search_refine (wav_data, mode, key_results[k], sync_bits[k]);
     }
 
   return key_results;
