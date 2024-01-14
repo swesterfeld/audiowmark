@@ -189,6 +189,7 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
   vector<float> fft_db;
   vector<char>  have_frames;
 
+  std::mutex result_mutex;
   // compute multiple time-shifted fft vectors
   size_t n_bands = Params::max_band - Params::min_band + 1;
   int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
@@ -197,22 +198,34 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
   for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
     {
       sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frames, /* want all frames */ {});
+
+      vector<int> start_frames;
+      for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+        {
+          if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+            start_frames.push_back (start_frame);
+        }
+
       for (size_t k = 0; k < key_results.size(); k++)
         {
-          thread_pool.add_job ([this, k, sync_shift, total_frame_count, n_bands, &sync_bits, &wav_data, &fft_db, &have_frames, &key_results]()
+          for (auto split_start_frames : split_vector (start_frames, 1024))
             {
-              for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
+              thread_pool.add_job ([this, k, sync_shift, total_frame_count, n_bands, split_start_frames,
+                                    &sync_bits, &wav_data, &fft_db, &have_frames, &key_results, &result_mutex]()
                 {
-                  const size_t sync_index = start_frame * Params::frame_size + sync_shift;
-                  if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+                  for (auto start_frame : split_start_frames)
                     {
                       ConvBlockType block_type;
                       double quality = sync_decode (sync_bits[k], wav_data, start_frame, fft_db, have_frames, &block_type);
                       // printf ("%zd %f\n", sync_index, quality);
-                      key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                      const size_t sync_index = start_frame * Params::frame_size + sync_shift;
+                      {
+                        std::lock_guard<std::mutex> lg (result_mutex);
+                        key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                      }
                     }
-                }
-            });
+                });
+            }
         }
       thread_pool.wait_all();
     }
@@ -457,4 +470,16 @@ SyncFinder::find_closest_sync (size_t index)
         }
     }
   return string_printf ("n:%d offset:%d", best, int (index) - (wm_offset + best * wm_length));
+}
+
+vector<vector<int>>
+SyncFinder::split_vector (vector<int>& in_vector, size_t max_size)
+{
+  /* split input vector into smaller vectors of at most max_size elements */
+  vector<vector<int>> result;
+  size_t size = in_vector.size();
+
+  for (size_t i = 0; i < size; i += max_size)
+    result.emplace_back (in_vector.begin() + i, in_vector.begin() + i + min (size - i, max_size));
+  return result;
 }
