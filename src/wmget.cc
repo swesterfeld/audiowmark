@@ -26,6 +26,7 @@
 #include "syncfinder.hh"
 #include "resample.hh"
 #include "fft.hh"
+#include "threadpool.hh"
 
 using std::string;
 using std::vector;
@@ -147,6 +148,7 @@ public:
     bool              speed_pattern;
   };
 private:
+  std::mutex      pattern_mutex;
   vector<Pattern> patterns;
   bool            speed_pattern = false;
 
@@ -159,6 +161,9 @@ public:
   void
   add_pattern (double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
   {
+    /* add_pattern can be called by any thread (safe to use from ThreadPool jobs) */
+    std::lock_guard<std::mutex> lg (pattern_mutex);
+
     Pattern p;
     p.time = time;
     p.sync_score = sync_score;
@@ -172,13 +177,25 @@ public:
   void
   sort_by_time()
   {
-    std::stable_sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
+    std::sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
       const int all1 = p1.type == Type::ALL;
       const int all2 = p2.type == Type::ALL;
       if (all1 != all2)
         return all1 < all2;
-      else
+      else if (p1.time != p2.time)
         return p1.time < p2.time;
+      else
+        {
+          auto ab = [] (const Pattern& pattern) {
+            switch (pattern.sync_score.block_type) {
+              case ConvBlockType::a:  return 0;
+              case ConvBlockType::b:  return 1;
+              case ConvBlockType::ab: return 2;
+            };
+            return 99; // should not happen
+          };
+          return ab (p1) < ab (p2);
+        }
     });
   }
   void
@@ -312,6 +329,7 @@ public:
   void
   run (const vector<Key>& key_list, const WavData& wav_data, ResultSet& result_set)
   {
+    ThreadPool thread_pool;
     SyncFinder sync_finder;
     FFTAnalyzer fft_analyzer (wav_data.n_channels());
     key_results = sync_finder.search (key_list, wav_data, SyncFinder::Mode::BLOCK);
@@ -325,7 +343,6 @@ public:
 
         const Key&  key = key_result.key;
         SyncFinder::Score score_all { 0, 0 };
-        SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
 
         ConvBlockType last_block_type = ConvBlockType::b;
         vector<vector<float>> ab_raw_bit_vec (2);
@@ -354,12 +371,15 @@ public:
                 raw_bit_vec = randomize_bit_order (key, raw_bit_vec, /* encode */ false);
 
                 /* ---- deal with this pattern ---- */
-                float decode_error = 0;
-                vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
-
                 const double time = double (sync_score.index) / wav_data.sample_rate();
-                if (!bit_vec.empty())
-                  result_set.add_pattern (time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                thread_pool.add_job ([sync_score, raw_bit_vec, time, &result_set]()
+                  {
+                    float decode_error = 0;
+                    vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+                    if (!bit_vec.empty())
+                      result_set.add_pattern (time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                  });
                 total_count += 1;
 
                 /* ---- update "all" pattern ---- */
@@ -383,13 +403,18 @@ public:
                         ab_bits[i * 2] = ab_raw_bit_vec[0][i];
                         ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
                       }
-                    vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
-                    if (!bit_vec.empty())
+                    thread_pool.add_job ([sync_score, ab_bits, ab_quality, time, &result_set]()
                       {
-                        score_ab.index = sync_score.index;
-                        score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-                        result_set.add_pattern (time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
-                      }
+                        float decode_error = 0;
+                        vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
+                        if (!bit_vec.empty())
+                          {
+                            SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
+                            score_ab.index = sync_score.index;
+                            score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
+                            result_set.add_pattern (time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                          }
+                      });
                   }
                 last_block_type = sync_score.block_type;
               }
@@ -405,13 +430,17 @@ public:
 
             vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
-            float decode_error = 0;
-            vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
+            thread_pool.add_job ([score_all, soft_bit_vec, &result_set]()
+              {
+                float decode_error = 0;
+                vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
-            if (!bit_vec.empty())
-              result_set.add_pattern (/* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+                if (!bit_vec.empty())
+                  result_set.add_pattern (/* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+              });
           }
       }
+    thread_pool.wait_all();
 
     debug_sync_frame_count = frame_count (wav_data);
   }
