@@ -21,6 +21,7 @@
 #include <regex>
 
 #include <assert.h>
+#include <cinttypes>
 
 using std::string;
 using std::vector;
@@ -203,6 +204,7 @@ void
 Key::set_test_key (uint64_t key)
 {
   uint64_to_buffer (key, m_aes_key.data());
+  m_name = string_printf ("test-key-%" PRId64, key);
 }
 
 void
@@ -214,6 +216,11 @@ Key::load_key (const string& key_file)
       error ("audiowmark: error opening key file: '%s'\n", key_file.c_str());
       exit (1);
     }
+  m_name = key_file;
+  // basename
+  size_t sep = m_name.find_last_of ("\\/");
+  if (sep != string::npos)
+    m_name = m_name.substr (sep + 1);
 
   const regex blank_re (R"(\s*(#.*)?[\r\n]+)");
   const regex key_re (R"(\s*key\s+([0-9a-f]+)\s*(#.*)?[\r\n]+)");
@@ -268,4 +275,10 @@ Key::aes_key() const
 {
   assert (m_aes_key.size() == SIZE);
   return m_aes_key.data();
+}
+
+const string&
+Key::name() const
+{
+  return m_name;
 }

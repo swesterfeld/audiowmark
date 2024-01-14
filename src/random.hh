@@ -28,6 +28,7 @@
 class Key
 {
   std::vector<unsigned char> m_aes_key;
+  std::string m_name;
 public:
   static constexpr size_t SIZE = 16; /* 128 bits */
 
@@ -37,6 +38,7 @@ public:
   void set_test_key (uint64_t key);
   void load_key (const std::string& filename);
   const unsigned char *aes_key() const;
+  const std::string& name() const;
 };
 
 class Random
