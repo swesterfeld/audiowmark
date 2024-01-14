@@ -338,6 +338,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
         });
     }
   thread_pool.wait_all();
+  sort (result_scores.begin(), result_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
   key_result.sync_scores = result_scores;
 }
 
