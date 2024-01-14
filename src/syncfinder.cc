@@ -280,8 +280,8 @@ SyncFinder::sync_select_n_best (vector<Score>& sync_scores, size_t n)
 void
 SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const vector<vector<FrameBit>>& sync_bits)
 {
-  vector<float> fft_db;
-  vector<char>  have_frames;
+  ThreadPool    thread_pool;
+  std::mutex    result_mutex;
   vector<Score> result_scores;
   BitPosGen     bit_pos_gen (key_result.key);
 
@@ -300,34 +300,44 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
 
   for (const auto& score : key_result.sync_scores)
     {
-      //printf ("%zd %s %f", score.index, find_closest_sync (score.index).c_str(), score.quality);
-
-      // refine match
-      double best_quality       = score.quality;
-      size_t best_index         = score.index;
-      ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
-
-      int start = std::max (int (score.index) - Params::sync_search_step, 0);
-      int end   = score.index + Params::sync_search_step;
-      for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+      thread_pool.add_job ([this, score, total_frame_count,
+                            &wav_data, &want_frames, &sync_bits, &result_scores, &result_mutex] ()
         {
-          sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frames, want_frames);
-          if (fft_db.size())
-            {
-              ConvBlockType block_type;
-              double        q = sync_decode (sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
+          vector<float> fft_db;
+          vector<char>  have_frames;
+          //printf ("%zd %s %f", score.index, find_closest_sync (score.index).c_str(), score.quality);
 
-              if (q > best_quality)
+          // refine match
+          double best_quality       = score.quality;
+          size_t best_index         = score.index;
+          ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
+
+          int start = std::max (int (score.index) - Params::sync_search_step, 0);
+          int end   = score.index + Params::sync_search_step;
+          for (int fine_index = start; fine_index <= end; fine_index += Params::sync_search_fine)
+            {
+              sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frames, want_frames);
+              if (fft_db.size())
                 {
-                  best_quality = q;
-                  best_index   = fine_index;
+                  ConvBlockType block_type;
+                  double        q = sync_decode (sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
+
+                  if (q > best_quality)
+                    {
+                      best_quality = q;
+                      best_index   = fine_index;
+                    }
                 }
             }
-        }
-      //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index).c_str(), best_quality);
-      if (best_quality > Params::sync_threshold2)
-        result_scores.push_back (Score { best_index, best_quality, best_block_type });
+          //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index).c_str(), best_quality);
+          if (best_quality > Params::sync_threshold2)
+            {
+              std::lock_guard<std::mutex> lg (result_mutex);
+              result_scores.push_back (Score { best_index, best_quality, best_block_type });
+            }
+        });
     }
+  thread_pool.wait_all();
   key_result.sync_scores = result_scores;
 }
 
