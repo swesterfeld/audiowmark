@@ -634,41 +634,45 @@ static int
 decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
 {
   ResultSet result_set;
-  double speed = 1.0;
 
-  for (auto key : key_list)
+  /*
+   * The strategy for integrating speed detection into decoding is this:
+   *  - we always (unconditionally) try to decode the  watermark on the original wav data
+   *  - if detected speed is somewhat different than 1.0, we also try to decode stretched data
+   *  - we report all normal and speed results we get
+   *
+   * The reason to do it this way is that the detected speed may be wrong (on short clips)
+   * and we don't want to loose a successful clip decoder match in this case.
+   */
+  if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
     {
-      /*
-       * The strategy for integrating speed detection into decoding is this:
-       *  - we always (unconditionally) try to decode the  watermark on the original wav data
-       *  - if detected speed is somewhat different than 1.0, we also try to decode stretched data
-       *  - we report all normal and speed results we get
-       *
-       * The reason to do it this way is that the detected speed may be wrong (on short clips)
-       * and we don't want to loose a successful clip decoder match in this case.
-       */
-      if (Params::detect_speed || Params::detect_speed_patient || Params::try_speed > 0)
+      vector<DetectSpeedResult> speed_results;
+      if (Params::detect_speed || Params::detect_speed_patient)
+        speed_results = detect_speed (key_list, wav_data, !orig_bits.empty());
+      else
         {
-          if (Params::detect_speed || Params::detect_speed_patient)
-            speed = detect_speed (key, wav_data, !orig_bits.empty());
-          else
-            speed = Params::try_speed;
-
-          // speeds closer to 1.0 than this usually work without stretching before decode
-          if (speed < 0.9999 || speed > 1.0001)
+          for (const auto& key : key_list)
             {
-              if (Params::json_output != "-")
-                printf ("speed %.6f\n", speed);
-              WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed);
-
-              result_set.set_speed_pattern (true);
-              BlockDecoder block_decoder;
-              block_decoder.run ({ key }, wav_data_speed, result_set);
-
-              ClipDecoder clip_decoder;
-              clip_decoder.run ({ key }, wav_data_speed, result_set);
-              result_set.set_speed_pattern (false);
+              DetectSpeedResult speed_result;
+              speed_result.key   = key;
+              speed_result.speed = Params::try_speed;
+              speed_results.push_back (speed_result);
             }
+        }
+
+      for (const auto& speed_result : speed_results)
+        {
+          if (Params::json_output != "-")
+            printf ("speed %.6f\n", speed_result.speed);
+          WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed_result.speed);
+
+          result_set.set_speed_pattern (true);
+          BlockDecoder block_decoder;
+          block_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+
+          ClipDecoder clip_decoder;
+          clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+          result_set.set_speed_pattern (false);
         }
     }
 
@@ -681,7 +685,7 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
   result_set.sort_by_time();
 
   if (!Params::json_output.empty())
-    result_set.print_json (wav_data, Params::json_output, speed);
+    result_set.print_json (wav_data, Params::json_output, 42 /*FIXME */);
 
   if (Params::json_output != "-")
     result_set.print();

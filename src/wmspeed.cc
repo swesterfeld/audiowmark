@@ -730,3 +730,21 @@ detect_speed (const Key& key, const WavData& in_data, bool print_results)
   else
     return 1;
 }
+
+vector<DetectSpeedResult>
+detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_results)
+{
+  vector<DetectSpeedResult> results;
+
+  for (const auto& key : key_list)
+    {
+      DetectSpeedResult speed_result;
+      speed_result.key   = key;
+      speed_result.speed = detect_speed (key, in_data, print_results);
+
+      // speeds closer to 1.0 than this usually work without stretching before decode
+      if (speed_result.speed < 0.9999 || speed_result.speed > 1.0001)
+        results.push_back (speed_result);
+    }
+  return results;
+}
