@@ -407,6 +407,7 @@ public:
                       {
                         float decode_error = 0;
                         vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
+
                         if (!bit_vec.empty())
                           {
                             SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
@@ -519,6 +520,7 @@ class ClipDecoder
     SyncFinder                    sync_finder;
     vector<SyncFinder::KeyResult> key_results = sync_finder.search (key_list, wav_data, SyncFinder::Mode::CLIP);
     FFTAnalyzer                   fft_analyzer (wav_data.n_channels());
+    ThreadPool                    thread_pool;
 
     for (const auto& key_result : key_results)
       {
@@ -549,17 +551,21 @@ class ClipDecoder
                       }
                   }
 
-                float decode_error = 0;
-                vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
-                if (!bit_vec.empty())
+                SyncFinder::Score sync_score_nopad = sync_score;
+                sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
+
+                thread_pool.add_job ([raw_bit_vec, sync_score_nopad, time_offset_sec, &result_set]()
                   {
-                    SyncFinder::Score sync_score_nopad = sync_score;
-                    sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
-                    result_set.add_pattern (time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
-                  }
+                    float decode_error = 0;
+                    vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
+
+                    if (!bit_vec.empty())
+                      result_set.add_pattern (time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+                  });
               }
           }
       }
+    thread_pool.wait_all();
   }
   enum class Pos { START, END };
   void
