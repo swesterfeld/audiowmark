@@ -429,8 +429,9 @@ score_smooth_find_best (const vector<SpeedSync::Score>& in_scores, double step, 
 
 class SpeedSearch
 {
-  ThreadPool thread_pool;
   vector<std::unique_ptr<SpeedSync>> speed_sync;
+  SpeedSync *center_speed_sync = nullptr;
+  WavData clipped_in_data;
   const WavData& in_data;
   double clip_location;
 
@@ -479,15 +480,18 @@ public:
     printf ("range = [ %.2f .. %.2f ]\n", bound (-1), bound (1));
   }
 
-  vector<SpeedSync::Score> run_search (const Key& key, const SpeedScanParams& scan_params, const vector<double>& speeds);
-  vector<SpeedSync::Score> refine_search (const SpeedScanParams& scan_params, double speed);
+  void start_prepare_jobs (ThreadPool& thread_pool, const Key& key, const SpeedScanParams& scan_params, const vector<double>& speeds);
+  void start_search_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params);
+  void start_refine_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params, double speed);
+  vector<SpeedSync::Score> get_results();
+  vector<SpeedSync::Score> get_refine_results();
 };
 
-vector<SpeedSync::Score>
-SpeedSearch::run_search (const Key& key, const SpeedScanParams& scan_params, const vector<double>& speeds)
+void
+SpeedSearch::start_prepare_jobs (ThreadPool& thread_pool, const Key& key, const SpeedScanParams& scan_params, const vector<double>& speeds)
 {
   /* speed is between 0.8 and 1.25, so we use a clip seconds factor of 1.3 to provide enough samples */
-  WavData in_clip = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
+  clipped_in_data = get_speed_clip (clip_location, in_data, scan_params.seconds * 1.3);
 
   speed_sync.clear();
 
@@ -497,24 +501,24 @@ SpeedSearch::run_search (const Key& key, const SpeedScanParams& scan_params, con
         {
           double c_speed = speed * pow (scan_params.step, c * (scan_params.n_steps * 2 + 1));
 
-          speed_sync.push_back (std::make_unique<SpeedSync> (key, in_clip, c_speed));
+          speed_sync.push_back (std::make_unique<SpeedSync> (key, clipped_in_data, c_speed));
         }
     }
 
-  timer_start();
-
   for (auto& s : speed_sync)
     s->start_prepare_job (thread_pool, scan_params);
-  thread_pool.wait_all();
+}
 
-  timer_report();
-
+void
+SpeedSearch::start_search_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params)
+{
   for (auto& s : speed_sync)
     s->start_search_jobs (thread_pool, scan_params, s->center_speed());
-  thread_pool.wait_all();
+}
 
-  timer_report();
-
+vector<SpeedSync::Score>
+SpeedSearch::get_results()
+{
   vector<SpeedSync::Score> scores;
   for (auto& s : speed_sync)
     {
@@ -524,18 +528,16 @@ SpeedSearch::run_search (const Key& key, const SpeedScanParams& scan_params, con
   return scores;
 }
 
-vector<SpeedSync::Score>
-SpeedSearch::refine_search (const SpeedScanParams& scan_params, double speed)
+void
+SpeedSearch::start_refine_jobs (ThreadPool& thread_pool, const SpeedScanParams& scan_params, double speed)
 {
-  SpeedSync *center_speed_sync = find_closest_speed_sync (speed);
-
-  timer_start();
-
+  center_speed_sync = find_closest_speed_sync (speed);
   center_speed_sync->start_search_jobs (thread_pool, scan_params, speed);
-  thread_pool.wait_all();
+}
 
-  timer_report();
-
+vector<SpeedSync::Score>
+SpeedSearch::get_refine_results()
+{
   return center_speed_sync->get_scores();
 }
 
@@ -620,16 +622,18 @@ get_best_clip_location (const Key& key, const WavData& in_data, double seconds, 
   return clip_location;
 }
 
-double
-detect_speed (const Key& key, const WavData& in_data, bool print_results)
+vector<DetectSpeedResult>
+detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_results)
 {
+  vector<DetectSpeedResult> results;
+
   /* typically even for high strength we need at least a few seconds of audio
    * in in_data for successful speed detection, but our algorithm won't work at
    * all for very short input files
    */
   double in_seconds = double (in_data.n_frames()) / in_data.sample_rate();
   if (in_seconds < 0.25)
-    return 1;
+    return results;
 
   const SpeedScanParams scan1_normal /* first pass: find approximation: speed approximately 0.8..1.25 */
     {
@@ -674,77 +678,121 @@ detect_speed (const Key& key, const WavData& in_data, bool print_results)
   // SpeedSearch::debug_range (scan1);
 
   const int    clip_candidates = 5;
-  const double clip_location = get_best_clip_location (key, in_data, scan1.seconds, clip_candidates);
 
-  vector<SpeedSync::Score> scores;
-  SpeedSearch speed_search (in_data, clip_location);
+  struct KeySpeedSearch
+  {
+    Key                           key;
+    std::unique_ptr<SpeedSearch>  speed_search;
+    vector<SpeedSync::Score>      scores;
+  };
+  vector<KeySpeedSearch> key_speed_search_vec;
+
+  ThreadPool thread_pool;
+
+  for (auto& key : key_list)
+    {
+      const double clip_location = get_best_clip_location (key, in_data, scan1.seconds, clip_candidates);
+
+      key_speed_search_vec.emplace_back (KeySpeedSearch {key, std::make_unique<SpeedSearch> (in_data, clip_location), {}});
+    }
 
   /* initial search using grid */
-  scores = speed_search.run_search (key, scan1, { 1.0 });
+  for (auto& key_speed_search : key_speed_search_vec)
+    key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan1, { 1.0 });
 
-  /* improve N best matches */
-  select_n_best_scores (scores, n_best);
+  thread_pool.wait_all();
 
-  vector<double> speeds;
-  for (auto score : scores)
-    speeds.push_back (score.speed);
+  for (auto& key_speed_search : key_speed_search_vec)
+    key_speed_search.speed_search->start_search_jobs (thread_pool, scan1);
 
-  scores = speed_search.run_search (key, scan2, speeds);
+  thread_pool.wait_all();
 
-  /* improve or refine best match */
-  select_n_best_scores (scores, 1);
+  for (auto& key_speed_search : key_speed_search_vec)
+    key_speed_search.scores = key_speed_search.speed_search->get_results();
+
+  for (auto& key_speed_search : key_speed_search_vec)
+    {
+      /* improve N best matches */
+      select_n_best_scores (key_speed_search.scores, n_best);
+
+      vector<double> speeds;
+      for (auto score : key_speed_search.scores)
+        speeds.push_back (score.speed);
+
+      key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan2, speeds);
+    }
+
+  thread_pool.wait_all();
+
+  for (auto& key_speed_search : key_speed_search_vec)
+    key_speed_search.speed_search->start_search_jobs (thread_pool, scan2);
+
+  thread_pool.wait_all();
+
+  for (auto& key_speed_search : key_speed_search_vec)
+    key_speed_search.scores = key_speed_search.speed_search->get_results();
+
+  for (auto& key_speed_search : key_speed_search_vec)
+    {
+      /* improve or refine best match */
+      select_n_best_scores (key_speed_search.scores, 1);
+    }
+
   if (Params::detect_speed_patient)
     {
       // slower version: prepare magnitudes again, according to best speed
-      scores = speed_search.run_search (key, scan3, { scores[0].speed });
+      for (auto& key_speed_search : key_speed_search_vec)
+        key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan3, { key_speed_search.scores[0].speed });
+
+      thread_pool.wait_all();
+
+      for (auto& key_speed_search : key_speed_search_vec)
+        key_speed_search.speed_search->start_search_jobs (thread_pool, scan3);
+
+      thread_pool.wait_all();
+
+      for (auto& key_speed_search : key_speed_search_vec)
+        key_speed_search.scores = key_speed_search.speed_search->get_results();
     }
   else
     {
       // faster version: keep already computed magnitudes
-      scores = speed_search.refine_search (scan3, scores[0].speed);
+      for (auto& key_speed_search : key_speed_search_vec)
+        key_speed_search.speed_search->start_refine_jobs (thread_pool, scan3, key_speed_search.scores[0].speed);
+
+      thread_pool.wait_all();
+
+      for (auto& key_speed_search : key_speed_search_vec)
+        key_speed_search.scores = key_speed_search.speed_search->get_refine_results();
     }
-  double best_speed = score_smooth_find_best (scores, 1 - scan3.step, scan3_smooth_distance);
-
-  double best_quality = 0;
-  for (auto score : scores)
-    best_quality = max (best_quality, score.quality);
-
-  if (print_results)
+  for (auto& key_speed_search : key_speed_search_vec)
     {
-      double delta = -1;
-      if (Params::test_speed > 0)
-        delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
-      printf ("detect_speed %f %f %.4f   ", best_speed, best_quality, delta);
+      double best_speed = score_smooth_find_best (key_speed_search.scores, 1 - scan3.step, scan3_smooth_distance);
 
-      double total = 0.0;
-      for (auto t : speed_search.get_times())
+      double best_quality = 0;
+      for (auto score : key_speed_search.scores)
+        best_quality = max (best_quality, score.quality);
+
+      if (print_results)
         {
-          total += t;
-          printf (" %.3f", t);
+          double delta = -1;
+          if (Params::test_speed > 0)
+            delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
+          printf ("detect_speed %f %f %.4f   ", best_speed, best_quality, delta);
+
+          double total = 0.0;
+          for (auto t : key_speed_search.speed_search->get_times())
+            {
+              total += t;
+              printf (" %.3f", t);
+            }
+          printf (" %.3f\n", total);
         }
-      printf (" %.3f\n", total);
-    }
 
-  if (best_quality > speed_sync_threshold)
-    return best_speed;
-  else
-    return 1;
-}
-
-vector<DetectSpeedResult>
-detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_results)
-{
-  vector<DetectSpeedResult> results;
-
-  for (const auto& key : key_list)
-    {
-      DetectSpeedResult speed_result;
-      speed_result.key   = key;
-      speed_result.speed = detect_speed (key, in_data, print_results);
-
-      // speeds closer to 1.0 than this usually work without stretching before decode
-      if (speed_result.speed < 0.9999 || speed_result.speed > 1.0001)
-        results.push_back (speed_result);
+      if (best_quality > speed_sync_threshold)
+        {
+          results.emplace_back (DetectSpeedResult { key_speed_search.key, best_speed });
+        }
     }
   return results;
 }
