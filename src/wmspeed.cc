@@ -791,7 +791,9 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
 
       if (best_quality > speed_sync_threshold)
         {
-          results.emplace_back (DetectSpeedResult { key_speed_search.key, best_speed });
+          // speeds closer to 1.0 than this usually work without stretching before decode
+          if (best_speed < 0.9999 || best_speed > 1.0001)
+            results.emplace_back (DetectSpeedResult { key_speed_search.key, best_speed });
         }
     }
   return results;
