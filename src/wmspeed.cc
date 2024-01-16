@@ -693,7 +693,7 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
     {
       const double clip_location = get_best_clip_location (key, in_data, scan1.seconds, clip_candidates);
 
-      key_speed_search_vec.emplace_back (KeySpeedSearch {key, std::make_unique<SpeedSearch> (in_data, clip_location), {}});
+      key_speed_search_vec.push_back ({key, std::make_unique<SpeedSearch> (in_data, clip_location), {}});
     }
 
   /* initial search using grid */
@@ -793,7 +793,7 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
         {
           // speeds closer to 1.0 than this usually work without stretching before decode
           if (best_speed < 0.9999 || best_speed > 1.0001)
-            results.emplace_back (DetectSpeedResult { key_speed_search.key, best_speed });
+            results.push_back ({ key_speed_search.key, best_speed });
         }
     }
   return results;
