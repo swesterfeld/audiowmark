@@ -56,7 +56,7 @@ print_usage()
   printf ("    audiowmark cmp <watermarked_wav> <message_hex>\n");
   printf ("\n");
   printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
-  printf ("    audiowmark gen-key <key_file>\n");
+  printf ("    audiowmark gen-key <key_file> [ --name <key_name> ]\n");
   printf ("\n");
   printf ("Global options:\n");
   printf ("  -q, --quiet             disable information messages\n");
@@ -400,9 +400,29 @@ test_resample (const string& in_file, const string& out_file, int new_rate)
   return 0;
 }
 
-int
-gen_key (const string& outfile)
+static void
+check_key_name (const string& name)
 {
+  for (auto ch : name)
+    {
+      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
+           ch == ' ' || ch == '-' || ch == '_')
+        {
+          // fine
+        }
+      else
+        {
+          error ("audiowmark: bad key name: '%c' is not allowed as character in key names\n", ch);
+          exit (1);
+        }
+    }
+}
+
+int
+gen_key (const string& outfile, const string& key_name)
+{
+  check_key_name (key_name);
+
   FILE *f = fopen (outfile.c_str(), "w");
   if (!f)
     {
@@ -410,6 +430,8 @@ gen_key (const string& outfile)
       return 1;
     }
   fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
+  if (key_name != "")
+    fprintf (f, "name \"%s\"\n", key_name.c_str());
   fclose (f);
   return 0;
 }
@@ -864,8 +886,10 @@ main (int argc, char **argv)
     }
   else if (ap.parse_cmd ("gen-key"))
     {
+      string key_name;
+      ap.parse_opt ("--name", key_name);
       args = parse_positional (ap, "key_file");
-      return gen_key (args[0]);
+      return gen_key (args[0], key_name);
     }
   else if (ap.parse_cmd ("gentest"))
     {
