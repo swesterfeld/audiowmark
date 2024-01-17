@@ -140,6 +140,7 @@ public:
   enum class Type { BLOCK, CLIP, ALL };
   struct Pattern
   {
+    Key               key;
     double            time = 0;
     vector<int>       bit_vec;
     float             decode_error = 0;
@@ -159,12 +160,13 @@ public:
     speed_pattern = sp;
   }
   void
-  add_pattern (double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
+  add_pattern (const Key& key, double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
   {
     /* add_pattern can be called by any thread (safe to use from ThreadPool jobs) */
     std::lock_guard<std::mutex> lg (pattern_mutex);
 
     Pattern p;
+    p.key = key;
     p.time = time;
     p.sync_score = sync_score;
     p.bit_vec = bit_vec;
@@ -233,7 +235,8 @@ public:
 
         const int seconds = pattern.time;
 
-        fprintf (outfile, "    { \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
+        fprintf (outfile, "    { \"key:\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
+                 pattern.key.name().c_str(),
                  seconds / 60, seconds % 60,
                  bit_vec_to_str (pattern.bit_vec).c_str(),
                  pattern.sync_score.quality, pattern.decode_error,
@@ -372,13 +375,13 @@ public:
 
                 /* ---- deal with this pattern ---- */
                 const double time = double (sync_score.index) / wav_data.sample_rate();
-                thread_pool.add_job ([sync_score, raw_bit_vec, time, &result_set]()
+                thread_pool.add_job ([key, sync_score, raw_bit_vec, time, &result_set]()
                   {
                     float decode_error = 0;
                     vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
                     if (!bit_vec.empty())
-                      result_set.add_pattern (time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                      result_set.add_pattern (key, time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
                   });
                 total_count += 1;
 
@@ -403,7 +406,7 @@ public:
                         ab_bits[i * 2] = ab_raw_bit_vec[0][i];
                         ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
                       }
-                    thread_pool.add_job ([sync_score, ab_bits, ab_quality, time, &result_set]()
+                    thread_pool.add_job ([key, sync_score, ab_bits, ab_quality, time, &result_set]()
                       {
                         float decode_error = 0;
                         vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
@@ -413,7 +416,7 @@ public:
                             SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
                             score_ab.index = sync_score.index;
                             score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-                            result_set.add_pattern (time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                            result_set.add_pattern (key, time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
                           }
                       });
                   }
@@ -431,13 +434,13 @@ public:
 
             vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
-            thread_pool.add_job ([score_all, soft_bit_vec, &result_set]()
+            thread_pool.add_job ([key, score_all, soft_bit_vec, &result_set]()
               {
                 float decode_error = 0;
                 vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
                 if (!bit_vec.empty())
-                  result_set.add_pattern (/* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+                  result_set.add_pattern (key, /* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
               });
           }
       }
@@ -554,13 +557,13 @@ class ClipDecoder
                 SyncFinder::Score sync_score_nopad = sync_score;
                 sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
 
-                thread_pool.add_job ([raw_bit_vec, sync_score_nopad, time_offset_sec, &result_set]()
+                thread_pool.add_job ([key, raw_bit_vec, sync_score_nopad, time_offset_sec, &result_set]()
                   {
                     float decode_error = 0;
                     vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
 
                     if (!bit_vec.empty())
-                      result_set.add_pattern (time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+                      result_set.add_pattern (key, time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
                   });
               }
           }
