@@ -197,7 +197,7 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
     total_frame_count *= 2;
   for (size_t sync_shift = 0; sync_shift < Params::frame_size; sync_shift += Params::sync_search_step)
     {
-      sync_fft (wav_data, sync_shift, frame_count (wav_data) - 1, fft_db, have_frames, /* want all frames */ {});
+      sync_fft_parallel (thread_pool, wav_data, sync_shift, fft_db, have_frames);
 
       vector<int> start_frames;
       for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
@@ -460,6 +460,58 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
 
           have_frames[f] = 1;
         }
+    }
+}
+
+void
+SyncFinder::sync_fft_parallel (ThreadPool& thread_pool,
+                               const WavData& wav_data,
+                               size_t index,
+                               std::vector<float>& fft_out_db,
+                               std::vector<char>& have_frames)
+{
+  std::mutex result_mutex;
+
+  fft_out_db.clear();
+  have_frames.clear();
+
+  struct PartialFFTResult
+  {
+    int           start_frame = 0;
+    vector<char>  have_frames;
+    vector<float> fft_db;
+  };
+  vector<PartialFFTResult> partial_fft_results;
+  const int frames_per_job = 256;
+  for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame += frames_per_job)
+    {
+      thread_pool.add_job ([this, start_frame, index, frames_per_job,
+                            &wav_data, &partial_fft_results, &result_mutex]
+        {
+          const int remaining_frames = frame_count (wav_data) - 1 - start_frame;
+          const int frames = std::min (remaining_frames, frames_per_job);
+          if (frames > 0)
+            {
+              PartialFFTResult result;
+              result.start_frame = start_frame;
+              sync_fft (wav_data, index + start_frame * Params::frame_size, frames, result.fft_db, result.have_frames, /* want all frames */ {});
+              if (!result.fft_db.size())
+                warning ("SyncFinder: sync_fft_parallel expected %d fft frames, but result was empty\n", frames);
+              {
+                std::lock_guard<std::mutex> lg (result_mutex);
+                partial_fft_results.push_back (result);
+              }
+            }
+        });
+    }
+  thread_pool.wait_all();
+  std::sort (partial_fft_results.begin(), partial_fft_results.end(),
+             [] (const auto& r1, const auto& r2) { return r1.start_frame < r2.start_frame; });
+
+  for (const auto& partial_fft_result : partial_fft_results)
+    {
+      fft_out_db.insert (fft_out_db.end(), partial_fft_result.fft_db.begin(), partial_fft_result.fft_db.end());
+      have_frames.insert (have_frames.end(), partial_fft_result.have_frames.begin(), partial_fft_result.have_frames.end());
     }
 }
 

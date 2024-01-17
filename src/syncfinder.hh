@@ -21,6 +21,7 @@
 #include "convcode.hh"
 #include "wavdata.hh"
 #include "random.hh"
+#include "threadpool.hh"
 
 /*
  * The SyncFinder class searches for sync bits in an input WavData. It is used
@@ -108,6 +109,11 @@ public:
   static double bit_quality (float umag, float dmag, int bit);
   static double normalize_sync_quality (double raw_quality);
 private:
+  void sync_fft_parallel (ThreadPool& thread_pool,
+                          const WavData& wav_data,
+                          size_t index,
+                          std::vector<float>& fft_out_db,
+                          std::vector<char>& have_frames);
   void sync_fft (const WavData& wav_data,
                  size_t index,
                  size_t frame_count,
