@@ -207,6 +207,92 @@ Key::set_test_key (uint64_t key)
   m_name = string_printf ("test-key-%" PRId64, key);
 }
 
+static bool
+string_chars (char ch)
+{
+  if ((ch >= 'A' && ch <= 'Z')
+  ||  (ch >= '0' && ch <= '9')
+  ||  (ch >= 'a' && ch <= 'z')
+  ||  (ch == '.')
+  ||  (ch == ':')
+  ||  (ch == '=')
+  ||  (ch == '/')
+  ||  (ch == '-')
+  ||  (ch == '_'))
+    return true;
+
+  return false;
+}
+
+static bool
+white_space (char ch)
+{
+  return (ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r');
+}
+
+static bool
+tokenize (const string& line, vector<string>& tokens)
+{
+  enum { BLANK, STRING, QUOTED_STRING, QUOTED_STRING_ESCAPED, COMMENT } state = BLANK;
+  string s;
+
+  string xline = line + '\n';
+  tokens.clear();
+  for (string::const_iterator i = xline.begin(); i != xline.end(); i++)
+    {
+      if (state == BLANK && string_chars (*i))
+        {
+          state = STRING;
+          s += *i;
+        }
+      else if (state == BLANK && *i == '"')
+        {
+          state = QUOTED_STRING;
+        }
+      else if (state == BLANK && white_space (*i))
+        {
+          // ignore more whitespaces if we've already seen one
+        }
+      else if (state == STRING && string_chars (*i))
+        {
+          s += *i;
+        }
+      else if ((state == STRING && white_space (*i))
+           ||  (state == QUOTED_STRING && *i == '"'))
+        {
+          tokens.push_back (s);
+          s = "";
+          state = BLANK;
+        }
+      else if (state == QUOTED_STRING && *i == '\\')
+        {
+          state = QUOTED_STRING_ESCAPED;
+        }
+      else if (state == QUOTED_STRING)
+        {
+          s += *i;
+        }
+      else if (state == QUOTED_STRING_ESCAPED)
+        {
+          s += *i;
+          state = QUOTED_STRING;
+        }
+      else if (*i == '#')
+        {
+          state = COMMENT;
+        }
+      else if (state == COMMENT)
+        {
+          // ignore comments
+        }
+      else
+        {
+          return false;
+        }
+    }
+  return state == BLANK || state == COMMENT;
+}
+
 void
 Key::load_key (const string& key_file)
 {
@@ -222,34 +308,38 @@ Key::load_key (const string& key_file)
   if (sep != string::npos)
     m_name = m_name.substr (sep + 1);
 
-  const regex blank_re (R"(\s*(#.*)?[\r\n]+)");
-  const regex key_re (R"(\s*key\s+([0-9a-f]+)\s*(#.*)?[\r\n]+)");
-
   char buffer[1024];
   int line = 1;
   int keys = 0;
   while (fgets (buffer, 1024, f))
     {
-      string s = buffer;
-
-      std::smatch match;
-      if (regex_match (s, blank_re))
+      vector<string> tokens;
+      bool parse_ok = false;
+      if (tokenize (buffer, tokens))
         {
-          /* blank line or comment */
-        }
-      else if (regex_match (s, match, key_re))
-        {
-          /* line containing aes key */
-          vector<unsigned char> key = hex_str_to_vec (match[1].str());
-          if (key.size() != Key::SIZE)
+          if (tokens.size() == 2 && tokens[0] == "key") /* line containing aes key */
             {
-              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, Key::SIZE * 8);
-              exit (1);
+              vector<unsigned char> key = hex_str_to_vec (tokens[1]);
+              if (key.size() != Key::SIZE)
+                {
+                  error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, Key::SIZE * 8);
+                  exit (1);
+                }
+              m_aes_key = key;
+              keys++;
+              parse_ok = true;
             }
-          m_aes_key = key;
-          keys++;
+          if (tokens.size() == 2 && tokens[0] == "name") /* key name */
+            {
+              m_name = tokens[1];
+              parse_ok = true;
+            }
+          if (tokens.empty()) /* blank line or comment */
+            {
+              parse_ok = true;
+            }
         }
-      else
+      if (!parse_ok)
         {
           error ("audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
           exit (1);
