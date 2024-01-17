@@ -686,73 +686,59 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
     vector<SpeedSync::Score>      scores;
   };
   vector<KeySpeedSearch> key_speed_search_vec;
-
   ThreadPool thread_pool;
 
+
+  auto run_search = [&] (const SpeedScanParams& scan_params, auto get_speeds) {
+    for (auto& key_speed_search : key_speed_search_vec)
+      key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan_params, get_speeds (key_speed_search));
+
+    thread_pool.wait_all();
+
+    for (auto& key_speed_search : key_speed_search_vec)
+      key_speed_search.speed_search->start_search_jobs (thread_pool, scan_params);
+
+    thread_pool.wait_all();
+
+    for (auto& key_speed_search : key_speed_search_vec)
+      key_speed_search.scores = key_speed_search.speed_search->get_results();
+  };
+
+  /* initial search using grid */
   for (auto& key : key_list)
     {
       const double clip_location = get_best_clip_location (key, in_data, scan1.seconds, clip_candidates);
 
       key_speed_search_vec.push_back ({key, std::make_unique<SpeedSearch> (in_data, clip_location), {}});
     }
-
-  /* initial search using grid */
-  for (auto& key_speed_search : key_speed_search_vec)
-    key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan1, { 1.0 });
-
-  thread_pool.wait_all();
-
-  for (auto& key_speed_search : key_speed_search_vec)
-    key_speed_search.speed_search->start_search_jobs (thread_pool, scan1);
-
-  thread_pool.wait_all();
-
-  for (auto& key_speed_search : key_speed_search_vec)
-    key_speed_search.scores = key_speed_search.speed_search->get_results();
-
-  for (auto& key_speed_search : key_speed_search_vec)
+  run_search (scan1, [] (auto& key_speed_search) -> vector<double>
     {
-      /* improve N best matches */
+      return { 1.0 };
+    });
+
+  /* improve N best matches */
+  run_search (scan2, [n_best] (auto& key_speed_search) -> vector<double>
+    {
       select_n_best_scores (key_speed_search.scores, n_best);
 
       vector<double> speeds;
       for (auto score : key_speed_search.scores)
         speeds.push_back (score.speed);
 
-      key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan2, speeds);
-    }
+      return speeds;
+    });
 
-  thread_pool.wait_all();
-
+  /* improve or refine best match */
   for (auto& key_speed_search : key_speed_search_vec)
-    key_speed_search.speed_search->start_search_jobs (thread_pool, scan2);
-
-  thread_pool.wait_all();
-
-  for (auto& key_speed_search : key_speed_search_vec)
-    key_speed_search.scores = key_speed_search.speed_search->get_results();
-
-  for (auto& key_speed_search : key_speed_search_vec)
-    {
-      /* improve or refine best match */
-      select_n_best_scores (key_speed_search.scores, 1);
-    }
+    select_n_best_scores (key_speed_search.scores, 1);
 
   if (Params::detect_speed_patient)
     {
       // slower version: prepare magnitudes again, according to best speed
-      for (auto& key_speed_search : key_speed_search_vec)
-        key_speed_search.speed_search->start_prepare_jobs (thread_pool, key_speed_search.key, scan3, { key_speed_search.scores[0].speed });
-
-      thread_pool.wait_all();
-
-      for (auto& key_speed_search : key_speed_search_vec)
-        key_speed_search.speed_search->start_search_jobs (thread_pool, scan3);
-
-      thread_pool.wait_all();
-
-      for (auto& key_speed_search : key_speed_search_vec)
-        key_speed_search.scores = key_speed_search.speed_search->get_results();
+      run_search (scan3, [] (auto& key_speed_search) -> vector<double>
+        {
+          return { key_speed_search.scores[0].speed };
+        });
     }
   else
     {
