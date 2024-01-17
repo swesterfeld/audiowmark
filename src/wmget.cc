@@ -146,21 +146,15 @@ public:
     float             decode_error = 0;
     SyncFinder::Score sync_score;
     Type              type;
-    bool              speed_pattern;
+    double            speed = 0;
   };
 private:
   std::mutex      pattern_mutex;
   vector<Pattern> patterns;
-  bool            speed_pattern = false;
 
 public:
   void
-  set_speed_pattern (bool sp)
-  {
-    speed_pattern = sp;
-  }
-  void
-  add_pattern (const Key& key, double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type)
+  add_pattern (const Key& key, double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type, double speed)
   {
     /* add_pattern can be called by any thread (safe to use from ThreadPool jobs) */
     std::lock_guard<std::mutex> lg (pattern_mutex);
@@ -172,7 +166,7 @@ public:
     p.bit_vec = bit_vec;
     p.decode_error = decode_error;
     p.type = pattern_type;
-    p.speed_pattern = speed_pattern;
+    p.speed = speed;
 
     patterns.push_back (p);
   }
@@ -201,7 +195,7 @@ public:
     });
   }
   void
-  print_json (const WavData& wav_data, const std::string &json_file, const double speed)
+  print_json (const WavData& wav_data, const std::string &json_file)
   {
     FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
     if (!outfile)
@@ -211,7 +205,6 @@ public:
       }
     const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
     fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
-    fprintf (outfile, "  \"speed\": %.6f,\n", speed);
     fprintf (outfile, "  \"matches\": [\n");
     int nth = 0;
     for (const auto& pattern : patterns)
@@ -230,17 +223,18 @@ public:
           btype = "ALL";
         if (pattern.type == Type::CLIP)
           btype = "CLIP-" + btype;
-        if (pattern.speed_pattern)
+        if (pattern.speed != 1)
           btype += "-SPEED";
 
         const int seconds = pattern.time;
 
-        fprintf (outfile, "    { \"key:\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\" }",
+        fprintf (outfile, "    { \"key\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\", \"speed\": %.6f }",
                  pattern.key.name().c_str(),
                  seconds / 60, seconds % 60,
                  bit_vec_to_str (pattern.bit_vec).c_str(),
                  pattern.sync_score.quality, pattern.decode_error,
-                 btype.c_str());
+                 btype.c_str(),
+                 pattern.speed);
       }
     fprintf (outfile, " ]\n}\n");
     fclose (outfile);
@@ -253,7 +247,7 @@ public:
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
             const char *extra = "";
-            if (pattern.speed_pattern)
+            if (pattern.speed != 1)
               extra = " SPEED";
 
             printf ("pattern   all %s %.3f %.3f%s\n", bit_vec_to_str (pattern.bit_vec).c_str(),
@@ -275,7 +269,7 @@ public:
               }
             if (pattern.type == Type::CLIP)
               block_str = "CLIP-" + block_str;
-            if (pattern.speed_pattern)
+            if (pattern.speed != 1)
               block_str += "-SPEED";
 
             const int seconds = pattern.time;
@@ -327,8 +321,13 @@ public:
 class BlockDecoder
 {
   int debug_sync_frame_count = 0;
+  const double speed = 0;
   vector<SyncFinder::KeyResult> key_results; // stored here for sync debugging
 public:
+  BlockDecoder (double speed) :
+    speed (speed)
+  {
+  }
   void
   run (const vector<Key>& key_list, const WavData& wav_data, ResultSet& result_set)
   {
@@ -375,13 +374,13 @@ public:
 
                 /* ---- deal with this pattern ---- */
                 const double time = double (sync_score.index) / wav_data.sample_rate();
-                thread_pool.add_job ([key, sync_score, raw_bit_vec, time, &result_set]()
+                thread_pool.add_job ([this, key, sync_score, raw_bit_vec, time, &result_set]()
                   {
                     float decode_error = 0;
                     vector<int> bit_vec = code_decode_soft (sync_score.block_type, normalize_soft_bits (raw_bit_vec), &decode_error);
 
                     if (!bit_vec.empty())
-                      result_set.add_pattern (key, time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                      result_set.add_pattern (key, time, sync_score, bit_vec, decode_error, ResultSet::Type::BLOCK, speed);
                   });
                 total_count += 1;
 
@@ -406,7 +405,7 @@ public:
                         ab_bits[i * 2] = ab_raw_bit_vec[0][i];
                         ab_bits[i * 2 + 1] = ab_raw_bit_vec[1][i];
                       }
-                    thread_pool.add_job ([key, sync_score, ab_bits, ab_quality, time, &result_set]()
+                    thread_pool.add_job ([this, key, sync_score, ab_bits, ab_quality, time, &result_set]()
                       {
                         float decode_error = 0;
                         vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (ab_bits), &decode_error);
@@ -416,7 +415,7 @@ public:
                             SyncFinder::Score score_ab  { 0, 0, ConvBlockType::ab };
                             score_ab.index = sync_score.index;
                             score_ab.quality = (ab_quality[0] + ab_quality[1]) / 2;
-                            result_set.add_pattern (key, time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK);
+                            result_set.add_pattern (key, time, score_ab, bit_vec, decode_error, ResultSet::Type::BLOCK, speed);
                           }
                       });
                   }
@@ -434,13 +433,13 @@ public:
 
             vector<float> soft_bit_vec = normalize_soft_bits (raw_bit_vec_all);
 
-            thread_pool.add_job ([key, score_all, soft_bit_vec, &result_set]()
+            thread_pool.add_job ([this, key, score_all, soft_bit_vec, &result_set]()
               {
                 float decode_error = 0;
                 vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, soft_bit_vec, &decode_error);
 
                 if (!bit_vec.empty())
-                  result_set.add_pattern (key, /* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL);
+                  result_set.add_pattern (key, /* time */ 0.0, score_all, bit_vec, decode_error, ResultSet::Type::ALL, speed);
               });
           }
       }
@@ -508,6 +507,7 @@ public:
 class ClipDecoder
 {
   const int frames_per_block = 0;
+  const double speed = 0;
 
   vector<float>
   mix_or_linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
@@ -557,13 +557,13 @@ class ClipDecoder
                 SyncFinder::Score sync_score_nopad = sync_score;
                 sync_score_nopad.index = time_offset_sec * wav_data.sample_rate();
 
-                thread_pool.add_job ([key, raw_bit_vec, sync_score_nopad, time_offset_sec, &result_set]()
+                thread_pool.add_job ([this, key, raw_bit_vec, sync_score_nopad, time_offset_sec, &result_set]()
                   {
                     float decode_error = 0;
                     vector<int> bit_vec = code_decode_soft (ConvBlockType::ab, normalize_soft_bits (raw_bit_vec), &decode_error);
 
                     if (!bit_vec.empty())
-                      result_set.add_pattern (key, time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP);
+                      result_set.add_pattern (key, time_offset_sec, sync_score_nopad, bit_vec, decode_error, ResultSet::Type::CLIP, speed);
                   });
               }
           }
@@ -617,8 +617,9 @@ class ClipDecoder
     run_padded (key_list, l_wav_data, result_set, time_offset);
    }
 public:
-  ClipDecoder() :
-    frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
+  ClipDecoder(double speed) :
+    frames_per_block (mark_sync_frame_count() + mark_data_frame_count()),
+    speed (speed)
   {
   }
   void
@@ -669,26 +670,24 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
             printf ("speed %.6f\n", speed_result.speed);
           WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed_result.speed);
 
-          result_set.set_speed_pattern (true);
-          BlockDecoder block_decoder;
+          BlockDecoder block_decoder (speed_result.speed);
           block_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
 
-          ClipDecoder clip_decoder;
+          ClipDecoder clip_decoder (speed_result.speed);
           clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
-          result_set.set_speed_pattern (false);
         }
     }
 
-  BlockDecoder block_decoder;
+  BlockDecoder block_decoder (1);
   block_decoder.run (key_list, wav_data, result_set);
 
-  ClipDecoder clip_decoder;
+  ClipDecoder clip_decoder (1) ;
   clip_decoder.run (key_list, wav_data, result_set);
 
   result_set.sort_by_time();
 
   if (!Params::json_output.empty())
-    result_set.print_json (wav_data, Params::json_output, 42 /*FIXME */);
+    result_set.print_json (wav_data, Params::json_output);
 
   if (Params::json_output != "-")
     result_set.print();
