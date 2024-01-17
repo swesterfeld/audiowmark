@@ -745,7 +745,7 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
           double delta = -1;
           if (Params::test_speed > 0)
             delta = 100 * fabs (best_speed - Params::test_speed) / Params::test_speed;
-          printf ("detect_speed %f %f %.4f   ", best_speed, best_quality, delta);
+          printf ("detect_speed %f %f %.4f\n", best_speed, best_quality, delta);
         }
 
       if (best_quality > speed_sync_threshold)
