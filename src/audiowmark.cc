@@ -147,6 +147,32 @@ parse_encoding (const string& str)
 }
 
 int
+atoi_or_die (const string& s)
+{
+  char *e = nullptr;
+  int i = strtol (s.c_str(), &e, 0);
+  if (e && e[0])
+    {
+      error ("audiowmark: error during string->int conversion: %s\n", s.c_str());
+      exit (1);
+    }
+  return i;
+}
+
+float
+atof_or_die (const string& s)
+{
+  char *e = nullptr;
+  float f = strtof (s.c_str(), &e);
+  if (e && e[0])
+    {
+      error ("audiowmark: error during string->float conversion: %s\n", s.c_str());
+      exit (1);
+    }
+  return f;
+}
+
+int
 gentest (const string& infile, const string& outfile)
 {
   printf ("generating test sample from '%s' to '%s'\n", infile.c_str(), outfile.c_str());
@@ -195,7 +221,7 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
       return 1;
     }
 
-  size_t start = atoi (start_str.c_str());
+  size_t start = atoi_or_die (start_str.c_str());
 
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
@@ -527,7 +553,7 @@ public:
     string out_s;
     if (parse_opt (option, out_s))
       {
-        out_i = atoi (out_s.c_str());
+        out_i = atoi_or_die (out_s.c_str());
         return true;
       }
     return false;
@@ -538,7 +564,7 @@ public:
     string out_s;
     if (parse_opt (option, out_s))
       {
-        out_f = atof (out_s.c_str());
+        out_f = atof_or_die (out_s.c_str());
         return true;
       }
     return false;
@@ -624,7 +650,7 @@ parse_key_list (ArgParser& ap)
   for (auto t : test_keys)
     {
       Key key;
-      key.set_test_key (atoi (t.c_str()));
+      key.set_test_key (atoi_or_die (t.c_str()));
       key_list.push_back (key);
     }
   if (key_list.empty())
@@ -934,7 +960,7 @@ main (int argc, char **argv)
 
       Key key = parse_key (ap);
       args = parse_positional (ap, "input_wav", "output_wav", "seed", "seconds");
-      return test_clip (key, args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+      return test_clip (key, args[0], args[1], atoi_or_die (args[2].c_str()), atoi_or_die (args[3].c_str()));
     }
   else if (ap.parse_cmd ("test-speed"))
     {
@@ -942,7 +968,7 @@ main (int argc, char **argv)
 
       Key key = parse_key (ap);
       args = parse_positional (ap, "seed");
-      return test_speed (key, atoi (args[0].c_str()));
+      return test_speed (key, atoi_or_die (args[0].c_str()));
     }
   else if (ap.parse_cmd ("test-gen-noise"))
     {
@@ -950,21 +976,21 @@ main (int argc, char **argv)
 
       Key key = parse_key (ap);
       args = parse_positional (ap, "output_wav", "seconds", "sample_rate");
-      return test_gen_noise (key, args[0], atof (args[1].c_str()), atoi (args[2].c_str()));
+      return test_gen_noise (key, args[0], atof_or_die (args[1].c_str()), atoi_or_die (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-change-speed"))
     {
       parse_shared_options (ap);
 
       args = parse_positional (ap, "input_wav", "output_wav", "speed");
-      return test_change_speed (args[0], args[1], atof (args[2].c_str()));
+      return test_change_speed (args[0], args[1], atof_or_die (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-resample"))
     {
       parse_shared_options (ap);
 
       args = parse_positional (ap, "input_wav", "output_wav", "new_rate");
-      return test_resample (args[0], args[1], atoi (args[2].c_str()));
+      return test_resample (args[0], args[1], atoi_or_die (args[2].c_str()));
     }
   else if (ap.remaining_args().size())
     {
