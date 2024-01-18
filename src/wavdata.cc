@@ -57,6 +57,9 @@ WavData::load (AudioInputStream *in_stream)
 {
   m_samples.clear(); // get rid of old contents
 
+  if (in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
+    m_samples.reserve (in_stream->n_frames() * in_stream->n_channels());
+
   vector<float> m_buffer;
   while (true)
     {
