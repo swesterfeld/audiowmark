@@ -664,26 +664,13 @@ parse_key_list (ArgParser& ap)
 Key
 parse_key (ArgParser& ap)
 {
-  Key key; // default initialized with zero key
-  string s;
-  int i;
-  int have_key = 0;
-  if (ap.parse_opt  ("--key", s))
+  auto key_list = parse_key_list (ap);
+  if (key_list.size() > 1)
     {
-      have_key++;
-      key.load_key (s);
-    }
-  if (ap.parse_opt ("--test-key", i))
-    {
-      have_key++;
-      key.set_test_key (i);
-    }
-  if (have_key > 1)
-    {
-      error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      error ("audiowmark %s: watermark key can at most be set once (--key / --test-key option)\n", ap.command().c_str());
       exit (1);
     }
-  return key;
+  return key_list[0];
 }
 
 void
