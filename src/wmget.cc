@@ -194,6 +194,28 @@ public:
         }
     });
   }
+  string
+  json_escape (const string& s)
+  {
+    string result;
+    for (unsigned ch : s)
+      {
+        if (ch == '"' || ch == '\\')
+          {
+            result += '\\';
+            result += ch;
+          }
+        else if (ch < 32)
+          {
+            result += string_printf ("\\u%04X", ch);
+          }
+        else
+          {
+            result += ch;
+          }
+      }
+    return result;
+  }
   void
   print_json (const WavData& wav_data, const std::string &json_file)
   {
@@ -229,7 +251,7 @@ public:
         const int seconds = pattern.time;
 
         fprintf (outfile, "    { \"key\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\", \"speed\": %.6f }",
-                 pattern.key.name().c_str(),
+                 json_escape (pattern.key.name()).c_str(),
                  seconds / 60, seconds % 60,
                  bit_vec_to_str (pattern.bit_vec).c_str(),
                  pattern.sync_score.quality, pattern.decode_error,
