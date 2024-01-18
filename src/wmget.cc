@@ -171,12 +171,14 @@ public:
     patterns.push_back (p);
   }
   void
-  sort_by_time()
+  sort()
   {
     std::sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
       const int all1 = p1.type == Type::ALL;
       const int all2 = p2.type == Type::ALL;
-      if (all1 != all2)
+      if (p1.key.name() != p2.key.name())
+        return p1.key.name() < p2.key.name();
+      else if (all1 != all2)
         return all1 < all2;
       else if (p1.time != p2.time)
         return p1.time < p2.time;
@@ -264,8 +266,23 @@ public:
   void
   print()
   {
+    string last_key_name;
+
     for (const auto& pattern : patterns)
       {
+        if (pattern.key.name() != last_key_name)
+          {
+            printf ("key %s\n", pattern.key.name().c_str());
+            last_key_name = pattern.key.name();
+
+            // currently we assume that speed detection returns one best speed for each key
+            for (auto p : patterns)
+              if (p.key.name() == pattern.key.name() && p.speed != 1)
+                {
+                  printf ("speed %.6f\n", p.speed);
+                  break;
+                }
+          }
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
             const char *extra = "";
@@ -688,8 +705,6 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
 
       for (const auto& speed_result : speed_results)
         {
-          if (Params::json_output != "-")
-            printf ("speed %.6f\n", speed_result.speed);
           WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed_result.speed);
 
           BlockDecoder block_decoder (speed_result.speed);
@@ -706,7 +721,7 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
   ClipDecoder clip_decoder (1) ;
   clip_decoder.run (key_list, wav_data, result_set);
 
-  result_set.sort_by_time();
+  result_set.sort();
 
   if (!Params::json_output.empty())
     result_set.print_json (wav_data, Params::json_output);
