@@ -176,12 +176,16 @@ public:
     std::sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
       const int all1 = p1.type == Type::ALL;
       const int all2 = p2.type == Type::ALL;
+      const auto p1bits = bit_vec_to_str (p1.bit_vec);
+      const auto p2bits = bit_vec_to_str (p2.bit_vec);
       if (p1.key.name() != p2.key.name())
         return p1.key.name() < p2.key.name();
       else if (all1 != all2)
         return all1 < all2;
       else if (p1.time != p2.time)
         return p1.time < p2.time;
+      else if (p1bits != p2bits)
+        return p1bits < p2bits;
       else
         {
           auto ab = [] (const Pattern& pattern) {
@@ -209,7 +213,7 @@ public:
           }
         else if (ch < 32)
           {
-            result += string_printf ("\\u%04X", ch);
+            result += string_printf ("\\u%04x", ch);
           }
         else
           {
