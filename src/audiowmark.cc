@@ -17,6 +17,11 @@
 
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <string>
 #include <random>
 #include <algorithm>
@@ -428,17 +433,23 @@ int
 gen_key (const string& outfile, const string& key_name)
 {
   string ename = escape_key_name (key_name);
-
-  FILE *f = fopen (outfile.c_str(), "w");
+  int fd = open (outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (fd < 0)
+    {
+      error ("audiowmark: error opening file %s: %s\n", outfile.c_str(), strerror (errno));
+      return 1;
+    }
+  FILE *f = fdopen (fd, "w");
   if (!f)
     {
+      close (fd);
       error ("audiowmark: error writing to file %s\n", outfile.c_str());
       return 1;
     }
   fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
   if (key_name != "")
     fprintf (f, "name \"%s\"\n", ename.c_str());
-  fclose (f);
+  fclose (f); // closes fd
   return 0;
 }
 
