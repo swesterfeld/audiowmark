@@ -400,28 +400,34 @@ test_resample (const string& in_file, const string& out_file, int new_rate)
   return 0;
 }
 
-static void
-check_key_name (const string& name)
+static string
+escape_key_name (const string& name)
 {
-  for (auto ch : name)
+  string result;
+  for (unsigned int ch : name)
     {
-      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') ||
-           ch == ' ' || ch == '-' || ch == '_')
+      if (ch == '"' || ch == '\\')
         {
-          // fine
+          result += '\\';
+          result += ch;
+        }
+      else if (ch >= 32) // ASCII, UTF-8
+        {
+          result += ch;
         }
       else
         {
-          error ("audiowmark: bad key name: '%c' is not allowed as character in key names\n", ch);
+          error ("audiowmark: bad key name: %d is not allowed as character in key names\n", ch);
           exit (1);
         }
     }
+  return result;
 }
 
 int
 gen_key (const string& outfile, const string& key_name)
 {
-  check_key_name (key_name);
+  string ename = escape_key_name (key_name);
 
   FILE *f = fopen (outfile.c_str(), "w");
   if (!f)
@@ -431,7 +437,7 @@ gen_key (const string& outfile, const string& key_name)
     }
   fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
   if (key_name != "")
-    fprintf (f, "name \"%s\"\n", key_name.c_str());
+    fprintf (f, "name \"%s\"\n", ename.c_str());
   fclose (f);
   return 0;
 }
