@@ -20,6 +20,8 @@
 
 #include "convcode.hh"
 #include "wavdata.hh"
+#include "random.hh"
+#include "threadpool.hh"
 
 /*
  * The SyncFinder class searches for sync bits in an input WavData. It is used
@@ -77,31 +79,39 @@ public:
     std::vector<int> up;
     std::vector<int> down;
   };
+  struct KeyResult
+  {
+    Key                key;
+    std::vector<Score> sync_scores;
+  };
 private:
-  std::vector<std::vector<FrameBit>> sync_bits;
-
-  void    init_up_down (const WavData& wav_data, Mode mode);
-  double  sync_decode (const WavData& wav_data, const size_t start_frame,
+  double  sync_decode (const std::vector<std::vector<FrameBit>>& sync_bits,
+                       const WavData& wav_data, const size_t start_frame,
                        const std::vector<float>& fft_out_db,
                        const std::vector<char>&  have_frames,
                        ConvBlockType *block_type);
   void scan_silence (const WavData& wav_data);
-  std::vector<Score> search_approx (const WavData& wav_data, Mode mode);
+  void search_approx (std::vector<KeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
   void sync_select_by_threshold (std::vector<Score>& sync_scores);
   void sync_select_n_best (std::vector<Score>& sync_scores, size_t n);
-  void search_refine (const WavData& wav_data, Mode mode, std::vector<Score>& sync_scores);
-  std::vector<Score> fake_sync (const WavData& wav_data, Mode mode);
+  void search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const std::vector<std::vector<FrameBit>>& sync_bits);
+  std::vector<KeyResult> fake_sync (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
 
   // non-zero sample range: [wav_data_first, wav_data_last)
   size_t wav_data_first = 0;
   size_t wav_data_last = 0;
 public:
-  std::vector<Score> search (const WavData& wav_data, Mode mode);
-  std::vector<std::vector<FrameBit>> get_sync_bits (const WavData& wav_data, Mode mode);
+  std::vector<KeyResult> search (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
+  static std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, const WavData& wav_data, Mode mode);
 
   static double bit_quality (float umag, float dmag, int bit);
   static double normalize_sync_quality (double raw_quality);
 private:
+  void sync_fft_parallel (ThreadPool& thread_pool,
+                          const WavData& wav_data,
+                          size_t index,
+                          std::vector<float>& fft_out_db,
+                          std::vector<char>& have_frames);
   void sync_fft (const WavData& wav_data,
                  size_t index,
                  size_t frame_count,
@@ -109,6 +119,7 @@ private:
                  std::vector<char>& have_frames,
                  const std::vector<char>& want_frames);
   std::string find_closest_sync (size_t index);
+  std::vector<std::vector<int>> split_vector (std::vector<int>& in_vector, size_t max_size);
 };
 
 #endif

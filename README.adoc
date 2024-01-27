@@ -163,6 +163,19 @@ and can be used for the add/get commands as follows:
   audiowmark add --key test.key in.wav out.wav 0123456789abcdef0011223344556677
   audiowmark get --key test.key out.wav
 
+Keys can be named using the `gen-key --name` option, and the key name will be
+reported for each match:
+
+  audiowmark gen-key oct23.key --name "October 2023"
+
+Finally, it is possible to use the `--key` option more than once for watermark
+detection. In this case, all keys that are specified will be tried. This is
+useful if you change keys on a regular basis, and passing multiple keys is
+more efficient than performing watermark detection multiple times with one
+key.
+
+  audiowmark get --key oct23.key --key nov23.key --key dec23.key out.wav
+
 [[strength]]
 == Watermark Strength
 

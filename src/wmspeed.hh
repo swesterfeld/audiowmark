@@ -19,7 +19,14 @@
 #define AUDIOWMARK_WM_SPEED_HH
 
 #include "wavdata.hh"
+#include "random.hh"
 
-double detect_speed (const WavData& in_data, bool print_results);
+struct DetectSpeedResult
+{
+  Key key;
+  double speed = 0;
+};
+
+std::vector<DetectSpeedResult> detect_speed (const std::vector<Key>& key_list, const WavData& in_data, bool print_results);
 
 #endif /* AUDIOWMARK_WM_SPEED_HH */

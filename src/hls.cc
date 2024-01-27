@@ -47,7 +47,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
 }
 
 int
-hls_add (const string& infile, const string& outfile, const string& bits)
+hls_add (const Key& key, const string& infile, const string& outfile, const string& bits)
 {
   error ("audiowmark: hls support is not available in this build of audiowmark\n");
   return 1;
@@ -201,7 +201,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
 }
 
 int
-hls_add (const string& infile, const string& outfile, const string& bits)
+hls_add (const Key& key, const string& infile, const string& outfile, const string& bits)
 {
   TSReader reader;
 
@@ -276,7 +276,7 @@ hls_add (const string& infile, const string& outfile, const string& bits)
       return 1;
     }
 
-  int wm_rc = add_stream_watermark (&in_stream, &out_stream, bits, start_pos - prev_size);
+  int wm_rc = add_stream_watermark (key, &in_stream, &out_stream, bits, start_pos - prev_size);
   if (wm_rc != 0)
     return wm_rc;
 

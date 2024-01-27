@@ -34,7 +34,6 @@ bool   Params::detect_speed    = false;
 bool   Params::detect_speed_patient = false;
 double Params::try_speed       = -1;
 double Params::test_speed      = -1;
-int    Params::have_key        = 0;
 size_t Params::payload_size    = 128;
 bool   Params::payload_short   = false;
 int    Params::test_cut        = 0; // for sync test
@@ -140,44 +139,28 @@ FFTAnalyzer::fft_range (const vector<float>& samples, size_t start_index, size_t
   return fft_out;
 }
 
-int
-frame_pos (int f, bool sync)
+BitPosGen::BitPosGen (const Key& key)
 {
-  static vector<int> pos_vec;
+  int frame_count = mark_data_frame_count() + mark_sync_frame_count();
+  for (int i = 0; i < frame_count; i++)
+    pos_vec.push_back (i);
 
-  if (pos_vec.empty())
-    {
-      int frame_count = mark_data_frame_count() + mark_sync_frame_count();
-      for (int i = 0; i < frame_count; i++)
-        pos_vec.push_back (i);
-
-      Random random (0, Random::Stream::frame_position);
-      random.shuffle (pos_vec);
-    }
-  if (sync)
-    {
-      assert (f >= 0 && size_t (f) < mark_sync_frame_count());
-
-      return pos_vec[f];
-    }
-  else
-    {
-      assert (f >= 0 && size_t (f) < mark_data_frame_count());
-
-      return pos_vec[f + mark_sync_frame_count()];
-    }
+  Random random (key, 0, Random::Stream::frame_position);
+  random.shuffle (pos_vec);
 }
 
 int
-sync_frame_pos (int f)
+BitPosGen::sync_frame (int f)
 {
-  return frame_pos (f, true);
+  assert (f >= 0 && size_t (f) < mark_sync_frame_count());
+  return pos_vec[f];
 }
 
 int
-data_frame_pos (int f)
+BitPosGen::data_frame (int f)
 {
-  return frame_pos (f, false);
+  assert (f >= 0 && size_t (f) < mark_data_frame_count());
+  return pos_vec[f + mark_sync_frame_count()];
 }
 
 size_t
@@ -193,16 +176,17 @@ mark_sync_frame_count()
 }
 
 vector<MixEntry>
-gen_mix_entries()
+gen_mix_entries (const Key& key)
 {
   const int frame_count = mark_data_frame_count();
   vector<MixEntry> mix_entries (frame_count * Params::bands_per_frame);
 
-  UpDownGen up_down_gen (Random::Stream::data_up_down);
+  UpDownGen up_down_gen (key, Random::Stream::data_up_down);
+  BitPosGen bit_pos_gen (key);
   int entry = 0;
   for (int f = 0; f < frame_count; f++)
     {
-      const int index = data_frame_pos (f);
+      const int index = bit_pos_gen.data_frame (f);
       UpDownArray up, down;
       up_down_gen.get (f, up, down);
 
@@ -210,7 +194,7 @@ gen_mix_entries()
       for (size_t i = 0; i < up.size(); i++)
         mix_entries[entry++] = { index, up[i], down[i] };
     }
-  Random random (/* seed */ 0, Random::Stream::mix);
+  Random random (key, /* seed */ 0, Random::Stream::mix);
   random.shuffle (mix_entries);
 
   return mix_entries;

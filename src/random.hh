@@ -25,6 +25,22 @@
 #include <string>
 #include <random>
 
+class Key
+{
+  std::vector<unsigned char> m_aes_key;
+  std::string m_name;
+public:
+  static constexpr size_t SIZE = 16; /* 128 bits */
+
+  Key();
+  ~Key();
+
+  void set_test_key (uint64_t key);
+  void load_key (const std::string& filename);
+  const unsigned char *aes_key() const;
+  const std::string& name() const;
+};
+
 class Random
 {
 public:
@@ -46,7 +62,7 @@ private:
 
   void die_on_error (const char *func, gcry_error_t error);
 public:
-  Random (uint64_t seed, Stream stream);
+  Random (const Key& key, uint64_t seed, Stream stream);
   ~Random();
 
   typedef uint64_t result_type;
@@ -90,8 +106,6 @@ public:
       }
   }
 
-  static void        set_global_test_key (uint64_t seed);
-  static void        load_global_key (const std::string& key_file);
   static std::string gen_key();
   static uint64_t    seed_from_hash (const std::vector<float>& floats);
 };

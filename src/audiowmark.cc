@@ -17,6 +17,11 @@
 
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <string>
 #include <random>
 #include <algorithm>
@@ -56,7 +61,7 @@ print_usage()
   printf ("    audiowmark cmp <watermarked_wav> <message_hex>\n");
   printf ("\n");
   printf ("  * generate 128-bit watermarking key, to be used with --key option\n");
-  printf ("    audiowmark gen-key <key_file>\n");
+  printf ("    audiowmark gen-key <key_file> [ --name <key_name> ]\n");
   printf ("\n");
   printf ("Global options:\n");
   printf ("  -q, --quiet             disable information messages\n");
@@ -142,6 +147,32 @@ parse_encoding (const string& str)
 }
 
 int
+atoi_or_die (const string& s)
+{
+  char *e = nullptr;
+  int i = strtol (s.c_str(), &e, 0);
+  if (e && e[0])
+    {
+      error ("audiowmark: error during string->int conversion: %s\n", s.c_str());
+      exit (1);
+    }
+  return i;
+}
+
+float
+atof_or_die (const string& s)
+{
+  char *e = nullptr;
+  float f = strtof (s.c_str(), &e);
+  if (e && e[0])
+    {
+      error ("audiowmark: error during string->float conversion: %s\n", s.c_str());
+      exit (1);
+    }
+  return f;
+}
+
+int
 gentest (const string& infile, const string& outfile)
 {
   printf ("generating test sample from '%s' to '%s'\n", infile.c_str(), outfile.c_str());
@@ -190,7 +221,7 @@ cut_start (const string& infile, const string& outfile, const string& start_str)
       return 1;
     }
 
-  size_t start = atoi (start_str.c_str());
+  size_t start = atoi_or_die (start_str.c_str());
 
   const vector<float>& in_signal = wav_data.samples();
   vector<float> out_signal;
@@ -291,7 +322,7 @@ test_snr (const string& orig_file, const string& wm_file)
 }
 
 int
-test_clip (const string& in_file, const string& out_file, int seed, int time_seconds)
+test_clip (const Key& key, const string& in_file, const string& out_file, int seed, int time_seconds)
 {
   WavData in_data;
   Error err = in_data.load (in_file);
@@ -301,7 +332,7 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
       return 1;
     }
   bool done = false;
-  Random rng (seed, /* there is no stream for this test */ Random::Stream::data_up_down);
+  Random rng (key, seed, /* there is no stream for this test */ Random::Stream::data_up_down);
   size_t start_point, end_point;
   do
     {
@@ -330,9 +361,9 @@ test_clip (const string& in_file, const string& out_file, int seed, int time_sec
 }
 
 int
-test_speed (int seed)
+test_speed (const Key& key, int seed)
 {
-  Random rng (seed, /* there is no stream for this test */ Random::Stream::data_up_down);
+  Random rng (key, seed, /* there is no stream for this test */ Random::Stream::data_up_down);
   double low = 0.85;
   double high = 1.15;
   printf ("%.6f\n", low + (rng() / double (UINT64_MAX)) * (high - low));
@@ -340,13 +371,13 @@ test_speed (int seed)
 }
 
 int
-test_gen_noise (const string& out_file, double seconds, int rate)
+test_gen_noise (const Key& key, const string& out_file, double seconds, int rate)
 {
   const int channels = 2;
   const int bits = 16;
 
   vector<float> noise;
-  Random rng (0, /* there is no stream for this test */ Random::Stream::data_up_down);
+  Random rng (key, 0, /* there is no stream for this test */ Random::Stream::data_up_down);
   for (size_t i = 0; i < size_t (rate * seconds) * channels; i++)
     noise.push_back (rng.random_double() * 2 - 1);
 
@@ -400,17 +431,51 @@ test_resample (const string& in_file, const string& out_file, int new_rate)
   return 0;
 }
 
-int
-gen_key (const string& outfile)
+static string
+escape_key_name (const string& name)
 {
-  FILE *f = fopen (outfile.c_str(), "w");
+  string result;
+  for (unsigned int ch : name)
+    {
+      if (ch == '"' || ch == '\\')
+        {
+          result += '\\';
+          result += ch;
+        }
+      else if (ch >= 32) // ASCII, UTF-8
+        {
+          result += ch;
+        }
+      else
+        {
+          error ("audiowmark: bad key name: %d is not allowed as character in key names\n", ch);
+          exit (1);
+        }
+    }
+  return result;
+}
+
+int
+gen_key (const string& outfile, const string& key_name)
+{
+  string ename = escape_key_name (key_name);
+  int fd = open (outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+  if (fd < 0)
+    {
+      error ("audiowmark: error opening file %s: %s\n", outfile.c_str(), strerror (errno));
+      return 1;
+    }
+  FILE *f = fdopen (fd, "w");
   if (!f)
     {
+      close (fd);
       error ("audiowmark: error writing to file %s\n", outfile.c_str());
       return 1;
     }
   fprintf (f, "# watermarking key for audiowmark\n\nkey %s\n", Random::gen_key().c_str());
-  fclose (f);
+  if (key_name != "")
+    fprintf (f, "name \"%s\"\n", ename.c_str());
+  fclose (f); // closes fd
   return 0;
 }
 
@@ -449,29 +514,38 @@ public:
       }
     return false;
   }
-  bool
-  parse_opt (const string& option, string& out_s)
+  vector<string>
+  parse_multi_opt (const string& option)
   {
-    bool found_option = false;
+    vector<string> values;
     auto it = m_args.begin();
     while (it != m_args.end())
       {
         auto next_it = it + 1;
         if (*it == option && next_it != m_args.end())   /* --option foo */
           {
-            out_s = *next_it;
+            values.push_back (*next_it);
             next_it = m_args.erase (it, it + 2);
-            found_option = true;
           }
         else if (starts_with (*it, (option + "=")))   /* --option=foo */
           {
-            out_s = it->substr (option.size() + 1);
+            values.push_back (it->substr (option.size() + 1));
             next_it = m_args.erase (it);
-            found_option = true;
           }
         it = next_it;
       }
-    return found_option;
+    return values;
+  }
+  bool
+  parse_opt (const string& option, string& out_s)
+  {
+    vector<string> values = parse_multi_opt (option);
+    if (values.size())
+      {
+        out_s = values.back();
+        return true;
+      }
+    return false;
   }
   bool
   parse_opt (const string& option, int& out_i)
@@ -479,7 +553,7 @@ public:
     string out_s;
     if (parse_opt (option, out_s))
       {
-        out_i = atoi (out_s.c_str());
+        out_i = atoi_or_die (out_s.c_str());
         return true;
       }
     return false;
@@ -490,7 +564,7 @@ public:
     string out_s;
     if (parse_opt (option, out_s))
       {
-        out_f = atof (out_s.c_str());
+        out_f = atof_or_die (out_s.c_str());
         return true;
       }
     return false;
@@ -540,20 +614,9 @@ parse_shared_options (ArgParser& ap)
 {
   int i;
   float f;
-  string s;
   if (ap.parse_opt ("--strength", f))
     {
       Params::water_delta = f / 1000;
-    }
-  if (ap.parse_opt  ("--key", s))
-    {
-      Params::have_key++;
-      Random::load_global_key (s);
-    }
-  if (ap.parse_opt ("--test-key", i))
-    {
-      Params::have_key++;
-      Random::set_global_test_key (i);
     }
   if (ap.parse_opt ("--short", i))
     {
@@ -570,11 +633,44 @@ parse_shared_options (ArgParser& ap)
     {
       Params::mix = false;
     }
-  if (Params::have_key > 1)
+}
+
+vector<Key>
+parse_key_list (ArgParser& ap)
+{
+  vector<Key> key_list;
+  vector<string> key_files = ap.parse_multi_opt  ("--key");
+  for (auto f : key_files)
     {
-      error ("audiowmark: watermark key can at most be set once (--key / --test-key option)\n");
+      Key key;
+      key.load_key (f);
+      key_list.push_back (key);
+    }
+  vector<string> test_keys = ap.parse_multi_opt ("--test-key");
+  for (auto t : test_keys)
+    {
+      Key key;
+      key.set_test_key (atoi_or_die (t.c_str()));
+      key_list.push_back (key);
+    }
+  if (key_list.empty())
+    {
+      Key key; // default initialized with zero key
+      key_list.push_back (key);
+    }
+  return key_list;
+}
+
+Key
+parse_key (ArgParser& ap)
+{
+  auto key_list = parse_key_list (ap);
+  if (key_list.size() > 1)
+    {
+      error ("audiowmark %s: watermark key can at most be set once (--key / --test-key option)\n", ap.command().c_str());
       exit (1);
     }
+  return key_list[0];
 }
 
 void
@@ -778,8 +874,9 @@ main (int argc, char **argv)
 
       ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
 
+      Key key = parse_key (ap);
       args = parse_positional (ap, "input_ts", "output_ts", "message_hex");
-      return hls_add (args[0], args[1], args[2]);
+      return hls_add (key, args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("hls-prepare"))
     {
@@ -793,16 +890,18 @@ main (int argc, char **argv)
       parse_shared_options (ap);
       parse_add_options (ap);
 
+      Key key = parse_key (ap);
       args = parse_positional (ap, "input_wav", "watermarked_wav", "message_hex");
-      return add_watermark (args[0], args[1], args[2]);
+      return add_watermark (key, args[0], args[1], args[2]);
     }
   else if (ap.parse_cmd ("get"))
     {
       parse_shared_options (ap);
       parse_get_options (ap);
 
+      vector<Key> key_list = parse_key_list (ap);
       args = parse_positional (ap, "watermarked_wav");
-      return get_watermark (args[0], /* no ber */ "");
+      return get_watermark (key_list, args[0], /* no ber */ "");
     }
   else if (ap.parse_cmd ("cmp"))
     {
@@ -811,13 +910,16 @@ main (int argc, char **argv)
 
       ap.parse_opt ("--expect-matches", Params::expect_matches);
 
+      vector<Key> key_list = parse_key_list (ap);
       args = parse_positional (ap, "watermarked_wav", "message_hex");
-      return get_watermark (args[0], args[1]);
+      return get_watermark (key_list, args[0], args[1]);
     }
   else if (ap.parse_cmd ("gen-key"))
     {
+      string key_name;
+      ap.parse_opt ("--name", key_name);
       args = parse_positional (ap, "key_file");
-      return gen_key (args[0]);
+      return gen_key (args[0], key_name);
     }
   else if (ap.parse_cmd ("gentest"))
     {
@@ -843,36 +945,39 @@ main (int argc, char **argv)
     {
       parse_shared_options (ap);
 
+      Key key = parse_key (ap);
       args = parse_positional (ap, "input_wav", "output_wav", "seed", "seconds");
-      return test_clip (args[0], args[1], atoi (args[2].c_str()), atoi (args[3].c_str()));
+      return test_clip (key, args[0], args[1], atoi_or_die (args[2].c_str()), atoi_or_die (args[3].c_str()));
     }
   else if (ap.parse_cmd ("test-speed"))
     {
       parse_shared_options (ap);
 
+      Key key = parse_key (ap);
       args = parse_positional (ap, "seed");
-      return test_speed (atoi (args[0].c_str()));
+      return test_speed (key, atoi_or_die (args[0].c_str()));
     }
   else if (ap.parse_cmd ("test-gen-noise"))
     {
       parse_shared_options (ap);
 
+      Key key = parse_key (ap);
       args = parse_positional (ap, "output_wav", "seconds", "sample_rate");
-      return test_gen_noise (args[0], atof (args[1].c_str()), atoi (args[2].c_str()));
+      return test_gen_noise (key, args[0], atof_or_die (args[1].c_str()), atoi_or_die (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-change-speed"))
     {
       parse_shared_options (ap);
 
       args = parse_positional (ap, "input_wav", "output_wav", "speed");
-      return test_change_speed (args[0], args[1], atof (args[2].c_str()));
+      return test_change_speed (args[0], args[1], atof_or_die (args[2].c_str()));
     }
   else if (ap.parse_cmd ("test-resample"))
     {
       parse_shared_options (ap);
 
       args = parse_positional (ap, "input_wav", "output_wav", "new_rate");
-      return test_resample (args[0], args[1], atoi (args[2].c_str()));
+      return test_resample (args[0], args[1], atoi_or_die (args[2].c_str()));
     }
   else if (ap.remaining_args().size())
     {

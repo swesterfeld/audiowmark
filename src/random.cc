@@ -21,6 +21,7 @@
 #include <regex>
 
 #include <assert.h>
+#include <cinttypes>
 
 using std::string;
 using std::vector;
@@ -52,7 +53,6 @@ gcrypt_init()
 }
 
 
-static vector<unsigned char> aes_key (16); // 128 bits
 static constexpr auto        GCRY_CIPHER = GCRY_CIPHER_AES128;
 
 static void
@@ -95,20 +95,20 @@ print (const string& label, const vector<unsigned char>& data)
 }
 #endif
 
-Random::Random (uint64_t start_seed, Stream stream)
+Random::Random (const Key& key, uint64_t start_seed, Stream stream)
 {
   gcrypt_init();
 
   gcry_error_t gcry_ret = gcry_cipher_open (&aes_ctr_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_CTR, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
 
-  gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, &aes_key[0], aes_key.size());
+  gcry_ret = gcry_cipher_setkey (aes_ctr_cipher, key.aes_key(), Key::SIZE);
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
   gcry_ret = gcry_cipher_open (&seed_cipher, GCRY_CIPHER, GCRY_CIPHER_MODE_ECB, 0);
   die_on_error ("gcry_cipher_open", gcry_ret);
 
-  gcry_ret = gcry_cipher_setkey (seed_cipher, &aes_key[0], aes_key.size());
+  gcry_ret = gcry_cipher_setkey (seed_cipher, key.aes_key(), Key::SIZE);
   die_on_error ("gcry_cipher_setkey", gcry_ret);
 
   seed (start_seed, stream);
@@ -120,19 +120,19 @@ Random::seed (uint64_t seed, Stream stream)
   buffer_pos = 0;
   buffer.clear();
 
-  unsigned char plain_text[aes_key.size()];
-  unsigned char cipher_text[aes_key.size()];
+  unsigned char plain_text[Key::SIZE];
+  unsigned char cipher_text[Key::SIZE];
 
   memset (plain_text, 0, sizeof (plain_text));
   uint64_to_buffer (seed, &plain_text[0]);
 
   plain_text[8] = uint8_t (stream);
 
-  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], aes_key.size(),
-                                                            &plain_text[0],  aes_key.size());
+  gcry_error_t gcry_ret = gcry_cipher_encrypt (seed_cipher, &cipher_text[0], Key::SIZE,
+                                                            &plain_text[0],  Key::SIZE);
   die_on_error ("gcry_cipher_encrypt", gcry_ret);
 
-  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], aes_key.size());
+  gcry_ret = gcry_cipher_setctr (aes_ctr_cipher, &cipher_text[0], Key::SIZE);
   die_on_error ("gcry_cipher_setctr", gcry_ret);
 }
 
@@ -172,14 +172,129 @@ Random::die_on_error (const char *func, gcry_error_t err)
     }
 }
 
-void
-Random::set_global_test_key (uint64_t key)
+string
+Random::gen_key()
 {
-  uint64_to_buffer (key, &aes_key[0]);
+  gcrypt_init();
+
+  vector<unsigned char> key (16);
+  gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
+  return vec_to_hex_str (key);
+}
+
+uint64_t
+Random::seed_from_hash (const vector<float>& floats)
+{
+  unsigned char hash[20];
+  gcry_md_hash_buffer (GCRY_MD_SHA1, hash, &floats[0], floats.size() * sizeof (float));
+  return uint64_from_buffer (hash);
+}
+
+Key::Key() :
+  m_aes_key (SIZE)
+{
+}
+
+Key::~Key()
+{
+  std::fill (m_aes_key.begin(), m_aes_key.end(), 0);
 }
 
 void
-Random::load_global_key (const string& key_file)
+Key::set_test_key (uint64_t key)
+{
+  uint64_to_buffer (key, m_aes_key.data());
+  m_name = string_printf ("test-key-%" PRId64, key);
+}
+
+static bool
+string_chars (char ch)
+{
+  if ((ch >= 'A' && ch <= 'Z')
+  ||  (ch >= '0' && ch <= '9')
+  ||  (ch >= 'a' && ch <= 'z')
+  ||  (ch == '.')
+  ||  (ch == ':')
+  ||  (ch == '=')
+  ||  (ch == '/')
+  ||  (ch == '-')
+  ||  (ch == '_'))
+    return true;
+
+  return false;
+}
+
+static bool
+white_space (char ch)
+{
+  return (ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r');
+}
+
+static bool
+tokenize (const string& line, vector<string>& tokens)
+{
+  enum { BLANK, STRING, QUOTED_STRING, QUOTED_STRING_ESCAPED, COMMENT } state = BLANK;
+  string s;
+
+  string xline = line + '\n';
+  tokens.clear();
+  for (string::const_iterator i = xline.begin(); i != xline.end(); i++)
+    {
+      if (state == BLANK && string_chars (*i))
+        {
+          state = STRING;
+          s += *i;
+        }
+      else if (state == BLANK && *i == '"')
+        {
+          state = QUOTED_STRING;
+        }
+      else if (state == BLANK && white_space (*i))
+        {
+          // ignore more whitespaces if we've already seen one
+        }
+      else if (state == STRING && string_chars (*i))
+        {
+          s += *i;
+        }
+      else if ((state == STRING && white_space (*i))
+           ||  (state == QUOTED_STRING && *i == '"'))
+        {
+          tokens.push_back (s);
+          s = "";
+          state = BLANK;
+        }
+      else if (state == QUOTED_STRING && *i == '\\')
+        {
+          state = QUOTED_STRING_ESCAPED;
+        }
+      else if (state == QUOTED_STRING)
+        {
+          s += *i;
+        }
+      else if (state == QUOTED_STRING_ESCAPED)
+        {
+          s += *i;
+          state = QUOTED_STRING;
+        }
+      else if (*i == '#')
+        {
+          state = COMMENT;
+        }
+      else if (state == COMMENT)
+        {
+          // ignore comments
+        }
+      else
+        {
+          return false;
+        }
+    }
+  return state == BLANK || state == COMMENT;
+}
+
+void
+Key::load_key (const string& key_file)
 {
   FILE *f = fopen (key_file.c_str(), "r");
   if (!f)
@@ -187,35 +302,44 @@ Random::load_global_key (const string& key_file)
       error ("audiowmark: error opening key file: '%s'\n", key_file.c_str());
       exit (1);
     }
-
-  const regex blank_re (R"(\s*(#.*)?[\r\n]+)");
-  const regex key_re (R"(\s*key\s+([0-9a-f]+)\s*(#.*)?[\r\n]+)");
+  m_name = key_file;
+  // basename
+  size_t sep = m_name.find_last_of ("\\/");
+  if (sep != string::npos)
+    m_name = m_name.substr (sep + 1);
 
   char buffer[1024];
   int line = 1;
   int keys = 0;
   while (fgets (buffer, 1024, f))
     {
-      string s = buffer;
-
-      std::smatch match;
-      if (regex_match (s, blank_re))
+      vector<string> tokens;
+      bool parse_ok = false;
+      if (tokenize (buffer, tokens))
         {
-          /* blank line or comment */
-        }
-      else if (regex_match (s, match, key_re))
-        {
-          /* line containing aes key */
-          vector<unsigned char> key = hex_str_to_vec (match[1].str());
-          if (key.size() != aes_key.size())
+          if (tokens.size() == 2 && tokens[0] == "key") /* line containing aes key */
             {
-              error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, aes_key.size() * 8);
-              exit (1);
+              vector<unsigned char> key = hex_str_to_vec (tokens[1]);
+              if (key.size() != Key::SIZE)
+                {
+                  error ("audiowmark: wrong key length in key file '%s', line %d\n => required key length is %zd bits\n", key_file.c_str(), line, Key::SIZE * 8);
+                  exit (1);
+                }
+              m_aes_key = key;
+              keys++;
+              parse_ok = true;
             }
-          aes_key = key;
-          keys++;
+          if (tokens.size() == 2 && tokens[0] == "name") /* key name */
+            {
+              m_name = tokens[1];
+              parse_ok = true;
+            }
+          if (tokens.empty()) /* blank line or comment */
+            {
+              parse_ok = true;
+            }
         }
-      else
+      if (!parse_ok)
         {
           error ("audiowmark: parse error in key file '%s', line %d\n", key_file.c_str(), line);
           exit (1);
@@ -236,20 +360,15 @@ Random::load_global_key (const string& key_file)
     }
 }
 
-string
-Random::gen_key()
+const unsigned char *
+Key::aes_key() const
 {
-  gcrypt_init();
-
-  vector<unsigned char> key (16);
-  gcry_randomize (&key[0], 16, /* long term key material strength */ GCRY_VERY_STRONG_RANDOM);
-  return vec_to_hex_str (key);
+  assert (m_aes_key.size() == SIZE);
+  return m_aes_key.data();
 }
 
-uint64_t
-Random::seed_from_hash (const vector<float>& floats)
+const string&
+Key::name() const
 {
-  unsigned char hash[20];
-  gcry_md_hash_buffer (GCRY_MD_SHA1, hash, &floats[0], floats.size() * sizeof (float));
-  return uint64_from_buffer (hash);
+  return m_name;
 }
