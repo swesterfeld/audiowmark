@@ -667,7 +667,6 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
   vector<KeySpeedSearch> key_speed_search_vec;
   ThreadPool thread_pool;
 
-
   auto run_search = [&] (const SpeedScanParams& scan_params, auto get_speeds) {
     for (auto& key_speed_search : key_speed_search_vec)
       key_speed_search.speed_search->start_prepare_jobs (key_speed_search.key, scan_params, get_speeds (key_speed_search));
