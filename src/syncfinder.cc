@@ -28,7 +28,7 @@ using std::string;
 using std::min;
 
 vector<vector<SyncFinder::FrameBit>>
-SyncFinder::init_up_down (const Key& key, const WavData& wav_data, Mode mode)
+SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
 {
   vector<vector<SyncFinder::FrameBit>> sync_bits;
 
@@ -395,7 +395,7 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
       KeyResult key_result;
       key_result.key = key;
       key_results.push_back (key_result);
-      sync_bits.push_back (init_up_down (key, wav_data, mode));
+      sync_bits.push_back (get_sync_bits (key, wav_data, mode));
     }
 
   search_approx (key_results, sync_bits, wav_data, mode);
@@ -410,12 +410,6 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
     }
 
   return key_results;
-}
-
-vector<vector<SyncFinder::FrameBit>>
-SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
-{
-  return init_up_down (key, wav_data, mode);
 }
 
 void

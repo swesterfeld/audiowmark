@@ -85,8 +85,6 @@ public:
     std::vector<Score> sync_scores;
   };
 private:
-  std::vector<std::vector<FrameBit>> init_up_down (const Key& key, const WavData& wav_data, Mode mode);
-
   double  sync_decode (const std::vector<std::vector<FrameBit>>& sync_bits,
                        const WavData& wav_data, const size_t start_frame,
                        const std::vector<float>& fft_out_db,
@@ -104,7 +102,7 @@ private:
   size_t wav_data_last = 0;
 public:
   std::vector<KeyResult> search (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
-  std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, const WavData& wav_data, Mode mode);
+  static std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, const WavData& wav_data, Mode mode);
 
   static double bit_quality (float umag, float dmag, int bit);
   static double normalize_sync_quality (double raw_quality);

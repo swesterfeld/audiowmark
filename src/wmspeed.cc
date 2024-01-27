@@ -158,9 +158,7 @@ public:
     frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
   {
     // constructor is run in the main thread; everything that is not thread-safe must happen here
-    SyncFinder sync_finder;
-
-    auto sync_finder_bits = sync_finder.get_sync_bits (key, in_data, SyncFinder::Mode::BLOCK);
+    auto sync_finder_bits = SyncFinder::get_sync_bits (key, in_data, SyncFinder::Mode::BLOCK);
     for (size_t bit = 0; bit < sync_finder_bits.size(); bit++)
       {
         for (const auto& frame_bit : sync_finder_bits[bit])
