@@ -134,6 +134,15 @@ linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_ch
   return raw_bit_vec;
 }
 
+static vector<float>
+mix_or_linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
+{
+  if (Params::mix)
+    return mix_decode (key, fft_out, n_channels);
+  else
+    return linear_decode (key, fft_out, n_channels);
+}
+
 class ResultSet
 {
 public:
@@ -404,15 +413,7 @@ public:
             if (fft_range_out.size())
               {
                 /* ---- retrieve bits from watermark ---- */
-                vector<float> raw_bit_vec;
-                if (Params::mix)
-                  {
-                    raw_bit_vec = mix_decode (key, fft_range_out, wav_data.n_channels());
-                  }
-                else
-                  {
-                    raw_bit_vec = linear_decode (key, fft_range_out, wav_data.n_channels());
-                  }
+                vector<float> raw_bit_vec = mix_or_linear_decode (key, fft_range_out, wav_data.n_channels());
                 assert (raw_bit_vec.size() == code_size (ConvBlockType::a, Params::payload_size));
 
                 raw_bit_vec = randomize_bit_order (key, raw_bit_vec, /* encode */ false);
@@ -554,14 +555,6 @@ class ClipDecoder
   const int frames_per_block = 0;
   const double speed = 0;
 
-  vector<float>
-  mix_or_linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_channels)
-  {
-    if (Params::mix)
-      return mix_decode (key, fft_out, n_channels);
-    else
-      return linear_decode (key, fft_out, n_channels);
-  }
   void
   run_padded (const vector<Key>& key_list, const WavData& wav_data, ResultSet& result_set, double time_offset_sec)
   {
