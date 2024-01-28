@@ -81,11 +81,17 @@ mix_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_chann
               const double min_db = -96;
 
               const size_t index = mix_entries[b].frame * n_channels + ch;
+              const size_t next_index = (index + n_channels) < fft_out.size() ? index + n_channels : index - n_channels;
+              const size_t prev_index = (int (index) - n_channels) >= 0 ? index - n_channels : index + n_channels;
+
               const int u = mix_entries[b].up;
               const int d = mix_entries[b].down;
 
               umag += db_from_complex (fft_out[index][u], min_db);
+              umag -= (db_from_complex (fft_out[prev_index][u], min_db) + db_from_complex (fft_out[next_index][u], min_db)) * 0.5;
+
               dmag += db_from_complex (fft_out[index][d], min_db);
+              dmag -= (db_from_complex (fft_out[prev_index][d], min_db) + db_from_complex (fft_out[next_index][d], min_db)) * 0.5;
             }
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
@@ -113,16 +119,24 @@ linear_decode (const Key& key, vector<vector<complex<float>>>& fft_out, int n_ch
       for (int ch = 0; ch < n_channels; ch++)
         {
           const size_t index = bit_pos_gen.data_frame (f) * n_channels + ch;
+          const size_t next_index = (index + n_channels) < fft_out.size() ? index + n_channels : index - n_channels;
+          const size_t prev_index = (int (index) - n_channels) >= 0 ? index - n_channels : index + n_channels;
+
           UpDownArray up, down;
           up_down_gen.get (f, up, down);
 
           const double min_db = -96;
           for (auto u : up)
-            umag += db_from_complex (fft_out[index][u], min_db);
+            {
+              umag += db_from_complex (fft_out[index][u], min_db);
+              umag -= 0.5 * (db_from_complex (fft_out[prev_index][u], min_db) + db_from_complex (fft_out[next_index][u], min_db));
+            }
 
           for (auto d : down)
-            dmag += db_from_complex (fft_out[index][d], min_db);
-
+            {
+              dmag += db_from_complex (fft_out[index][d], min_db);
+              dmag -= 0.5 * (db_from_complex (fft_out[prev_index][d], min_db) + db_from_complex (fft_out[next_index][d], min_db));
+            }
         }
       if ((f % Params::frames_per_bit) == (Params::frames_per_bit - 1))
         {
