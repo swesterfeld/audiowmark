@@ -148,18 +148,18 @@ do
       for CLIP in $(seq $AWM_MULTI_CLIP)
       do
         audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
-        audiowmark_cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
+        audiowmark_cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_GET --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
         rm ${OUT_FILE}.clip.wav
         echo
       done
     elif [ "x$AWM_REPORT" == "xtruncv" ]; then
       for TRUNC in $AWM_TRUNCATE
       do
-        audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
+        audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS $AWM_PARAMS_GET --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS --test-truncate $TRUNC | sed "s/^/$TRUNC /g"
         echo
       done
     else
-      audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
+      audiowmark_cmp $OUT_FILE $PATTERN $AWM_PARAMS $AWM_PARAMS_GET --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
       echo
     fi
     rm -f ${AWM_FILE}.wav $OUT_FILE # cleanup temp files
