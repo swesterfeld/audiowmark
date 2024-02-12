@@ -149,7 +149,7 @@ fft_analyzer [color=blue4,shape=rect,label=<
 <b>Fourier Transform Analyzer</b> <br/>
 • Input: Time domain samples <br/>
 • FFT with block Size 1024 <br/>
-• Hamming Window <br/>
+• Hann Window <br/>
 </TD></TR></TABLE> >];
 
 apply_frame_mod [color=fuchsia,shape=rect,label=<
@@ -447,7 +447,7 @@ fft_range [color=blue4,shape=rect,label=< <table border="0" align="left"><tr><td
 • Input: Frames with time domain samples <br/>
 • Short inputs are zero-padded as needed (Mode::CLIP) <br/>
 • FFT with block Size 1024 <br/>
-• Hamming Window <br/>
+• Hann Window <br/>
 • Output: 513 FFT Bands <br/>
 </td></tr></table> >];
 
@@ -604,7 +604,7 @@ fft_analyzer [color=blue4,shape=rect,label=<
 <b>Fourier Transform Analyzer</b> <br/>
 • Input: Time domain samples <br/>
 • FFT with block Size 1024 <br/>
-• Hamming Window <br/>
+• Hann Window <br/>
 • Output: 513 FFT Bands <br/>
 </TD></TR></TABLE> >];
 
