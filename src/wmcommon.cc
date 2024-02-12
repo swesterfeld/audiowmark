@@ -72,9 +72,7 @@ FFTAnalyzer::gen_normalized_window (size_t n_values)
   for (size_t i = 0; i < n_values; i++)
     {
       const double n_values_2 = n_values / 2.0;
-      // const double win =  window_cos ((i - n_values_2) / n_values_2);
-      const double win = window_hamming ((i - n_values_2) / n_values_2);
-      //const double win = 1;
+      const double win =  window_cos ((i - n_values_2) / n_values_2);
       window[i] = win;
       window_weight += win;
     }
