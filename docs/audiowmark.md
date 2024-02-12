@@ -663,9 +663,10 @@ By using the same AES key and a cryptographically secure PRNG, the sequences are
 This prevents watermark extraction or modification by anyone without possession of the exact encoding key.
 
 
-## Experimental Speed Detection
+## Speed Detection
 
-An experimental branch is currently in development that explores the ability to extract watermarks from audio segments played back at unknown rates.
+As one of the later developments, a dedicated speed detection facility has been integrated that explores the ability to extract watermarks from
+audio segments played back at unknown rates.
 In scenarios where audio has been resampled and pitched at a constant rate, synchronization markers may still be
 detectable by searching the audio content at varying resampled playback rates.
 
