@@ -89,6 +89,11 @@ AC_DEFINE_UNQUOTED(HAVE_FFMPEG, $HAVE_FFMPEG, [whether ffmpeg libs are available
 AM_CONDITIONAL([COND_WITH_FFMPEG], [test "x$with_ffmpeg" != "xno"])
 dnl -------------------------------------------------------------------------
 
+dnl --------------- building documentation is optional ----------------------
+AC_ARG_WITH([docs], [AS_HELP_STRING([--with-docs], [build documentation])], [], [with_docs=no])
+AM_CONDITIONAL([COND_WITH_DOCS], [test "x$with_docs" != "xno"])
+dnl -------------------------------------------------------------------------
+
 dnl -------------------- address sanitizer ----------------------------------
 AC_ARG_ENABLE([asan], [AS_HELP_STRING([--enable-asan], [build using address sanitizer])],
 [
@@ -169,4 +174,5 @@ echo "  Use undefined behaviour sanitizer. .: $enable_ubsan (for debugging)"
 echo "  Use thread sanitizer . . . . . . . .: $enable_tsan (for debugging)"
 echo "  Use leak sanitizer . . . . . . . . .: $enable_lsan (for debugging)"
 echo "  Use stdc++ debug mode. . . . . . . .: $enable_debug_cxx (for debugging)"
-echo "  Use ffmpeg libs. . . . . . . . . . .: $with_ffmpeg (required for HLS)"
+echo "  Use ffmpeg libs. . . . . . . . . . .: $with_ffmpeg (use --with-ffmpeg to enable, required for HLS)"
+echo "  Build developer documentation  . . .: $with_docs (use --with-docs to enable)"
