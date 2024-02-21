@@ -779,6 +779,35 @@ To make detection more reliable, the original signal level for each bin is
 estimated by taking the average value of the previous and next spectrum and
 subtracted before computing the sum of the up- and down-bands.
 
+## Mixing with Limiter
+
+The input material for **audiowmark** is normalized (all samples are in the
+range from -1 to 1). If we simply added the watermark to the input, it
+could happen that this sum exceeds the range from -1 to 1 which would
+result in clipping. To avoid this, a limiter during mixing is used.
+
+The limiter computes the highest peak for each one second long block. Then a
+linear volume envelope is constructed connecting the blocks, such that the
+envelope is greater or equal to the height of the peaks in each block. The
+typical value for really high peaks is about 1.04 for the default watermarking
+strength of 10.
+
+To avoid clipping, the signal is divided by the slowly changing volume
+envelope. The result is somewhat similar to a lookahead peak limiter with
+attack of one second, and linear release of one second. Or to describe the
+effect more directly, if a single peak of 1.04 was produced in the watermarked
+signal, the limiter would slowly start decreasing the volume to 1/1.04 over the
+time of one second before the block that contains the peak, stay there for a
+while (due to the use of blocks) and afterwards slowly increase the volume
+again over the time of one second.
+
+By using a limiter that works on one second blocks like this, it is possible to
+seek to any point in the watermark (which is required for streaming via HLS)
+and getting the exact same output that watermarking all previous samples would
+have produced, because the output of the limiter only depends on the current,
+previous and next one second block. So only a small context window needs to
+be processed when seeking.
+
 ## Speed Detection
 
 As one of the later developments, a dedicated speed detection facility has been integrated that explores the ability to extract watermarks from
