@@ -1,3 +1,18 @@
+Overview of Changes in audiowmark-0.6.2:
+
+* improved robustness of the watermark detection a lot for many cases
+* improved handling if more than one key needs to be used for detection
+  - support using --key multiple times for audiowmark get
+  - support naming watermark keys (key name defaults to filename)
+  - extend JSON and regular output to report key name for matches
+* merge architecture documentation for developers written by Tim Janik (#49)
+* support RF64 output (--output-format rf64) for huge wav files (#30, #2)
+* use hann window function to improve robustness/quality for some files (#48)
+* fix building against zita-resampler installed in non-standard location (#39)
+* replace sprintf with string_printf: sprintf is deprecated on macOS (#33)
+* fix build errors related to PRNG on new clang compilers (#29)
+* fix problems in videowmark due to command line option ordering (#23)
+
 Overview of Changes in audiowmark-0.6.1:
 
 * improve speed detection/correction
