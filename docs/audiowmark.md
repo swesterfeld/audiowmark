@@ -45,6 +45,7 @@ or --raw-channels) are documented in the README file.
 HLS command help can be displayed using --help-hls
 ```
 
+\pagebreak
 
 # Audiowmark Architecture
 <style>	body { max-width: 50em; margin: auto; }	</style>
@@ -254,9 +255,9 @@ conv_encode [color=green4,shape=rect,label=<
 <b>Convolutional Code Expansion</b> <br/>
 • Pads watermark with termination zeros <br/>
 • Combines bit stream with A/B constants <br/>
-• Generates output stream of parity bits <br/>
-• Generates 858 parity bits A-Block <br/>
-• Generates 858 parity bits B-Block <br/>
+• Generates output stream of encoded bits <br/>
+• Generates 858 encoded bits A-Block <br/>
+• Generates 858 encoded bits B-Block <br/>
 </TD></TR></TABLE>>];
 
 ab_generators [color=green4,shape=rect,label=<
@@ -343,19 +344,28 @@ get_frame_mod [color=red,shape=rect,label=<
 }
 ~~~~
 
-The watermark is encoded and embedded into the audio signal in two block types, A-Blocks and B-Blocks.
-Given ideal transmissions, the watermark can be extracted from each of the block types.
-In case of distorted and noisy transmissions where watermark extraction from either block type fails,
-a combination of segments with A-Block and B-Block data may still lead to successful recovery of the original watermark.
+The watermark is encoded and embedded into the audio signal in two block types,
+A-Blocks and B-Blocks.  The information contained in each block alone is
+usually sufficient to extract the watermark.  However, in case of very
+distorted and noisy transmissions where watermark extraction from either block
+type fails, a combination of segments with A-Block and B-Block data may still
+lead to successful recovery of the original watermark.
 
-In order to support watermark extraction from clipped excerpts of the input stream, a fixed pattern
-of synchronization bits is integrated into the data blocks with much higher redundancy than the data bits.
-The fixed pattern allows detection of A-Blocks and B-Blocks as such to aid the watermark extraction.
+In order to support watermark extraction from clipped excerpts of the input
+stream, a fixed pattern of synchronization bits is integrated into the data
+blocks with much higher redundancy than the data bits.  The fixed pattern
+allows detection of the location of A-Blocks and B-Blocks as such to aid the
+watermark extraction.
 
 The user provided encoding `Key` seeds an AES based pseudo random number generator in
 [Counter Mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#CTR)
-that is used to determine encoding places, randomize the noise introduced by the watermark and to interleave encoding
-for robustness. Without the key, the watermark information cannot be retrieved and its presence can not be detected.
+that is used to determine encoding places, randomize the noise introduced by
+the watermark and to interleave encoding for robustness. Without the key, the
+watermark information cannot be retrieved. Using a key is important because the
+implementation itself is open source, and being able to read the watermark
+message bits would allow an attacker to remove the watermark without degrading
+the audio quality.
+
 The different types of random data streams used for the distribution of the embedded watermark information are as follows:
 
 * R1 - Used to randomizes Up/Down band shifts for watermark data bits.
@@ -477,7 +487,7 @@ BlockDecoder [color=darkorchid3,shape=rect,label=< <table border="0" align="left
 conv_decode_soft [color=green4,shape=rect,label=< <table border="0" align="left"><tr><td balign="left">
 <b>Soft-Decision Decoder</b> <br/>
 • Utilize Viterbi algorithm <br/>
-• Decode blocks of 858 parity bits <br/>
+• Decode blocks of 858 encoded bits <br/>
 • Reconstructs 128 payload bits <br/>
 • Uses 'Convolutional Code Parameters' <br/>
 • Decode A-, B- and AB-Blocks <br/>
