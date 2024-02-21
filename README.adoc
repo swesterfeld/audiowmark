@@ -23,6 +23,10 @@ later. The algorithm used here is inspired by
   Martin Steinebach: Digitale Wasserzeichen für Audiodaten.
   Darmstadt University of Technology 2004, ISBN 3-8322-2507-2
 
+If you are interested in the details how `audiowmark` works, there is
+a separate
+https://uplex.de/audiowmark/audiowmark-developer.pdf[*documentation for developers*].
+
 == Open Source License
 
 `audiowmark` is *open source* software available under the *GPLv3
