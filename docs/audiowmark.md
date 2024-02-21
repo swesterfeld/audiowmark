@@ -19,18 +19,25 @@ Commands:
     audiowmark cmp <watermarked_wav> <message_hex>
 
   * generate 128-bit watermarking key, to be used with --key option
-    audiowmark gen-key <key_file>
+    audiowmark gen-key <key_file> [ --name <key_name> ]
 
 Global options:
-  --strength <s>        set watermark strength              [10]
-  --linear              disable non-linear bit storage
-  --short <bits>        enable short payload mode
-  --key <file>          load watermarking key from file
-  -q, --quiet           disable information messages
+  -q, --quiet             disable information messages
+  --strict                treat (minor) problems as errors
 
-  --input-format raw    use raw stream as input
-  --output-format raw   use raw stream as output
-  --format raw          use raw stream as input and output
+Options for get / cmp:
+  --detect-speed          detect and correct replay speed difference
+  --detect-speed-patient  slower, more accurate speed detection
+  --json <file>           write JSON results into file
+
+Options for add / get / cmp:
+  --key <file>            load watermarking key from file
+  --short <bits>          enable short payload mode
+  --strength <s>          set watermark strength              [10]
+
+  --input-format raw      use raw stream as input
+  --output-format raw     use raw stream as output
+  --format raw            use raw stream as input and output
 
 The options to set the raw stream parameters (such as --raw-rate
 or --raw-channels) are documented in the README file.
@@ -38,6 +45,7 @@ or --raw-channels) are documented in the README file.
 HLS command help can be displayed using --help-hls
 ```
 
+\pagebreak
 
 # Audiowmark Architecture
 <style>	body { max-width: 50em; margin: auto; }	</style>
@@ -247,9 +255,9 @@ conv_encode [color=green4,shape=rect,label=<
 <b>Convolutional Code Expansion</b> <br/>
 • Pads watermark with termination zeros <br/>
 • Combines bit stream with A/B constants <br/>
-• Generates output stream of parity bits <br/>
-• Generates 858 parity bits A-Block <br/>
-• Generates 858 parity bits B-Block <br/>
+• Generates output stream of encoded bits <br/>
+• Generates 858 encoded bits A-Block <br/>
+• Generates 858 encoded bits B-Block <br/>
 </TD></TR></TABLE>>];
 
 ab_generators [color=green4,shape=rect,label=<
@@ -336,19 +344,28 @@ get_frame_mod [color=red,shape=rect,label=<
 }
 ~~~~
 
-The watermark is encoded and embedded into the audio signal in two block types, A-Blocks and B-Blocks.
-Given ideal transmissions, the watermark can be extracted from each of the block types.
-In case of distorted and noisy transmissions where watermark extraction from either block type fails,
-a combination of segments with A-Block and B-Block data may still lead to successful recovery of the original watermark.
+The watermark is encoded and embedded into the audio signal in two block types,
+A-Blocks and B-Blocks.  The information contained in each block alone is
+usually sufficient to extract the watermark.  However, in case of very
+distorted and noisy transmissions where watermark extraction from either block
+type fails, a combination of segments with A-Block and B-Block data may still
+lead to successful recovery of the original watermark.
 
-In order to support watermark extraction from clipped excerpts of the input stream, a fixed pattern
-of synchronization bits is integrated into the data blocks with much higher redundancy than the data bits.
-The fixed pattern allows detection of A-Blocks and B-Blocks as such to aid the watermark extraction.
+In order to support watermark extraction from clipped excerpts of the input
+stream, a fixed pattern of synchronization bits is integrated into the data
+blocks with much higher redundancy than the data bits.  The fixed pattern
+allows detection of the location of A-Blocks and B-Blocks as such to aid the
+watermark extraction.
 
 The user provided encoding `Key` seeds an AES based pseudo random number generator in
 [Counter Mode](https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#CTR)
-that is used to determine encoding places, randomize the noise introduced by the watermark and to interleave encoding
-for robustness. Without the key, the watermark information cannot be retrieved and its presence can not be detected.
+that is used to determine encoding places, randomize the noise introduced by
+the watermark and to interleave encoding for robustness. Without the key, the
+watermark information cannot be retrieved. Using a key is important because the
+implementation itself is open source, and being able to read the watermark
+message bits would allow an attacker to remove the watermark without degrading
+the audio quality.
+
 The different types of random data streams used for the distribution of the embedded watermark information are as follows:
 
 * R1 - Used to randomizes Up/Down band shifts for watermark data bits.
@@ -470,7 +487,7 @@ BlockDecoder [color=darkorchid3,shape=rect,label=< <table border="0" align="left
 conv_decode_soft [color=green4,shape=rect,label=< <table border="0" align="left"><tr><td balign="left">
 <b>Soft-Decision Decoder</b> <br/>
 • Utilize Viterbi algorithm <br/>
-• Decode blocks of 858 parity bits <br/>
+• Decode blocks of 858 encoded bits <br/>
 • Reconstructs 128 payload bits <br/>
 • Uses 'Convolutional Code Parameters' <br/>
 • Decode A-, B- and AB-Blocks <br/>
@@ -516,6 +533,41 @@ Upon detection of A/B-Block synchronization positions, watermark bits are extrac
 Due to high redundancy and wide spread of watermark information, bits often can still be extracted from audio clips that are heavily shortened. To employ the full detection machinery to very short clips, symmetric zero padding is used to provide enough input samples (zero padded regions are ignored during scoring however).
 
 Since detection success is directly dependent on the precise bit stream synchronization, an iterative process is used for fast approximation of synchronization locations with later refinements to yield precise results.
+
+The purpose of the synchronization algorithm is to find the location of the
+watermark A/B blocks in the input signal. This is important because the
+signal may have been cropped so that the location of the blocks is not
+known. To be able to find the locations of the blocks, while adding the
+watermark, some sync bits are added to each block with relatively high redundancy.
+The values of these sync bits are known, for an A block they are 010101, for a
+B block they are 101010. The up- and down-bands used for the sync bits and
+offsets of all frames that belong to sync bits inside the A / B block are known
+and determined by the key.
+
+To perform the actual synchronization and locate the start of an A (or B) block,
+two steps are performed.
+
+* As a first step, the synchronization algorithm tests all possible positions
+for the start of an A (or B) block using a step size of 256 (1/4 frame size)
+and tries to decode the sync bits at the expected locations relative to the
+start of the block. Since the values and locations of the bits are known, a sync
+score can be computed that indicates how good the bits in the actual audio
+input at this position match the expected bit sequence.
+
+* For all start locations with a significantly high sync score, in a second
+step the actual start position is searched by trying all different start
+locations near to the original match with a smaller finer step size. Again
+a sync score can be computed and compared to a second threshold to decide
+whether this is location is really likely to contain a data block. If the match
+is good enough the start location will be used to decode the data bits in the
+block.
+
+Besides using this strategy to find "whole" data blocks, there is also a
+variant of the synchronization algorithm that is used if the audio signal
+is very short. It can find the location of the watermark even if the length
+of the input signal is too short to contain a complete data block. To be
+able to do this, the input signal is zero padded before sync detection and
+then the usual algorithm to find whole blocks is used.
 
 The following chart provides the detail of the steps involved in determining the synchronization locations.
 
@@ -662,6 +714,109 @@ During decoding, the same Pseudo Random Number Generator sequences R1…R6 are u
 By using the same AES key and a cryptographically secure PRNG, the sequences are uniformly distributed and deterministically reproducible but cannot be extrapolated.
 This prevents watermark extraction or modification by anyone without possession of the exact encoding key.
 
+## The Patchwork Algorithm
+
+![Example Spectrum](example-spectrum.png)
+
+To store one single bit inside a spectrum, **audiowmark** uses the patchwork
+algorithm. From the frequency bands of the spectrum (generated by computing the
+FFT of one frame), two groups are choosen in the frequency range of the watermark
+using the pseudo random number generator. These are called up- and down-bands.
+In the example above, the up-bands are red and the down-bands are green.
+Typically there are 30 up- and 30 down-bands and the other bands do not carry
+information.
+
+To embed a single bit, the following changes are made to the spectrum:
+
+ * to **store a 1 bit**, each magnitude of each up-band is increased by a small amount,
+   and each magnitude of each down-band is decreased by a small amount (this is
+   shown by the small arrows in the example image)
+
+ * to **store a 0 bit**, each magnitude of each up-band is decreased, and each magnitude of
+   each up-band is increased (the opposite of the small arrows in the example image)
+
+Since we have pseudo-randomly choosen the up- and down-bands from the spectrum,
+we can expect that if we sum up all values of the up-bands and sum up all
+values of the down-bands **before** embedding the bit, we will get a similar
+result (because the mean value of all spectrum bins is shared between the two).
+
+However, since we increased all elements of the up-bands and decreased all
+elements of the down-bands **after embedding a 1 bit**, the sum of the up-bands
+should be **greater than** the sum of the down-bands.
+
+So to decode the bit from the spectrum, we can simply use the rule
+
+ * **decode as 1 bit**, if the sum of the up-bands is greater than the sum
+   of the down-bands
+
+ * **decode as 0 bit**, if the sum of the up-bands is smaller than the sum
+   of the down-bands
+
+In the actual implementation, increasing/decreasing the magnitude of the
+up-/down-bands is done by generating a watermark signal with the right
+magnitude/phase for each frame that only contains the changes. So we
+compute a delta spectrum, which is then passed to the IFFT, windowed and then
+added to the original audio, so that the sum has the desired modified spectrum
+magnitude.
+
+The detection is performed on dB values of the magnitudes of the spectrum
+obtained from the FFT, so the sums of the dB values of up-/down-bands are
+computed and compared to decide whether a 0 bit or 1 bit was received.
+
+The patchwork algorithm does not guarantee that encoding/decoding will always
+yield the right result at the lowest level of embedding/decoding one bit (as
+the difference of the up-/down-bands can be too big before embedding due to
+the original signal). However error correction and redundancy by embedding a
+bit in more than one frame makes the whole process reliable at a higher level.
+
+There are three improvements over the basic patch work algorithm described
+above, which make the watermark detection more accurate:
+
+* To use soft-decoding for the convolutional decoder, instead of deciding
+whether a 0 or 1 bit was received by comparing the two sums directly before
+decoding the convolutional code to obtain the message bits, the difference
+between the two sums is normalized and is used as a soft-bit input for the
+Viterbi algorithm.
+
+* Instead of storing one data bit in each frame spectrum, a data bit uses up-
+and down-bands from different frames. This is called mix-encoding, which
+spreads the information of each data bit over many frames.
+
+* As described above, the original signal can have some negative effect
+on the performance of the decoder, since the sum of the up-bands and the
+sum of the down-bands will be different even before embedding the bits.
+To make detection more reliable, the original signal level for each bin is
+estimated by taking the average value of the previous and next spectrum and
+subtracted before computing the sum of the up- and down-bands.
+
+## Mixing with Limiter
+
+The input material for **audiowmark** is normalized (all samples are in the
+range from -1 to 1). If we simply added the watermark to the input, it
+could happen that this sum exceeds the range from -1 to 1 which would
+result in clipping. To avoid this, a limiter during mixing is used.
+
+The limiter computes the highest peak for each one second long block. Then a
+linear volume envelope is constructed connecting the blocks, such that the
+envelope is greater or equal to the height of the peaks in each block. The
+typical value for really high peaks is about 1.04 for the default watermarking
+strength of 10.
+
+To avoid clipping, the signal is divided by the slowly changing volume
+envelope. The result is somewhat similar to a lookahead peak limiter with
+attack of one second, and linear release of one second. Or to describe the
+effect more directly, if a single peak of 1.04 was produced in the watermarked
+signal, the limiter would slowly start decreasing the volume to 1/1.04 over the
+time of one second before the block that contains the peak, stay there for a
+while (due to the use of blocks) and afterwards slowly increase the volume
+again over the time of one second.
+
+By using a limiter that works on one second blocks like this, it is possible to
+seek to any point in the watermark (which is required for streaming via HLS)
+and getting the exact same output that watermarking all previous samples would
+have produced, because the output of the limiter only depends on the current,
+previous and next one second block. So only a small context window needs to
+be processed when seeking.
 
 ## Speed Detection
 
