@@ -524,6 +524,41 @@ Due to high redundancy and wide spread of watermark information, bits often can 
 
 Since detection success is directly dependent on the precise bit stream synchronization, an iterative process is used for fast approximation of synchronization locations with later refinements to yield precise results.
 
+The purpose of the synchronization algorithm is to find the location of the
+watermark A/B blocks in the input signal. This is important because the
+signal may have been cropped so that the location of the blocks is not
+known. To be able to find the locations of the blocks, while adding the
+watermark, some sync bits are added to each block with relatively high redundancy.
+The values of these sync bits are known, for an A block they are 010101, for a
+B block they are 101010. The up- and down-bands used for the sync bits and
+offsets of all frames that belong to sync bits inside the A / B block are known
+and determined by the key.
+
+To perform the actual synchronization and locate the start of an A (or B) block,
+two steps are performed.
+
+* As a first step, the synchronization algorithm tests all possible positions
+for the start of an A (or B) block using a step size of 256 (1/4 frame size)
+and tries to decode the sync bits at the expected locations relative to the
+start of the block. Since the values and locations of the bits are known, a sync
+score can be computed that indicates how good the bits in the actual audio
+input at this position match the expected bit sequence.
+
+* For all start locations with a significantly high sync score, in a second
+step the actual start position is searched by trying all different start
+locations near to the original match with a smaller finer step size. Again
+a sync score can be computed and compared to a second threshold to decide
+whether this is location is really likely to contain a data block. If the match
+is good enough the start location will be used to decode the data bits in the
+block.
+
+Besides using this strategy to find "whole" data blocks, there is also a
+variant of the synchronization algorithm that is used if the audio signal
+is very short. It can find the location of the watermark even if the length
+of the input signal is too short to contain a complete data block. To be
+able to do this, the input signal is zero padded before sync detection and
+then the usual algorithm to find whole blocks is used.
+
 The following chart provides the detail of the steps involved in determining the synchronization locations.
 
 
