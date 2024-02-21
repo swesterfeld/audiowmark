@@ -1,3 +1,5 @@
+AUTOMAKE_OPTIONS = dist-zstd no-dist-gzip
+
 SUBDIRS = src tests
 ACLOCAL_AMFLAGS = -I m4
 
