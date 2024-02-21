@@ -19,18 +19,25 @@ Commands:
     audiowmark cmp <watermarked_wav> <message_hex>
 
   * generate 128-bit watermarking key, to be used with --key option
-    audiowmark gen-key <key_file>
+    audiowmark gen-key <key_file> [ --name <key_name> ]
 
 Global options:
-  --strength <s>        set watermark strength              [10]
-  --linear              disable non-linear bit storage
-  --short <bits>        enable short payload mode
-  --key <file>          load watermarking key from file
-  -q, --quiet           disable information messages
+  -q, --quiet             disable information messages
+  --strict                treat (minor) problems as errors
 
-  --input-format raw    use raw stream as input
-  --output-format raw   use raw stream as output
-  --format raw          use raw stream as input and output
+Options for get / cmp:
+  --detect-speed          detect and correct replay speed difference
+  --detect-speed-patient  slower, more accurate speed detection
+  --json <file>           write JSON results into file
+
+Options for add / get / cmp:
+  --key <file>            load watermarking key from file
+  --short <bits>          enable short payload mode
+  --strength <s>          set watermark strength              [10]
+
+  --input-format raw      use raw stream as input
+  --output-format raw     use raw stream as output
+  --format raw            use raw stream as input and output
 
 The options to set the raw stream parameters (such as --raw-rate
 or --raw-channels) are documented in the README file.
