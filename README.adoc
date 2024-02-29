@@ -674,6 +674,13 @@ step is `./autogen.sh`. In this case, you need to ensure that (besides
 the dependencies listed below) the `autoconf-archive` package is
 installed.
 
+== Compiling from Source on Windows/Cygwin
+
+Windows is not an officially supported platform. However, if you want to
+build audiowmark (and videowmark) from source on windows, one way to do
+so is to use Cygwin. Andreas Strohmeier provided
+https://raw.githubusercontent.com/swesterfeld/audiowmark/master/docs/win-x64-build-guide.txt[*build instructions for Cygwin*].
+
 == Dependencies
 
 If you compile from source, `audiowmark` needs the following libraries:
