@@ -4,7 +4,8 @@ doc_DATA  = audiowmark.pdf audiowmark.html
 
 GRAPHVIZ_PY = graphviz.py
 
-EXTRA_DIST = audiowmark.md $(GRAPHVIZ_PY) example-spectrum.dat example-spectrum.gp
+EXTRA_DIST = audiowmark.md $(GRAPHVIZ_PY) example-spectrum.dat example-spectrum.gp \
+	     videowmark-win.cc win-x64-build-guide.txt
 
 audiowmark.pdf: audiowmark.md $(GRAPHVIZ_PY) example-spectrum.png
 	pandoc -F $(GRAPHVIZ_PY) -V papersize:a4 -V geometry:margin=2cm $< -o $@

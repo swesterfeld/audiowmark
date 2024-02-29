@@ -1,0 +1,209 @@
+In this step-by-step guide I show how to build Audiowmark
+to run it on Windows x64.
+
+I won't explain every single tool, just the creation process.
+That's enough work.
+
+Following these instructions exactly should lead to success.
+
+Prerequisites (programs / source codes / libraries):
+
+- Download source code from Audiowmark
+  DL: https://github.com/swesterfeld/audiowmark/releases
+  I chose this one : audiowmark-0.6.2.tar.zst
+
+- Download source code from zita-resampler
+  DL: https://github.com/digital-stage/zita-resampler/
+
+- Download 7zip ( newest beta version to extract .zst files )
+  DL: https://www.7-zip.org/
+
+- Download Notepad++
+  DL: https://notepad-plus-plus.org/
+
+- Download Cygwin
+  DL: https://cygwin.com/
+
+- Download CMAKE
+  DL: https://cmake.org/download/
+
+- Download MinGW-w64
+  DL: https://github.com/niXman/mingw-builds-binaries/releases
+  I chose this one : x86_64-13.2.0-release-posix-seh-msvcrt-rt_v11-rev0.7z
+
+- Download FFmpeg
+  DL: https://github.com/BtbN/FFmpeg-Builds/releases
+    I chose this one : ffmpeg-master-latest-win64-gpl-shared.zip
+
+
+
+Prepare everything:
+
+- Install Cygwin ( do a clean install )
+  We need to add the following libraries to Cygwin ( choose always the latest stable release )
+  - gcc-core
+  - gcc-debuginfo
+  - gcc-g++
+  - mingw64-x86_64-gcc-core
+  - mingw64-x86_64-gcc-g++
+  - make
+  - make-debuginfo
+  - libfftw3-devel
+  - libsndfile-devel
+  - libgcrypt-devel
+  - libmpg123-devel
+
+  - libzita-resampler ( Not included in Cygwin. We have to compile and copy it later manually )
+  - FFmpeg ( It is available in Cygwin, but i had some problems with it. So we add it later manually )
+
+- Install CMAKE
+
+- Install Notepad++
+
+- Install 7zip ( newest beta version to extract .zst files )
+
+- Extract zita-resempler-main.zip to c:\zita-resempler-main
+
+- Extract audiowmark-0.6.2.zip to c:\audiowmark-0.6.2
+
+  Edit "c:\audiowmark-0.6.2\src\utils.cc" and insert the following line directly below the comment section ( needed for vasprintf )
+  #define _GNU_SOURCE
+
+- Extract ffmpeg-master-latest-win64-gpl-shared.zip to c:\ffmpeg-master-latest-win64-gpl-shared
+
+- Extract x86_64-13.2.0-release-posix-seh-msvcrt-rt_v11-rev0.7z\mingw64 to c:\mingw64
+
+- Add "C:\mingw64\bin" to the system path variable and place it at the top most position
+
+- Important : Restart Windows !
+
+- After restart windows edit the file c:\zita-resempler-main\CMakeLists.txt with Notepad++.
+   Find the line below # make ( should be line 22 ) and insert the parameter SHARED.
+   # make
+      before:
+      	add_library(zita-resampler ${SOURCES} ${HEADER_LIST})
+      after:
+        add_library(zita-resampler SHARED ${SOURCES} ${HEADER_LIST})
+
+- Start CMAKE
+   Select the source dir c:\zita-resempler-main
+   Select / create the build dir ( f.e.: c:\zita-resampler-main\build64 )
+   Press "Configure"
+   Choose "MinGW Makefiles as generator"
+   Choose "Use default native compilers"
+   Press "Finish" to complete the configuration
+   We should see : Configuring done ( ignore the red values in the list above )
+   After successfull configuration press "Generate"
+   We should see : Gernerating done
+   Close CMAKE
+
+- Open the command prompt ( cmd.exe ) and go to the directory "c:\zita-resampler-main\build64".
+   Type in:
+     mingw32-make
+
+  We should see : [100%] Built target zita-resampler
+
+  Now we should have the following two new files:
+   "c:\zita-resampler-main\build64\libzita-resampler.dll"
+   "c:\zita-resampler-main\build64\libzita-resampler.dll.a"
+
+  Close CMD
+
+- Install zita-resampler
+  - Copy the file "c:\zita-resampler-main\build64\libzita-resampler.dll" to "C:\cygwin64\usr\x86_64-pc-cygwin\bin"
+  - Copy the file "c:\zita-resampler-main\build64\libzita-resampler.dll.a" to "C:\cygwin64\usr\x86_64-pc-cygwin\lib"
+  - Copy the whole directory "C:\zita-resampler-main\source\zita-resampler" to "C:\audiowmark-0.6.2\src\zita-resampler"
+
+- Install FFmpeg
+  - Copy ALL files from "C:\ffmpeg-master-latest-win64-gpl-shared\bin\*.*" to "C:\cygwin64\usr\x86_64-w64-mingw32\sys-root\mingw\bin"
+  - Copy ALL files ( except dir "pkgconfig" ) from "C:\ffmpeg-master-latest-win64-gpl-shared\lib\*.*" to "C:\cygwin64\usr\x86_64-w64-mingw32\sys-root\mingw\lib"
+  - Copy ALL .pc-files from "C:\ffmpeg-master-latest-win64-gpl-shared\lib\pkgconfig\*.pc" to "C:\cygwin64\lib\pkgconfig"
+  - Copy ALL sub directories from "C:\ffmpeg-master-latest-win64-gpl-shared\include\*" to "C:\audiowmark-0.6.2\src\*"
+
+
+Now we should be ready to build the audiowmark source code:
+
+- Start Cygwin64-Terminal with admin rights
+  Change the current directory to: /cygdrive/c/audiowmark-0.6.2
+
+- Type in:
+   ./configure --host=x86_64-pc-cygwin
+
+- Type in:
+   make.exe
+
+All created EXE-files will be saved to "C:\audiowmark-0.6.2\src\.libs"
+Note : There is another, significantly smaller version of each EXE file in "C:\audiowmark-0.6.2\src\". Don't use these. They don't work.
+
+
+The last part to do is to build the videowmark.exe.
+The file "C:\audiowmark-0.6.2\src\videowmark" is a linux bash script and can not executed on windows.
+So I ported it to C++.
+To keep it simple, I made only this single CPP file without a header file.
+- Copy the file "C:\audiowmark-0.6.2\docs\videowmark-win.cc" to "C:\audiowmark-0.6.2\src\"
+- Open Cygwin and and go to the directory "/cygdrive/c/audiowmark-0.6.2/src/"
+- Type in :
+     g++ -o videowmark.exe videowmark.cc
+
+Okay, we are almost finished.
+
+In order to deliver audiowmark.exe and videowmark.exe all corresponding DLL- and EXE-files must also be delivered.
+And that's a lot.
+
+Every single DLL- and EXE-file we will find somewhere in "C:\cygwin64"
+Each file must be copied into the SAME directory where the EXE file is located.
+
+Location: C:\audiowmark-0.6.2\src\.libs\
+audiowmark.exe
+
+C:\audiowmark-0.6.2\src\
+videowmark.exe
+
+Location: /usr/x86_64-w64-mingw32/sys-root/mingw/bin/
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+avcodec-60.dll
+avdevice-60.dll
+avfilter-9.dll
+avformat-60.dll
+avutil-58.dll
+libatomic-1.dll
+libgcc_s_seh-1.dll
+libgomp-1.dll
+libquadmath-0.dll
+libssp-0.dll
+libstdc++-6.dll
+libwinpthread-1.dll
+postproc-57.dll
+swresample-4.dll
+swscale-7.dll
+
+
+Location: /usr/bin/
+cygiconv-2.dll
+cygintl-8.dll
+cyggpg-error-0.dll
+cygvorbis-0.dll
+cygvorbisenc-2.dll
+cygogg-0.dll
+cygFLAC-8.dll
+cygopus-0.dll
+cygmp3lame-0.dll
+cyggcrypt-20.dll
+cygsndfile-1.dll
+cygmpg123-0.dll
+cygstdc++-6.dll
+cygwin1.dll
+cyggcc_s-seh-1.dll
+cygfftw3f-3.dll
+
+Location: /usr/x86_64-pc-cygwin/bin/
+libzita-resampler.dll
+
+
+That's it. We're done.
+That was easy, wasn't it?
+
+BR
+Andreas
