@@ -140,7 +140,7 @@ The last part to do is to build the videowmark.exe.
 The file "C:\audiowmark-0.6.2\src\videowmark" is a linux bash script and can not executed on windows.
 So I ported it to C++.
 To keep it simple, I made only this single CPP file without a header file.
-- Copy the file "C:\audiowmark-0.6.2\docs\videowmark-win.cc" to "C:\audiowmark-0.6.2\src\"
+- Copy the file "C:\audiowmark-0.6.2\docs\videowmark-win.cc" to "C:\audiowmark-0.6.2\src\videowmark.cc"
 - Open Cygwin and and go to the directory "/cygdrive/c/audiowmark-0.6.2/src/"
 - Type in :
      g++ -o videowmark.exe videowmark.cc
