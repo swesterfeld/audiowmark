@@ -15,6 +15,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef __CYGWIN__
+/* needed for vasprintf */
+#define _GNU_SOURCE
+#endif
+
 #include "utils.hh"
 #include "stdarg.h"
 
