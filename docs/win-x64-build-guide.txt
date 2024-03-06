@@ -1,3 +1,5 @@
+Last update: 05.03.2024
+
 In this step-by-step guide I show how to build Audiowmark
 to run it on Windows x64.
 
@@ -33,7 +35,7 @@ Prerequisites (programs / source codes / libraries):
 
 - Download FFmpeg
   DL: https://github.com/BtbN/FFmpeg-Builds/releases
-    I chose this one : ffmpeg-master-latest-win64-gpl-shared.zip
+  I chose this one : ffmpeg-master-latest-win64-gpl-shared.zip
 
 
 
@@ -64,7 +66,7 @@ Prepare everything:
 
 - Extract zita-resempler-main.zip to c:\zita-resempler-main
 
-- Extract audiowmark-0.6.2.zip to c:\audiowmark-0.6.2
+- Extract audiowmark-0.6.2.tar.zst to c:\audiowmark-0.6.2
 
   Edit "c:\audiowmark-0.6.2\src\utils.cc" and insert the following line directly below the comment section ( needed for vasprintf )
   #define _GNU_SOURCE
@@ -73,7 +75,7 @@ Prepare everything:
 
 - Extract x86_64-13.2.0-release-posix-seh-msvcrt-rt_v11-rev0.7z\mingw64 to c:\mingw64
 
-- Add "C:\mingw64\bin" to the system path variable and place it at the top most position
+- Add "C:\mingw64\bin" to the system path variable and place it at the very first position
 
 - Important : Restart Windows !
 
@@ -117,6 +119,7 @@ Prepare everything:
 - Install FFmpeg
   - Copy ALL files from "C:\ffmpeg-master-latest-win64-gpl-shared\bin\*.*" to "C:\cygwin64\usr\x86_64-w64-mingw32\sys-root\mingw\bin"
   - Copy ALL files ( except dir "pkgconfig" ) from "C:\ffmpeg-master-latest-win64-gpl-shared\lib\*.*" to "C:\cygwin64\usr\x86_64-w64-mingw32\sys-root\mingw\lib"
+  - Copy ALL files ( except dir "pkgconfig" ) from "C:\ffmpeg-master-latest-win64-gpl-shared\lib\*.*" to "C:\cygwin64\usr\x86_64-pc-cygwin\lib"
   - Copy ALL .pc-files from "C:\ffmpeg-master-latest-win64-gpl-shared\lib\pkgconfig\*.pc" to "C:\cygwin64\lib\pkgconfig"
   - Copy ALL sub directories from "C:\ffmpeg-master-latest-win64-gpl-shared\include\*" to "C:\audiowmark-0.6.2\src\*"
 
@@ -127,10 +130,10 @@ Now we should be ready to build the audiowmark source code:
   Change the current directory to: /cygdrive/c/audiowmark-0.6.2
 
 - Type in:
-   ./configure --host=x86_64-pc-cygwin
+   ./configure --host=x86_64-pc-cygwin --with-ffmpeg
 
 - Type in:
-   make.exe
+   make
 
 All created EXE-files will be saved to "C:\audiowmark-0.6.2\src\.libs"
 Note : There is another, significantly smaller version of each EXE file in "C:\audiowmark-0.6.2\src\". Don't use these. They don't work.
@@ -153,13 +156,24 @@ And that's a lot.
 Every single DLL- and EXE-file we will find somewhere in "C:\cygwin64"
 Each file must be copied into the SAME directory where the EXE file is located.
 
-Location: C:\audiowmark-0.6.2\src\.libs\
+---------------
+Location in Windows : C:\audiowmark-0.6.2\src\.libs\
+Location in Cygwin  : /cygdrive/c/audiowmark-0.6.2/src/.libs
+---------------
 audiowmark.exe
 
-C:\audiowmark-0.6.2\src\
+
+---------------
+Location in Windows : C:\audiowmark-0.6.2\src\
+Location in Cygwin  : /cygdrive/c/audiowmark-0.6.2/src/
+---------------
 videowmark.exe
 
-Location: /usr/x86_64-w64-mingw32/sys-root/mingw/bin/
+
+---------------
+Location in Windows : C:\cygwin64\usr\x86_64-w64-mingw32\sys-root\mingw\bin
+Location in Cygwin  : /usr/x86_64-w64-mingw32/sys-root/mingw/bin/
+---------------
 ffmpeg.exe
 ffplay.exe
 ffprobe.exe
@@ -180,7 +194,10 @@ swresample-4.dll
 swscale-7.dll
 
 
-Location: /usr/bin/
+---------------
+Location in Windows : C:\cygwin64\bin
+Location in Cygwin  : /usr/bin/
+---------------
 cygiconv-2.dll
 cygintl-8.dll
 cyggpg-error-0.dll
@@ -198,7 +215,11 @@ cygwin1.dll
 cyggcc_s-seh-1.dll
 cygfftw3f-3.dll
 
-Location: /usr/x86_64-pc-cygwin/bin/
+
+---------------
+Location in Windows : C:\cygwin64\usr\x86_64-pc-cygwin\bin
+Location in Cygwin  : /usr/x86_64-pc-cygwin/bin/
+---------------
 libzita-resampler.dll
 
 

@@ -22,6 +22,8 @@
  *
  */
 
+ //---------------------------------------------------------------------------
+
 #include <iostream>
 #include <string>
 #include <cstdio>
@@ -29,13 +31,20 @@
 #include <algorithm>
 #include <filesystem>
 
+//---------------------------------------------------------------------------
+
 using namespace std;
 
+//---------------------------------------------------------------------------
+
+string g_sVersion = "videowmark 0.0.5";
 string g_sFFMPEG_VERBOSE = "-v error";
 string g_sFFProbe = "ffprobe.exe";
 string g_sFFMpeg = "ffmpeg.exe";
 string g_sAudiowmark = "audiowmark.exe";
 int g_iQuiet = 0;
+
+//---------------------------------------------------------------------------
 
 #define STRING_LENGTH 4096
 
@@ -49,17 +58,17 @@ int die(string sErrorMsg)
 }
 //---------------------------------------------------------------------------
 
-//Fix me
-//Maybe there is es better solution
+// Fix me
+// Maybe there is es better solution
 //
-//The result of getenv is not correct in cygwin environment.
+// The result of getenv is not correct in cygwin environment.
 //
-//Example: getenv("TEMP");
+// Example: getenv("TEMP");
 //
-//Result : /cygdrive/c/path/to/temp
-//But should be: c:\path\to\temp
+// Result : /cygdrive/c/path/to/temp
+// But should be: c:\path\to\temp
 //
-//This is a workaround to repair the path
+// This is a workaround to repair the path
 string repair_cygwin_path(string sPath)
 {
 int i = 0;
@@ -69,7 +78,7 @@ string sResult = "";
     {
         sPath.erase(0, 10);
 
-        for(i = 0; i < sPath.length(); i++)
+        for(i = 0; i < int(sPath.length()); i++)
         {
             if(sPath[i] == '/')
             {
@@ -89,14 +98,13 @@ string sResult = "";
 }
 //---------------------------------------------------------------------------
 
-//Fix me
-//Maybe there is es better solution
+// Converts the Windows path to the UNIX path
 string get_unix_path(string sPath)
 {
 int i = 0;
 string sResult = "";
 
-    for(i = 0; i < sPath.length(); i++)
+    for(i = 0; i < int(sPath.length()); i++)
     {
         if(sPath[i] == '\\')
         {
@@ -105,6 +113,108 @@ string sResult = "";
     }
 
     sResult = sPath;
+
+    return sResult;
+}
+//---------------------------------------------------------------------------
+
+// Converts the UNIX path to the Windows path
+string get_windows_path(string sPath)
+{
+int i = 0;
+string sResult = "";
+
+    for(i = 0; i < int(sPath.length()); i++)
+    {
+        if(sPath[i] == '/')
+        {
+            sPath[i] = '\\';
+        }
+    }
+
+    sResult = sPath;
+
+    return sResult;
+}
+//---------------------------------------------------------------------------
+
+// Completes the path if necessary
+string complete_path(string sPath)
+{
+int iPathLength = 0;
+bool bUNIX = true;
+string sResult = "";
+
+    iPathLength = sPath.length();
+    if(iPathLength > 0)
+    {
+        if(int(sPath.find("\\")) >= 0 )
+        {
+            bUNIX = false;
+        }
+
+        if(bUNIX == true)
+        {   // UNIX
+            if(sPath[iPathLength-1] != '/')
+            {
+                sPath += "/";
+            }
+        }
+        else
+        {   // Windows
+            if(sPath[iPathLength-1] != '\\')
+            {
+                sPath += "\\";
+            }
+        }
+    }
+
+    sResult = sPath;
+
+    return sResult;
+}
+//---------------------------------------------------------------------------
+
+// Set the current working directory
+string set_working_dir(string sDestExe)
+{
+string sResult = "";
+string sWorkingDir = "";
+string sPath = "";
+string sTempUnixPath = "";
+char cWorkingDir[STRING_LENGTH] = {};
+
+    //If something goes wrong while getting the working dir
+    sResult = sDestExe;
+
+    //Get current application directory
+	GetModuleFileNameA(NULL, cWorkingDir, STRING_LENGTH);
+    sWorkingDir = cWorkingDir;
+
+    if(sDestExe.length() > 0 && sWorkingDir.length() > 0)
+    {
+        //Repair the path if needed
+        sWorkingDir = repair_cygwin_path(sWorkingDir);
+
+        //Convert Windows path to UNIX path
+        sWorkingDir = get_unix_path(sWorkingDir);
+
+        //Fix me:
+        //Create filesystem::path object ( works in Cygwin only with UNIX path )
+        filesystem::path p(sWorkingDir);
+
+        //Get file path
+        sPath = p.parent_path();
+
+        //Completes the path if necessary
+        sPath = complete_path(sPath);
+
+        //Convert UNIX path to Windows path
+        sPath = get_windows_path(sPath);
+
+        //Build the filename
+        sResult = "\"" + sPath + sDestExe + "\"";
+    }
 
     return sResult;
 }
@@ -132,21 +242,29 @@ string sTempFilename = "";
     //Repair the path if needed
     sTempPath = repair_cygwin_path(sTempPath);
 
-    //Fix me:
-    //filesystem::path in Cygwin only works with /
+    //Completes the path if necessary
+    sTempPath = complete_path(sTempPath);
+
+    //Convert Windows path to UNIX path
     sTempUnixFilename = get_unix_path(sFilename);
 
+    //Fix me:
+    //Create filesystem::path object ( works in Cygwin only with UNIX path )
     filesystem::path p(sTempUnixFilename);
 
+    //Get filename without path
     sFilenameWoPath = p.filename();
 
-    sTempFilename = sTempPath + "\\" + sFilenameWoPath;
+    //Create filename
+    sTempFilename = sTempPath + sFilenameWoPath;
 
+    //Create temp file at destination
     if(CopyFile(sFilename.c_str(), sTempFilename.c_str(), false) == false)
     {
         die("Could not create temp file");
     }
 
+    //Return file path
     return sTempFilename;
 }
 //---------------------------------------------------------------------------
@@ -162,11 +280,10 @@ bool delete_temp_file(string sFilename)
 string ExecCmd(string sCMD /* [in] command to execute */ )
 {
 int i = 0;
-
-    string strResult = "";
-    char cmd[STRING_LENGTH] = {};
-    HANDLE hPipeRead = 0;
-    HANDLE hPipeWrite = 0;
+string strResult = "";
+char cmd[STRING_LENGTH] = {};
+HANDLE hPipeRead = 0;
+HANDLE hPipeWrite = 0;
 
     strcpy(cmd, sCMD.c_str());
 
@@ -248,7 +365,6 @@ string sProbeResult = "";
 string sTempResult = "";
 string sBitRate = "";
 string sData = "";
-char cResult[STRING_LENGTH] = {};
 int i = 0;
 int iPos = 0;
 
@@ -260,7 +376,7 @@ int iPos = 0;
     sProbeResult = ExecCmd(sCMD);
 
     //Parse to find the audio line
-    for(i = 0; i < sProbeResult.length(); i++)
+    for(i = 0; i < int(sProbeResult.length()); i++)
     {
         if(sProbeResult[i] != 0x0d && sProbeResult[i] != 0x0a)
         {
@@ -285,7 +401,7 @@ int iPos = 0;
     if(sResult.length() > 0)
     {
         sValue = "codec_name=";
-        iPos = sResult.find(sValue);
+        iPos = int(sResult.find(sValue));
         if(iPos > 0)
         {
             iPos += sValue.length();
@@ -297,7 +413,7 @@ int iPos = 0;
         }
 
         sValue = "bit_rate=";
-        iPos = sResult.find(sValue);
+        iPos = int(sResult.find(sValue));
         if(iPos > 0)
         {
             iPos += sValue.length();
@@ -399,7 +515,6 @@ string sTempFilenameAudioWM = "";
     // check file extensions
     sExtIn = extension(sInFile);
     sExtOut = extension(sOutFile);
-
     if(sExtIn != sExtOut)
     {
         die("input/output extension must match ('" + sExtIn + "' vs. '" + sExtOut + "')");
@@ -518,7 +633,6 @@ string sTempPath = "";
 string sResult = "";
 string sTempFilenameVideo = "";
 string sTempFilenameAudio = "";
-char cResult[STRING_LENGTH] = {};
 
     // check audio/video stream count
     sResult = audio_video_stream_count(sFilename);
@@ -593,24 +707,34 @@ char cResult[STRING_LENGTH] = {};
 }
 //---------------------------------------------------------------------------
 
+void show_version_and_exit()
+{
+    printf("%s\n", g_sVersion.c_str());
+    exit(0);
+}
+//---------------------------------------------------------------------------
+
 void show_help_and_exit()
 {
     printf(
-       "usage: videowmark <command> [ <args>... ]\n"
-       "\n"
-       "Commands:\n"
-       "  * create a watermarked video file with a message\n"
-       "    videowmark add <input_video> <watermarked_video> <message_hex>\n"
-       "\n"
-       "  * retrieve message\n"
-       "    videowmark get <watermarked_video>\n"
-       "\n"
-       "Global options:\n"
-       "  --strength <s>        set watermark strength\n"
-       "  --key <file>          load watermarking key from file\n"
-       "  -q, --quiet           disable information messages\n"
-       "  -v, --verbose         enable ffmpeg verbose output\n"
-       );
+           "usage: videowmark <command> [ <args>... ]\n"
+           "\n"
+           "Commands:\n"
+           "  * create a watermarked video file with a message\n"
+           "    videowmark add <input_video> <watermarked_video> <message_hex>\n"
+           "\n"
+           "  * retrieve message\n"
+           "    videowmark get <watermarked_video>\n"
+           "\n"
+           "Global options:\n"
+           "  --strength <s>            set watermark strength\n"
+           "  --key <file>              load watermarking key from file\n"
+           "  -q, --quiet               disable information messages\n"
+           "  -v, --verbose             enable ffmpeg verbose output\n"
+           "  --version                 show the current videowmark version\n"
+           "  --detect-speed            detect and correct replay speed difference\n"
+           "  --detect-speed-patient    slower, more accurate speed detection\n"
+           );
 
     exit(0);
 }
@@ -625,25 +749,33 @@ string sFilename = "";
 string sInFile = "";
 string sOutFile = "";
 string sHash = "";
+string sARGS = "";
 int i = 0;
 
-    string sARGS = "";
+    // Set the the current working directory
+    g_sFFProbe = set_working_dir(g_sFFProbe);
+    g_sFFMpeg = set_working_dir(g_sFFMpeg);
+    g_sAudiowmark = set_working_dir(g_sAudiowmark);
 
     if(argc > 1)
     {
-        //Get all args
+        // Get all args
         for(i = 1; i < argc; i++)
         {
             if(string(argv[i]) == "-v" || string(argv[i]) == "--verbose")
             {
                 g_sFFMPEG_VERBOSE = "-v info";
             }
+            else if(string(argv[i]) == "--version")
+            {
+                show_version_and_exit();
+            }
             else if(string(argv[i]) == "-q" || string(argv[i]) == "--quiet")
             {
                 sARGS += " -q";
                 g_iQuiet = 1;
             }
-            else if(string(argv[i]) == "--detect-speed")
+            else if(string(argv[i]) == "--detect-speed" || string(argv[i]) == "--detect-speed-patient")
             {
                 sARGS += " " + string(argv[i]);
             }
@@ -697,7 +829,7 @@ int i = 0;
             }
         }
 
-        //Get and execute action
+        // Get and execute action
         if(sAction == "add" && sInFile.length() > 0 && sOutFile.length() > 0 && sHash.length() > 0)
         {
             add_watermark(sInFile, sOutFile, sHash, sARGS);
