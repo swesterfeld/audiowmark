@@ -484,6 +484,13 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
           error ("audiowmark: hls segment '%s' is not encoded using AAC\n", segname.c_str());
           return 1;
         }
+      int segment_channels = atoi (params["channels"].c_str());
+      if (segment_channels != audio_master_data.n_channels())
+        {
+          error ("audiowmark: number of channels mismatch:\n - hls segment '%s' has %d channels\n - audio master '%s' has %d channels\n",
+                 segname.c_str(), segment_channels, audio_master.c_str(), audio_master_data.n_channels());
+          return 1;
+        }
 
       /* get segment parameters */
       if (params["channel_layout"].empty())
