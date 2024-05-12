@@ -20,6 +20,11 @@
 
 #include <regex>
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+#include <cinttypes>
+
 #include "utils.hh"
 #include "mpegts.hh"
 #include "wavdata.hh"

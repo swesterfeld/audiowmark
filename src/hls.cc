@@ -23,6 +23,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+#include <cinttypes>
+
 #include "utils.hh"
 #include "mpegts.hh"
 #include "sfinputstream.hh"

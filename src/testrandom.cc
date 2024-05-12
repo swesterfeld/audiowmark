@@ -18,7 +18,10 @@
 #include "utils.hh"
 #include "random.hh"
 
-#include <inttypes.h>
+#ifndef __STDC_FORMAT_MACROS
+#define __STDC_FORMAT_MACROS
+#endif
+#include <cinttypes>
 
 using std::vector;
 using std::string;
