@@ -69,28 +69,36 @@ RawConverter::create (const RawFormat& raw_format, Error& error)
     {
       case 16: return create_with_bits<16> (raw_format, error);
       case 24: return create_with_bits<24> (raw_format, error);
+      case 32: return create_with_bits<32> (raw_format, error);
       default: error = Error ("unsupported bit depth");
                return nullptr;
     }
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
-constexpr std::array<int, 3>
+constexpr std::array<int, 4>
 make_endian_shift ()
 {
   if (BIT_DEPTH == 16)
     {
       if (ENDIAN == RawFormat::Endian::LITTLE)
-        return { 16, 24, -1 };
+        return { 16, 24, -1, -1 };
       else
-        return { 24, 16, -1 };
+        return { 24, 16, -1, -1 };
     }
   if (BIT_DEPTH == 24)
     {
       if (ENDIAN == RawFormat::Endian::LITTLE)
-        return {  8, 16, 24 };
+        return {  8, 16, 24, -1 };
       else
-        return { 24, 16, 8 };
+        return { 24, 16, 8, -1 };
+    }
+  if (BIT_DEPTH == 32)
+    {
+      if (ENDIAN == RawFormat::Endian::LITTLE)
+        return {  0, 8, 16, 24 };
+      else
+        return { 24, 16, 8, 0 };
     }
 }
 
@@ -120,6 +128,8 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samp
         ptr[1] = sample >> eshift[1];
       if (eshift[2] >= 0)
         ptr[2] = sample >> eshift[2];
+      if (eshift[3] >= 0)
+        ptr[3] = sample >> eshift[3];
 
       ptr += sample_width;
     }
@@ -146,6 +156,8 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const vector<unsigned c
         s32 += ptr[1] << eshift[1];
       if (eshift[2] >= 0)
         s32 += ptr[2] << eshift[2];
+      if (eshift[3] >= 0)
+        s32 += ptr[3] << eshift[3];
 
       samples[i] = s32 * norm;
       ptr += sample_width;
