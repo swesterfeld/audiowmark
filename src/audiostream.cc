@@ -23,6 +23,7 @@
 #include "rawconverter.hh"
 #include "rawoutputstream.hh"
 #include "stdoutwavoutputstream.hh"
+#include "wavpipeinputstream.hh"
 
 using std::string;
 
@@ -52,7 +53,7 @@ AudioInputStream::create (const string& filename, Error& err)
       else if (err)
         return nullptr;
     }
-  else
+  else if (Params::input_format == Format::RAW)
     {
       RawInputStream *ristream = new RawInputStream();
       in_stream.reset (ristream);
@@ -60,6 +61,20 @@ AudioInputStream::create (const string& filename, Error& err)
       err = ristream->open (filename, Params::raw_input_format);
       if (err)
         return nullptr;
+    }
+  else if (Params::input_format == Format::WAV_PIPE)
+    {
+      WavPipeInputStream *wistream = new WavPipeInputStream();
+      in_stream.reset (wistream);
+
+      err = wistream->open (filename);
+      if (err)
+        return nullptr;
+    }
+  else
+    {
+      err = Error ("selected format is not supported as input format");
+      return nullptr;
     }
   return in_stream;
 }
@@ -79,9 +94,11 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
     }
   else if (filename == "-")
     {
+      bool wav_pipe = Params::output_format == Format::WAV_PIPE;
+
       StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
       out_stream.reset (swstream);
-      err = swstream->open (n_channels, sample_rate, bit_depth, n_frames);
+      err = swstream->open (n_channels, sample_rate, bit_depth, n_frames, wav_pipe);
       if (err)
         return nullptr;
     }

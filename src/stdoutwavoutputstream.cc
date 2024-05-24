@@ -71,7 +71,7 @@ header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
 }
 
 Error
-StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames, bool wav_pipe)
 {
   assert (m_state == State::NEW);
 
@@ -79,7 +79,7 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
     {
       return Error ("StdoutWavOutputStream::open: unsupported bit depth");
     }
-  if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN)
+  if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN && !wav_pipe)
     {
       return Error ("unable to write wav format to standard out without input length information");
     }
@@ -100,7 +100,10 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   size_t aligned_data_size = data_size + m_close_padding;
 
   header_append_str (header_bytes, "RIFF");
-  header_append_u32 (header_bytes, 36 + aligned_data_size);
+  if (wav_pipe)
+    header_append_u32 (header_bytes, -1);
+  else
+    header_append_u32 (header_bytes, 36 + aligned_data_size);
   header_append_str (header_bytes, "WAVE");
 
   // subchunk 1
@@ -115,7 +118,10 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
 
   // subchunk 2
   header_append_str (header_bytes, "data");
-  header_append_u32 (header_bytes, data_size);
+  if (wav_pipe)
+    header_append_u32 (header_bytes, -1);
+  else
+    header_append_u32 (header_bytes, data_size);
 
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
   if (ferror (stdout))
