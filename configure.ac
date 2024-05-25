@@ -7,6 +7,8 @@ AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CXX
 LT_INIT
 
+AC_C_BIGENDIAN()
+
 dnl
 dnl sndfile
 dnl
