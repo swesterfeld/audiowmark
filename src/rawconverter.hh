@@ -28,7 +28,7 @@ public:
   virtual ~RawConverter() = 0;
 
   virtual void to_raw   (const std::vector<float>& samples, std::vector<unsigned char>& bytes) = 0;
-  virtual void from_raw (const std::vector<unsigned char>& bytes, std::vector<float>& samples) = 0;
+  virtual void from_raw (const unsigned char *bytes, float *samples, size_t n_samples) = 0;
 };
 
 #endif /* AUDIOWMARK_RAW_CONVERTER_HH */

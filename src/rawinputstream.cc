@@ -146,7 +146,7 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
 
   input_bytes.resize (r_count * n_channels * sample_width);
 
-  m_raw_converter->from_raw (input_bytes, samples);
+  m_raw_converter->from_raw (input_bytes.data(), samples.data(), r_count * n_channels);
 
   return Error::Code::NONE;
 }

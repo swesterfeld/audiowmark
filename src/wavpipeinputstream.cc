@@ -25,6 +25,7 @@
 using std::string;
 using std::vector;
 using std::min;
+using std::max;
 
 WavPipeInputStream::~WavPipeInputStream()
 {
@@ -153,18 +154,34 @@ WavPipeInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
+  const size_t block_size = 1024;
   const int n_channels   = m_format.n_channels();
   const int sample_width = m_format.bit_depth() / 8;
 
-  vector<unsigned char> input_bytes (count * n_channels * sample_width);
-  size_t r_count = fread (input_bytes.data(), n_channels * sample_width, count, m_input_file);
-  if (ferror (m_input_file))
-    return Error ("error reading sample data");
+  m_input_bytes.resize (block_size * n_channels * sample_width);
+  size_t pos = 0;
 
-  input_bytes.resize (r_count * n_channels * sample_width);
+  for (;;)
+    {
+      size_t todo = min (count, block_size);
+      if (!todo)
+        break;
 
-  m_raw_converter->from_raw (input_bytes, samples);
+      size_t r_count = fread (m_input_bytes.data(), n_channels * sample_width, todo, m_input_file);
+      if (ferror (m_input_file))
+        return Error ("error reading sample data");
 
+      if (!r_count)
+        break;
+
+      samples.resize (max (samples.size(), (pos + r_count) * n_channels));
+
+      m_raw_converter->from_raw (m_input_bytes.data(), samples.data() + pos * n_channels, r_count * n_channels);
+
+      pos += r_count;
+      count -= r_count;
+    }
+  samples.resize (pos * n_channels);
   return Error::Code::NONE;
 }
 

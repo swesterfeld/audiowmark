@@ -38,6 +38,7 @@ class WavPipeInputStream : public AudioInputStream
   FILE       *m_input_file = nullptr;
   bool        m_close_file = false;
 
+  std::vector<unsigned char>    m_input_bytes;
   std::unique_ptr<RawConverter> m_raw_converter;
 
 public:
