@@ -75,7 +75,7 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
 {
   assert (m_state == State::NEW);
 
-  if (bit_depth != 16 && bit_depth != 24)
+  if (bit_depth != 16 && bit_depth != 24 && bit_depth != 32)
     {
       return Error ("StdoutWavOutputStream::open: unsupported bit depth");
     }
