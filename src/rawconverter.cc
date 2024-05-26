@@ -33,8 +33,8 @@ template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 class RawConverterImpl : public RawConverter
 {
 public:
-  void to_raw (const std::vector<float>& samples, std::vector<unsigned char>& bytes);
-  void from_raw (const std::vector<unsigned char>& bytes, std::vector<float>& samples);
+  void to_raw (const std::vector<float>& samples, std::vector<unsigned char>& bytes) AUDIOWMARK_EXTRA_OPT;
+  void from_raw (const std::vector<unsigned char>& bytes, std::vector<float>& samples) AUDIOWMARK_EXTRA_OPT;
 };
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
