@@ -116,6 +116,7 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samp
 #else
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
 #endif
+  assert ((uintptr_t (output_bytes.data()) & 3) == 0); // ensure alignment for optimized 32 bit native endian version
 
   output_bytes.resize (sample_width * samples.size());
 
@@ -123,22 +124,36 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samp
 
   for (size_t i = 0; i < samples.size(); i++)
     {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
+      const float min_value = -0x80000000LL;
+      const float max_value =  0x7FFFFFFF;
+      const float norm      =  0x80000000LL;
+      const float snorm     = samples[i] * norm;
 
-      const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
+      int sample;
+      if (snorm >= max_value)
+        sample = 0x7FFFFFFF;
+      else if (snorm <= min_value)
+        sample = 0x80000000;
+      else
+        sample = snorm;
 
-      if (eshift[0] >= 0)
-        ptr[0] = (sample >> eshift[0]) ^ sign_flip;
-      if (eshift[1] >= 0)
-        ptr[1] = sample >> eshift[1];
-      if (eshift[2] >= 0)
-        ptr[2] = sample >> eshift[2];
-      if (eshift[3] >= 0)
-        ptr[3] = sample >> eshift[3];
+      if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 32)
+        ((int32_t *)ptr)[i] = sample;
+      else if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 16)
+        ((int16_t *)ptr)[i] = sample >> 16;
+      else
+        {
+          if (eshift[0] >= 0)
+            ptr[0] = (sample >> eshift[0]) ^ sign_flip;
+          if (eshift[1] >= 0)
+            ptr[1] = sample >> eshift[1];
+          if (eshift[2] >= 0)
+            ptr[2] = sample >> eshift[2];
+          if (eshift[3] >= 0)
+            ptr[3] = sample >> eshift[3];
 
-      ptr += sample_width;
+          ptr += sample_width;
+        }
     }
 }
 
