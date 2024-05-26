@@ -104,6 +104,24 @@ make_endian_shift ()
     }
 }
 
+template<int BITS>
+static int
+float_to_int_clip (float f)
+{
+  const int64_t inorm = (1LL << (BITS - 1));
+  const float min_value = -inorm;
+  const float max_value =  inorm - 1;
+  const float norm      =  inorm;
+  const float snorm     = f * norm;
+
+  if (snorm >= max_value)
+    return inorm - 1;
+  else if (snorm <= min_value)
+    return -inorm;
+  else
+    return snorm;
+}
+
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
 RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
@@ -124,25 +142,14 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samp
 
   for (size_t i = 0; i < samples.size(); i++)
     {
-      const float min_value = -0x80000000LL;
-      const float max_value =  0x7FFFFFFF;
-      const float norm      =  0x80000000LL;
-      const float snorm     = samples[i] * norm;
-
-      int sample;
-      if (snorm >= max_value)
-        sample = 0x7FFFFFFF;
-      else if (snorm <= min_value)
-        sample = 0x80000000;
-      else
-        sample = snorm;
-
       if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 32)
-        ((int32_t *)ptr)[i] = sample;
+        ((int32_t *)ptr)[i] = float_to_int_clip<32> (samples[i]);
       else if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 16)
-        ((int16_t *)ptr)[i] = sample >> 16;
+        ((int16_t *)ptr)[i] = float_to_int_clip<16> (samples[i]);
       else
         {
+          int sample = float_to_int_clip<32> (samples[i]);
+
           if (eshift[0] >= 0)
             ptr[0] = (sample >> eshift[0]) ^ sign_flip;
           if (eshift[1] >= 0)
