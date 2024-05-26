@@ -23,6 +23,7 @@
 
 using std::string;
 using std::vector;
+using std::min;
 
 StdoutWavOutputStream::~StdoutWavOutputStream()
 {
@@ -145,15 +146,26 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
   if (samples.empty())
     return Error::Code::NONE;
 
-  vector<unsigned char> output_bytes;
+  const size_t block_size = 1024;
+  const int sample_width = m_bit_depth / 8;
 
-  m_raw_converter->to_raw (samples, output_bytes);
+  m_output_bytes.resize (sample_width * block_size);
+  size_t pos = 0;
 
-  fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
-  if (ferror (stdout))
-    return Error ("write sample data failed");
+  for (;;)
+    {
+      size_t todo = min (block_size, samples.size() - pos);
+      if (!todo)
+        return Error::Code::NONE;
 
-  return Error::Code::NONE;
+      m_raw_converter->to_raw (samples.data() + pos, m_output_bytes.data(), todo);
+
+      fwrite (m_output_bytes.data(), 1, todo * sample_width, stdout);
+      if (ferror (stdout))
+        return Error ("write sample data failed");
+
+      pos += todo;
+    }
 }
 
 Error

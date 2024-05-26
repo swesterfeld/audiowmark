@@ -37,6 +37,7 @@ class StdoutWavOutputStream : public AudioOutputStream
   };
   State       m_state = State::NEW;
 
+  std::vector<unsigned char>    m_output_bytes;
   std::unique_ptr<RawConverter> m_raw_converter;
 
 public:

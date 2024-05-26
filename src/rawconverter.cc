@@ -30,11 +30,11 @@ RawConverter::~RawConverter()
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
-class RawConverterImpl : public RawConverter
+class RawConverterImpl final : public RawConverter
 {
 public:
-  void to_raw (const std::vector<float>& samples, std::vector<unsigned char>& bytes) AUDIOWMARK_EXTRA_OPT;
-  void from_raw (const unsigned char *bytes, float *samples, size_t n_samples) AUDIOWMARK_EXTRA_OPT;
+  void to_raw (const float *samples, unsigned char *bytes, size_t n_samples) override AUDIOWMARK_EXTRA_OPT;
+  void from_raw (const unsigned char *bytes, float *samples, size_t n_samples) override AUDIOWMARK_EXTRA_OPT;
 };
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
@@ -124,7 +124,7 @@ float_to_int_clip (float f)
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
-RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
+RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const float *samples, unsigned char *output_bytes, size_t n_samples)
 {
   constexpr int  sample_width = BIT_DEPTH / 8;
   constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
@@ -134,13 +134,11 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samp
 #else
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
 #endif
-  assert ((uintptr_t (output_bytes.data()) & 3) == 0); // ensure alignment for optimized 32 bit native endian version
+  assert ((uintptr_t (output_bytes) & 3) == 0); // ensure alignment for optimized 32 bit native endian version
 
-  output_bytes.resize (sample_width * samples.size());
+  unsigned char *ptr = output_bytes;
 
-  unsigned char *ptr = output_bytes.data();
-
-  for (size_t i = 0; i < samples.size(); i++)
+  for (size_t i = 0; i < n_samples; i++)
     {
       if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 32)
         ((int32_t *)ptr)[i] = float_to_int_clip<32> (samples[i]);
