@@ -41,6 +41,8 @@ class WavPipeInputStream : public AudioInputStream
   std::vector<unsigned char>    m_input_bytes;
   std::unique_ptr<RawConverter> m_raw_converter;
 
+  Error read_error (const std::string& message);
+
 public:
   ~WavPipeInputStream();
 

@@ -56,6 +56,15 @@ header_get_u32 (unsigned char *bytes)
 }
 
 Error
+WavPipeInputStream::read_error (const std::string& message)
+{
+  if (ferror (m_input_file))
+    return Error (string_printf ("wav input read error: %s", strerror (errno)));
+  else
+    return Error (message);
+}
+
+Error
 WavPipeInputStream::open (const string& filename)
 {
   assert (m_state == State::NEW);
@@ -79,28 +88,31 @@ WavPipeInputStream::open (const string& filename)
     }
   RawFormat format;
   unsigned char riff_buffer[12];
-  size_t riff_ok = fread (riff_buffer, sizeof (riff_buffer), 1, m_input_file);
-  if (!riff_ok ||
-        (header_get_4cc (riff_buffer) != "RIFF" &&
-         header_get_4cc (riff_buffer) != "RF64") ||
-        header_get_4cc (riff_buffer + 8) != "WAVE")
-    return Error ("input file is not a valid wav file");
+  bool riff_ok = fread (riff_buffer, sizeof (riff_buffer), 1, m_input_file);
+  if (!riff_ok || (header_get_4cc (riff_buffer) != "RIFF" && header_get_4cc (riff_buffer) != "RF64") ||
+      header_get_4cc (riff_buffer + 8) != "WAVE")
+    return read_error ("input file is not a valid wav file");
+
   bool in_data_chunk = false;
+  bool have_fmt_chunk = false;
   do
     {
       unsigned char chunk[8];
-      size_t rc = fread (chunk, sizeof (chunk), 1, m_input_file);
-      if (rc == 0)
-        return Error ("wav input is incomplete (no data chunk found)");
+      if (!fread (chunk, sizeof (chunk), 1, m_input_file))
+        return read_error ("wav input is incomplete (no data chunk found)");
 
       uint32_t chunk_size = header_get_u32 (chunk + 4);
-      if (header_get_4cc (chunk) == "fmt " && chunk_size >= 16)
+      if (header_get_4cc (chunk) == "fmt " && chunk_size >= 16 && chunk_size <= 64 * 1024 && !have_fmt_chunk)
         {
           vector<unsigned char> buffer (chunk_size);
-          fread (buffer.data(), buffer.size(), 1, m_input_file);
+          if (!fread (buffer.data(), buffer.size(), 1, m_input_file))
+            return read_error ("wav input is incomplete (error reading fmt chunk)");
+
           format.set_channels (header_get_u16 (&buffer[2]));
           format.set_sample_rate (header_get_u32 (&buffer[4]));
           format.set_bit_depth (header_get_u16 (&buffer[14]));
+
+          have_fmt_chunk = true;
         }
       else if (header_get_4cc (chunk) == "data")
         {
@@ -112,14 +124,20 @@ WavPipeInputStream::open (const string& filename)
           while (chunk_size)
             {
               uint32_t todo = min<uint32_t> (chunk_size, sizeof (junk));
-              fread (junk, todo, 1, m_input_file);
+              if (!fread (junk, todo, 1, m_input_file))
+                return read_error ("wav input is incomplete (error skipping unknown chunk)");
               chunk_size -= todo;
             }
         }
     } while (!in_data_chunk);
+
+  if (!have_fmt_chunk)
+    return Error ("wav input is incomplete (missing fmt chunk)");
+
   m_raw_converter.reset (RawConverter::create (format, err));
   if (err)
     return err;
+
   m_format = format;
   m_state  = State::OPEN;
   return Error::Code::NONE;
@@ -161,15 +179,11 @@ WavPipeInputStream::read_frames (vector<float>& samples, size_t count)
   m_input_bytes.resize (block_size * n_channels * sample_width);
   size_t pos = 0;
 
-  for (;;)
+  while (size_t todo = min (count, block_size))
     {
-      size_t todo = min (count, block_size);
-      if (!todo)
-        break;
-
       size_t r_count = fread (m_input_bytes.data(), n_channels * sample_width, todo, m_input_file);
       if (ferror (m_input_file))
-        return Error ("error reading sample data");
+        return Error (string_printf ("error reading wav input sample data: %s", strerror (errno)));
 
       if (!r_count)
         break;
