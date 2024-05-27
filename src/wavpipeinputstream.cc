@@ -172,7 +172,7 @@ WavPipeInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
-  const size_t block_size = 1024;
+  const size_t block_size = 8192;
   const int n_channels   = m_format.n_channels();
   const int sample_width = m_format.bit_depth() / 8;
 

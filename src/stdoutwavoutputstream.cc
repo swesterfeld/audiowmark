@@ -19,6 +19,7 @@
 #include "utils.hh"
 
 #include <assert.h>
+#include <string.h>
 #include <math.h>
 
 using std::string;
@@ -146,26 +147,23 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
   if (samples.empty())
     return Error::Code::NONE;
 
-  const size_t block_size = 1024;
+  const size_t block_size = 8192 * m_n_channels;
   const int sample_width = m_bit_depth / 8;
 
   m_output_bytes.resize (sample_width * block_size);
   size_t pos = 0;
 
-  for (;;)
+  while (size_t todo = min (block_size, samples.size() - pos))
     {
-      size_t todo = min (block_size, samples.size() - pos);
-      if (!todo)
-        return Error::Code::NONE;
-
       m_raw_converter->to_raw (samples.data() + pos, m_output_bytes.data(), todo);
 
       fwrite (m_output_bytes.data(), 1, todo * sample_width, stdout);
       if (ferror (stdout))
-        return Error ("write sample data failed");
+        return Error (string_printf ("write sample data failed (%s)", strerror (errno)));
 
       pos += todo;
     }
+  return Error::Code::NONE;
 }
 
 Error
