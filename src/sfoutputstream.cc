@@ -16,6 +16,7 @@
  */
 
 #include "sfoutputstream.hh"
+#include "rawconverter.hh"
 #include "utils.hh"
 
 #include <math.h>
@@ -103,13 +104,7 @@ SFOutputStream::write_frames (const vector<float>& samples)
 {
   vector<int> isamples (samples.size());
   for (size_t i = 0; i < samples.size(); i++)
-    {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
-
-      isamples[i] = lrint (bound<double> (min_value, samples[i] * norm, max_value));
-    }
+    isamples[i] = float_to_int_clip<32> (samples[i]);
 
   sf_count_t frames = samples.size() / m_n_channels;
   sf_count_t count = sf_writef_int (m_sndfile, isamples.data(), frames);

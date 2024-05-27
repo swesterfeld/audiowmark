@@ -31,4 +31,22 @@ public:
   virtual void from_raw (const unsigned char *bytes, float *samples, size_t n_samples) = 0;
 };
 
+template<int BITS>
+static inline int
+float_to_int_clip (float f)
+{
+  const int64_t inorm = (1LL << (BITS - 1));
+  const float min_value = -inorm;
+  const float max_value =  inorm - 1;
+  const float norm      =  inorm;
+  const float snorm     = f * norm;
+
+  if (snorm >= max_value)
+    return inorm - 1;
+  else if (snorm <= min_value)
+    return -inorm;
+  else
+    return snorm;
+}
+
 #endif /* AUDIOWMARK_RAW_CONVERTER_HH */

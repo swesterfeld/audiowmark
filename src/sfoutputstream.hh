@@ -51,7 +51,7 @@ public:
 
   Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
   Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
-  Error  write_frames (const std::vector<float>& frames) override;
+  Error  write_frames (const std::vector<float>& frames) override AUDIOWMARK_EXTRA_OPT;
   Error  close() override;
   int    bit_depth() const override;
   int    sample_rate() const override;
