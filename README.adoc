@@ -489,15 +489,10 @@ channels, bit depth, encoding and so forth from the stream itself, and the a
 wav header is written for the program after `audiowmark`, so that this can
 figure out the parameters of the stream.
 
-There are two cases where this is problematic. The first case is if the full
-length of the stream is not known at the time processing starts. Then a wav
-header cannot be used, as the wav file contains the length of the stream.  The
-second case is that the program before or after `audiowmark` doesn't support wav
-headers.
-
-For these two cases, raw streams are available. The idea is to set all
-information that is needed like sample rate, number of channels,... manually.
-Then, headerless data can be processed from stdin and/or sent to stdout.
+If the program before or after `audiowmark` doesn't support wav headers, raw
+streams can be used instead. The idea is to set all information that is needed
+like sample rate, number of channels,... manually.  Then, headerless data can
+be processed from stdin and/or sent to stdout.
 
 --input-format raw::
 --output-format raw::
