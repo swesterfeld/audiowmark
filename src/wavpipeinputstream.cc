@@ -108,6 +108,25 @@ WavPipeInputStream::open (const string& filename)
           if (!fread (buffer.data(), buffer.size(), 1, m_input_file))
             return read_error ("wav input is incomplete (error reading fmt chunk)");
 
+          int format_type = header_get_u16 (&buffer[0]);
+          if (format_type != 1)
+            {
+              if (format_type == 0xFFFE && chunk_size >= 40) /* extended */
+                {
+                  static const std::array<unsigned char, 16> pcm_fmt_guid
+                    {
+                      0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+                      0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71
+                    };
+                  if (!std::equal (pcm_fmt_guid.begin(), pcm_fmt_guid.end(), &buffer[24]))
+                    return Error (string_printf ("wav input has unsupported extended format type, expected PCM"));
+                }
+              else
+                {
+                  return Error (string_printf ("wav input has unsupported format type (%d), expected PCM", format_type));
+                }
+            }
+
           format.set_channels (header_get_u16 (&buffer[2]));
           format.set_sample_rate (header_get_u32 (&buffer[4]));
           format.set_bit_depth (header_get_u16 (&buffer[14]));
