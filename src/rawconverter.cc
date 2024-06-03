@@ -16,10 +16,12 @@
  */
 
 #include "rawconverter.hh"
+#include "config.h"
 
 #include <array>
 
 #include <math.h>
+#include <assert.h>
 
 using std::vector;
 
@@ -28,11 +30,11 @@ RawConverter::~RawConverter()
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
-class RawConverterImpl : public RawConverter
+class RawConverterImpl final : public RawConverter
 {
 public:
-  void to_raw (const std::vector<float>& samples, std::vector<unsigned char>& bytes);
-  void from_raw (const std::vector<unsigned char>& bytes, std::vector<float>& samples);
+  void to_raw (const float *samples, unsigned char *bytes, size_t n_samples) override AUDIOWMARK_EXTRA_OPT;
+  void from_raw (const unsigned char *bytes, float *samples, size_t n_samples) override AUDIOWMARK_EXTRA_OPT;
 };
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
@@ -69,85 +71,117 @@ RawConverter::create (const RawFormat& raw_format, Error& error)
     {
       case 16: return create_with_bits<16> (raw_format, error);
       case 24: return create_with_bits<24> (raw_format, error);
+      case 32: return create_with_bits<32> (raw_format, error);
       default: error = Error ("unsupported bit depth");
                return nullptr;
     }
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
-constexpr std::array<int, 3>
+constexpr std::array<int, 4>
 make_endian_shift ()
 {
   if (BIT_DEPTH == 16)
     {
       if (ENDIAN == RawFormat::Endian::LITTLE)
-        return { 16, 24, -1 };
+        return { 16, 24, -1, -1 };
       else
-        return { 24, 16, -1 };
+        return { 24, 16, -1, -1 };
     }
   if (BIT_DEPTH == 24)
     {
       if (ENDIAN == RawFormat::Endian::LITTLE)
-        return {  8, 16, 24 };
+        return {  8, 16, 24, -1 };
       else
-        return { 24, 16, 8 };
+        return { 24, 16, 8, -1 };
+    }
+  if (BIT_DEPTH == 32)
+    {
+      if (ENDIAN == RawFormat::Endian::LITTLE)
+        return {  0, 8, 16, 24 };
+      else
+        return { 24, 16, 8, 0 };
     }
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
-RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const vector<float>& samples, vector<unsigned char>& output_bytes)
+RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const float *samples, unsigned char *output_bytes, size_t n_samples)
 {
   constexpr int  sample_width = BIT_DEPTH / 8;
   constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
   constexpr unsigned char sign_flip = ENCODING == RawFormat::SIGNED ? 0x00 : 0x80;
+#ifdef WORDS_BIGENDDIAN
+  constexpr bool native_endian = ENDIAN == RawFormat::BIG;
+#else
+  constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
+#endif
+  assert ((uintptr_t (output_bytes) & 3) == 0); // ensure alignment for optimized 32 bit native endian version
 
-  output_bytes.resize (sample_width * samples.size());
+  unsigned char *ptr = output_bytes;
 
-  unsigned char *ptr = output_bytes.data();
-
-  for (size_t i = 0; i < samples.size(); i++)
+  for (size_t i = 0; i < n_samples; i++)
     {
-      const double norm      =  0x80000000LL;
-      const double min_value = -0x80000000LL;
-      const double max_value =  0x7FFFFFFF;
+      if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 32)
+        ((int32_t *)ptr)[i] = float_to_int_clip<32> (samples[i]);
+      else if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 16)
+        ((int16_t *)ptr)[i] = float_to_int_clip<16> (samples[i]);
+      else
+        {
+          int sample = float_to_int_clip<32> (samples[i]);
 
-      const int    sample = lrint (bound<double> (min_value, samples[i] * norm, max_value));
+          if (eshift[0] >= 0)
+            ptr[0] = (sample >> eshift[0]) ^ sign_flip;
+          if (eshift[1] >= 0)
+            ptr[1] = sample >> eshift[1];
+          if (eshift[2] >= 0)
+            ptr[2] = sample >> eshift[2];
+          if (eshift[3] >= 0)
+            ptr[3] = sample >> eshift[3];
 
-      if (eshift[0] >= 0)
-        ptr[0] = (sample >> eshift[0]) ^ sign_flip;
-      if (eshift[1] >= 0)
-        ptr[1] = sample >> eshift[1];
-      if (eshift[2] >= 0)
-        ptr[2] = sample >> eshift[2];
-
-      ptr += sample_width;
+          ptr += sample_width;
+        }
     }
 }
 
 template<int BIT_DEPTH, RawFormat::Endian ENDIAN, RawFormat::Encoding ENCODING>
 void
-RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const vector<unsigned char>& input_bytes, vector<float>& samples)
+RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const unsigned char *input_bytes, float *samples, size_t n_samples)
 {
-  const unsigned char *ptr = input_bytes.data();
+  const unsigned char *ptr = input_bytes;
   constexpr int sample_width = BIT_DEPTH / 8;
   constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
   constexpr unsigned char sign_flip = ENCODING == RawFormat::SIGNED ? 0x00 : 0x80;
+#ifdef WORDS_BIGENDDIAN
+  constexpr bool native_endian = ENDIAN == RawFormat::BIG;
+#else
+  constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
+#endif
+  assert ((uintptr_t (input_bytes) & 3) == 0); // ensure alignment for optimized 32 bit native endian version
 
-  samples.resize (input_bytes.size() / sample_width);
-  const double norm = 1.0 / 0x80000000LL;
-  for (size_t i = 0; i < samples.size(); i++)
+  const float norm = 1.0 / 0x80000000LL;
+  for (size_t i = 0; i < n_samples; i++)
     {
-      int s32 = 0;
+      if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 32)
+        samples[i] = ((int32_t *)ptr)[i] * norm;
+      else if (native_endian && ENCODING == RawFormat::SIGNED && BIT_DEPTH == 16)
+        samples[i] = ((int16_t *)ptr)[i] * float (1.0 / 0x8000);
+      else
+        {
+          int s32 = 0;
 
-      if (eshift[0] >= 0)
-        s32 += (ptr[0] ^ sign_flip) << eshift[0];
-      if (eshift[1] >= 0)
-        s32 += ptr[1] << eshift[1];
-      if (eshift[2] >= 0)
-        s32 += ptr[2] << eshift[2];
+          if (eshift[0] >= 0)
+            s32 += (ptr[0] ^ sign_flip) << eshift[0];
+          if (eshift[1] >= 0)
+            s32 += ptr[1] << eshift[1];
+          if (eshift[2] >= 0)
+            s32 += ptr[2] << eshift[2];
+          if (eshift[3] >= 0)
+            s32 += ptr[3] << eshift[3];
+          samples[i] = s32 * norm;
 
-      samples[i] = s32 * norm;
-      ptr += sample_width;
+          ptr += sample_width;
+        }
+
     }
 }

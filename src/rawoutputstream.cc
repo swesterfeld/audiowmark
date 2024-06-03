@@ -91,8 +91,8 @@ RawOutputStream::write_frames (const vector<float>& samples)
   if (samples.empty())
     return Error::Code::NONE;
 
-  vector<unsigned char> bytes;
-  m_raw_converter->to_raw (samples, bytes);
+  vector<unsigned char> bytes (samples.size() * m_format.bit_depth() / 8);
+  m_raw_converter->to_raw (samples.data(), bytes.data(), samples.size());
 
   fwrite (&bytes[0], 1, bytes.size(), m_output_file);
   if (ferror (m_output_file))

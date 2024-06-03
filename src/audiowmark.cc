@@ -119,6 +119,8 @@ parse_format (const string& str)
     return Format::AUTO;
   if (str == "rf64")
     return Format::RF64;
+  if (str == "wav-pipe")
+    return Format::WAV_PIPE;
 
   error ("audiowmark: unsupported format '%s'\n", str.c_str());
   exit (1);

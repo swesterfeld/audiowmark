@@ -155,7 +155,7 @@ SFInputStream::read_frames (vector<float>& samples, size_t count)
        * used during read and write are identical
        */
       samples.resize (r_count * m_n_channels);
-      const double norm = 1.0 / 0x80000000LL;
+      const float norm = 1.0 / 0x80000000LL;
       for (size_t i = 0; i < samples.size(); i++)
         samples[i] = isamples[i] * norm;
     }

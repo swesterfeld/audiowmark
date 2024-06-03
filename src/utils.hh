@@ -39,8 +39,10 @@ bound (const T& min_value, const T& value, const T& max_value)
 // detect compiler
 #if __clang__
   #define AUDIOWMARK_COMP_CLANG
+  #define AUDIOWMARK_EXTRA_OPT
 #elif __GNUC__ > 2
   #define AUDIOWMARK_COMP_GCC
+  #define AUDIOWMARK_EXTRA_OPT __attribute__((optimize("-O3"))) /* enable auto vectorization, some functions benefit a lot from this */
 #else
   #error "unsupported compiler"
 #endif

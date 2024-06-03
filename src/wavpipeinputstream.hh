@@ -15,40 +15,45 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef AUDIOWMARK_STDOUT_WAV_STREAM_HH
-#define AUDIOWMARK_STDOUT_WAV_STREAM_HH
-
-#include "audiostream.hh"
-#include "rawconverter.hh"
+#ifndef AUDIOWMARK_WAV_PIPE_INPUT_STREAM_HH
+#define AUDIOWMARK_WAV_PIPE_INPUT_STREAM_HH
 
 #include <string>
+#include <memory>
 
-class StdoutWavOutputStream : public AudioOutputStream
+#include <sndfile.h>
+
+#include "audiostream.hh"
+#include "rawinputstream.hh"
+
+class WavPipeInputStream : public AudioInputStream
 {
-  int         m_bit_depth = 0;
-  int         m_sample_rate = 0;
-  int         m_n_channels = 0;
-  size_t      m_close_padding = 0;
-
   enum class State {
     NEW,
     OPEN,
     CLOSED
   };
   State       m_state = State::NEW;
+  RawFormat   m_format;
+  FILE       *m_input_file = nullptr;
+  bool        m_close_file = false;
 
-  std::vector<unsigned char>    m_output_bytes;
+  std::vector<unsigned char>    m_input_bytes;
   std::unique_ptr<RawConverter> m_raw_converter;
 
-public:
-  ~StdoutWavOutputStream();
+  Error read_error (const std::string& message);
 
-  Error open (int n_channels, int sample_rate, int bit_depth, size_t n_frames, bool wav_pipe);
-  Error write_frames (const std::vector<float>& frames) override;
-  Error close() override;
-  int  sample_rate() const override;
-  int  bit_depth() const override;
-  int  n_channels() const override;
+public:
+  ~WavPipeInputStream();
+
+  Error   open (const std::string& filename);
+  Error   read_frames (std::vector<float>& samples, size_t count) override;
+  void    close();
+
+  int     bit_depth() const override;
+  int     sample_rate() const override;
+  size_t  n_frames() const override;
+  int     n_channels() const override;
 };
 
-#endif
+#endif /* AUDIOWMARK_WAV_PIPE_INPUT_STREAM_HH */

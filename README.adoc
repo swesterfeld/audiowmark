@@ -434,6 +434,53 @@ Streaming input is also supported for watermark detection.
 
   cat in.wav | audiowmark get -
 
+== Wav Pipe Format
+
+In some cases, the length of the streaming input is not known by the program
+that produces the stream. For instance consider a mp3 that is being decoded by
+madplay.
+
+  cat in.mp3 |
+    madplay -o wave:- - |
+    audiowmark add - out.wav f0
+
+Since madplay doesn't know the length of the output when it starts decoding the
+mp3, the best it can do is to fill the wav header with a big number. And
+indeed, audiowmark will watermark the stream, but also print a warning like
+this:
+
+  audiowmark: warning: unexpected EOF; input frames (1073741823) != output frames (8316288)
+
+This may sound harmless, but for very long input streams, this will also
+truncate the audio input after this length. If you already know that you need
+to input a wav file from a pipe (without correct length in the header) and
+simply want to watermark all of it, it is better to use the `wav-pipe` format:
+
+  cat in.mp3 |
+    madplay -o wave:- - |
+    audiowmark add --input-format wav-pipe --output-format rf64 - out.wav f0
+
+This will not print a warning, and it also works correctly for long input
+streams. Note that using `rf64` as output format is necessary for huge output
+files (larger than 4G).
+
+Similar to pipe input, audiowmark can write a wav header with a huge number (in
+cases where it does not know the length in advance) if the output format is set
+to `wav-pipe`.
+
+  cat in.mp3 |
+    madplay -o wave:- - |
+    audiowmark add --input-format wav-pipe --output-format wav-pipe - - f0 |
+    lame - > out.mp3
+
+If you need both, `wav-pipe` input and output, a shorter way to write it is
+using `--format wav-pipe`, like this:
+
+  cat in.mp3 |
+    madplay -o wave:- - |
+    audiowmark add --format wav-pipe - - f0 |
+    lame - > out.mp3
+
 == Raw Streams
 
 So far, all streams described here are essentially wav streams, which means
@@ -442,15 +489,10 @@ channels, bit depth, encoding and so forth from the stream itself, and the a
 wav header is written for the program after `audiowmark`, so that this can
 figure out the parameters of the stream.
 
-There are two cases where this is problematic. The first case is if the full
-length of the stream is not known at the time processing starts. Then a wav
-header cannot be used, as the wav file contains the length of the stream.  The
-second case is that the program before or after `audiowmark` doesn't support wav
-headers.
-
-For these two cases, raw streams are available. The idea is to set all
-information that is needed like sample rate, number of channels,... manually.
-Then, headerless data can be processed from stdin and/or sent to stdout.
+If the program before or after `audiowmark` doesn't support wav headers, raw
+streams can be used instead. The idea is to set all information that is needed
+like sample rate, number of channels,... manually.  Then, headerless data can
+be processed from stdin and/or sent to stdout.
 
 --input-format raw::
 --output-format raw::

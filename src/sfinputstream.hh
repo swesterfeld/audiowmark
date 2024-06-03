@@ -61,7 +61,7 @@ public:
 
   Error               open (const std::string& filename);
   Error               open (const std::vector<unsigned char> *data);
-  Error               read_frames (std::vector<float>& samples, size_t count) override;
+  Error               read_frames (std::vector<float>& samples, size_t count) override AUDIOWMARK_EXTRA_OPT;
   void                close();
 
   int

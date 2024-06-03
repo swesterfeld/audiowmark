@@ -144,9 +144,9 @@ RawInputStream::read_frames (vector<float>& samples, size_t count)
   if (ferror (m_input_file))
     return Error ("error reading sample data");
 
-  input_bytes.resize (r_count * n_channels * sample_width);
+  samples.resize (r_count * n_channels);
 
-  m_raw_converter->from_raw (input_bytes, samples);
+  m_raw_converter->from_raw (input_bytes.data(), samples.data(), r_count * n_channels);
 
   return Error::Code::NONE;
 }

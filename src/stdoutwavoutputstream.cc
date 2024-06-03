@@ -19,10 +19,12 @@
 #include "utils.hh"
 
 #include <assert.h>
+#include <string.h>
 #include <math.h>
 
 using std::string;
 using std::vector;
+using std::min;
 
 StdoutWavOutputStream::~StdoutWavOutputStream()
 {
@@ -71,18 +73,22 @@ header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
 }
 
 Error
-StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames)
+StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames, bool wav_pipe)
 {
   assert (m_state == State::NEW);
 
-  if (bit_depth != 16 && bit_depth != 24)
+  if (bit_depth != 16 && bit_depth != 24 && bit_depth != 32)
     {
       return Error ("StdoutWavOutputStream::open: unsupported bit depth");
     }
-  if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN)
+  if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN && !wav_pipe)
     {
       return Error ("unable to write wav format to standard out without input length information");
     }
+
+  // 32-bit output is a faster (less conversion overhead), so we use it for pipes
+  if (bit_depth > 16 && wav_pipe)
+    bit_depth = 32;
 
   RawFormat format;
   format.set_bit_depth (bit_depth);
@@ -100,7 +106,10 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   size_t aligned_data_size = data_size + m_close_padding;
 
   header_append_str (header_bytes, "RIFF");
-  header_append_u32 (header_bytes, 36 + aligned_data_size);
+  if (wav_pipe)
+    header_append_u32 (header_bytes, -1);
+  else
+    header_append_u32 (header_bytes, 36 + aligned_data_size);
   header_append_str (header_bytes, "WAVE");
 
   // subchunk 1
@@ -115,7 +124,10 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
 
   // subchunk 2
   header_append_str (header_bytes, "data");
-  header_append_u32 (header_bytes, data_size);
+  if (wav_pipe)
+    header_append_u32 (header_bytes, -1);
+  else
+    header_append_u32 (header_bytes, data_size);
 
   fwrite (&header_bytes[0], 1, header_bytes.size(), stdout);
   if (ferror (stdout))
@@ -135,14 +147,22 @@ StdoutWavOutputStream::write_frames (const vector<float>& samples)
   if (samples.empty())
     return Error::Code::NONE;
 
-  vector<unsigned char> output_bytes;
+  const size_t block_size = 8192 * m_n_channels;
+  const int sample_width = m_bit_depth / 8;
 
-  m_raw_converter->to_raw (samples, output_bytes);
+  m_output_bytes.resize (sample_width * block_size);
+  size_t pos = 0;
 
-  fwrite (&output_bytes[0], 1, output_bytes.size(), stdout);
-  if (ferror (stdout))
-    return Error ("write sample data failed");
+  while (size_t todo = min (block_size, samples.size() - pos))
+    {
+      m_raw_converter->to_raw (samples.data() + pos, m_output_bytes.data(), todo);
 
+      fwrite (m_output_bytes.data(), 1, todo * sample_width, stdout);
+      if (ferror (stdout))
+        return Error (string_printf ("write sample data failed (%s)", strerror (errno)));
+
+      pos += todo;
+    }
   return Error::Code::NONE;
 }
 
