@@ -18,6 +18,8 @@
 #include "wavpipeinputstream.hh"
 #include "rawconverter.hh"
 
+#include <array>
+
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
