@@ -465,7 +465,7 @@ streams. Note that using `rf64` as output format is necessary for huge output
 files (larger than 4G).
 
 Similar to pipe input, audiowmark can write a wav header with a huge number (in
-cases where it does not know the length in advance) if the output firmat is set
+cases where it does not know the length in advance) if the output format is set
 to `wav-pipe`.
 
   cat in.mp3 |
