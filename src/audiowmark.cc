@@ -373,10 +373,9 @@ test_speed (const Key& key, int seed)
 }
 
 int
-test_gen_noise (const Key& key, const string& out_file, double seconds, int rate)
+test_gen_noise (const Key& key, const string& out_file, double seconds, int rate, int bits)
 {
   const int channels = 2;
-  const int bits = 16;
 
   vector<float> noise;
   Random rng (key, 0, /* there is no stream for this test */ Random::Stream::data_up_down);
@@ -431,6 +430,30 @@ test_resample (const string& in_file, const string& out_file, int new_rate)
       return 1;
     }
   return 0;
+}
+
+int
+test_info (const string& in_file, const string& property)
+{
+  WavData in_data;
+  Error err = in_data.load (in_file);
+  if (err)
+    {
+      error ("audiowmark: error loading %s: %s\n", in_file.c_str(), err.message());
+      return 1;
+    }
+  if (property == "bit_depth")
+    {
+      printf ("%d\n", in_data.bit_depth());
+      return 0;
+    }
+  if (property == "frames")
+    {
+      printf ("%zd\n", in_data.n_frames());
+      return 0;
+    }
+  error ("audiowmark: unsupported property for test_info: %s\n", property.c_str());
+  return 1;
 }
 
 static string
@@ -962,10 +985,12 @@ main (int argc, char **argv)
   else if (ap.parse_cmd ("test-gen-noise"))
     {
       parse_shared_options (ap);
+      int bits = 16;
+      ap.parse_opt ("--bits", bits);
 
       Key key = parse_key (ap);
       args = parse_positional (ap, "output_wav", "seconds", "sample_rate");
-      return test_gen_noise (key, args[0], atof_or_die (args[1].c_str()), atoi_or_die (args[2].c_str()));
+      return test_gen_noise (key, args[0], atof_or_die (args[1].c_str()), atoi_or_die (args[2].c_str()), bits);
     }
   else if (ap.parse_cmd ("test-change-speed"))
     {
@@ -980,6 +1005,13 @@ main (int argc, char **argv)
 
       args = parse_positional (ap, "input_wav", "output_wav", "new_rate");
       return test_resample (args[0], args[1], atoi_or_die (args[2].c_str()));
+    }
+  else if (ap.parse_cmd ("test-info"))
+    {
+      parse_shared_options (ap);
+
+      args = parse_positional (ap, "input_wav", "property");
+      return test_info (args[0], args[1]);
     }
   else if (ap.remaining_args().size())
     {
