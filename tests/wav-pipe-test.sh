@@ -13,13 +13,16 @@ do
 
   [ "x$BITS" == "x$(audiowmark test-info $IN_WAV bit_depth)" ] || die "generated input bit depth is not correct"
 
-  cat $IN_WAV   | audiowmark_add --test-key 1 --format wav-pipe - - $TEST_MSG > $OUT1_WAV || die "watermark from pipe failed"
-  cat $OUT1_WAV | audiowmark_add --test-key 2 --format wav-pipe - - $TEST_MSG > $OUT2_WAV || die "watermark from pipe failed"
-  cat $OUT2_WAV | audiowmark_add --test-key 3 --format wav-pipe - - $TEST_MSG > $OUT3_WAV || die "watermark from pipe failed"
+  cat $IN_WAV   | audiowmark_add --test-key 1 --test-no-limiter --format wav-pipe - - $TEST_MSG > $OUT1_WAV || die "watermark from pipe failed"
+  cat $OUT1_WAV | audiowmark_add --test-key 2 --test-no-limiter --format wav-pipe - - $TEST_MSG > $OUT2_WAV || die "watermark from pipe failed"
+  cat $OUT2_WAV | audiowmark_add --test-key 3 --test-no-limiter --format wav-pipe - - $TEST_MSG > $OUT3_WAV || die "watermark from pipe failed"
 
   check_length $IN_WAV $OUT1_WAV
   check_length $IN_WAV $OUT2_WAV
   check_length $IN_WAV $OUT3_WAV
+  check_snr $IN_WAV $OUT1_WAV 32
+  check_snr $IN_WAV $OUT2_WAV 29
+  check_snr $IN_WAV $OUT3_WAV 27
 
   audiowmark_cmp --expect-matches 0 $OUT3_WAV $TEST_MSG
   audiowmark_cmp --expect-matches 5 --test-key 1 $OUT3_WAV $TEST_MSG
