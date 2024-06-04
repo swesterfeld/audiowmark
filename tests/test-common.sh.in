@@ -41,3 +41,12 @@ audiowmark_cmp()
   fi
   $AUDIOWMARK --strict cmp "$@" > $AUDIOWMARK_OUT || die "failed to detect watermark $@"
 }
+
+check_length()
+{
+  local in1=$(audiowmark test-info $1 frames) || die "error detecting length of $1"
+  local in2=$(audiowmark test-info $2 frames) || die "error detecting length of $2"
+
+  [ "x$in1" != "x" ] || die "length of '$1' could not be detected"
+  [ "x$in1" == "x$in2" ] || die "length of '$1' ($in1) and '$2' ($in2) differs"
+}
