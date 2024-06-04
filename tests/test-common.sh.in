@@ -54,7 +54,11 @@ check_length()
 check_snr()
 {
   local snr="$($AUDIOWMARK test-snr $1 $2)"
-  echo >&2 "==== snr of $1 and $2 is $snr (expected $3) ===="
+  if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
+    :
+  else
+    echo >&2 "==== snr of $1 and $2 is $snr (expected $3) ===="
+  fi
   [ "x$snr" != "x" ] || die "snr of '$1' and '$2' could not be detected"
   [ "x$3" != "x" ] || die "need snr bound"
   awk "BEGIN {exit !($snr >= $3)}" || die "snr of '$1' and '$2' is worse than $3"
