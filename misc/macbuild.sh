@@ -1,5 +1,5 @@
 #!/bin/bash
-set -Eeuo pipefail -x
+set -Eeo pipefail -x
 
 # install dependencies
 brew install autoconf-archive automake libsndfile fftw mpg123 libgcrypt libtool
