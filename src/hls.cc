@@ -436,7 +436,6 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
   };
   vector<Segment> segments;
   char buffer[1024];
-  int line = 1;
   const regex blank_re (R"(\s*(#.*)?)");
   while (fgets (buffer, 1024, in_file))
     {
@@ -460,7 +459,6 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
           segment.name = s;
           segments.push_back (segment);
         }
-      line++;
     }
   for (auto& segment : segments)
     {
