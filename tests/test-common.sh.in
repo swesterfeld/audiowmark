@@ -2,6 +2,7 @@
 
 AUDIOWMARK=@top_builddir@/src/audiowmark
 TEST_MSG=f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0
+TOP_BUILDDIR=@top_builddir@
 
 # common shell functions
 
@@ -40,4 +41,26 @@ audiowmark_cmp()
     echo >&2 ==== audiowmark cmp "$@" ====
   fi
   $AUDIOWMARK --strict cmp "$@" > $AUDIOWMARK_OUT || die "failed to detect watermark $@"
+}
+
+check_length()
+{
+  local in1="$($AUDIOWMARK test-info $1 frames)"
+  local in2="$($AUDIOWMARK test-info $2 frames)"
+
+  [ "x$in1" != "x" ] || die "length of '$1' could not be detected"
+  [ "x$in1" == "x$in2" ] || die "length of '$1' ($in1) and '$2' ($in2) differs"
+}
+
+check_snr()
+{
+  local snr="$($AUDIOWMARK test-snr $1 $2)"
+  if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
+    :
+  else
+    echo >&2 "==== snr of $1 and $2 is $snr (expected $3) ===="
+  fi
+  [ "x$snr" != "x" ] || die "snr of '$1' and '$2' could not be detected"
+  [ "x$3" != "x" ] || die "need snr bound"
+  awk "BEGIN {exit !($snr >= $3)}" || die "snr of '$1' and '$2' is worse than $3"
 }
