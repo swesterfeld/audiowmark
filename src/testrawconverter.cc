@@ -21,6 +21,7 @@
 #include <math.h>
 #include <gcrypt.h>
 
+#include <array>
 #include <set>
 
 #include "rawconverter.hh"
