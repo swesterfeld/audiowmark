@@ -2,7 +2,7 @@
 set -Eeuo pipefail -x
 
 # install dependencies
-brew install autoconf-archive automake libsndfile fftw mpg123 libgcrypt
+brew install autoconf-archive automake libsndfile fftw mpg123 libgcrypt libtool
 
 # build zita-resampler
 git clone https://github.com/swesterfeld/zita-resampler
