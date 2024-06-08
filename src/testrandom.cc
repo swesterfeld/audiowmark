@@ -18,8 +18,6 @@
 #include "utils.hh"
 #include "random.hh"
 
-#include <inttypes.h>
-
 using std::vector;
 using std::string;
 

@@ -21,6 +21,12 @@
 #include <vector>
 #include <string>
 
+#ifndef __STDC_FORMAT_MACROS
+// some compilers/platforms (i.e. very old macOS) need this for macros like PRId64 (#61)
+#define __STDC_FORMAT_MACROS
+#endif
+#include <cinttypes>
+
 std::vector<int> bit_str_to_vec (const std::string& bits);
 std::string      bit_vec_to_str (const std::vector<int>& bit_vec);
 

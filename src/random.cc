@@ -21,7 +21,6 @@
 #include <regex>
 
 #include <assert.h>
-#include <cinttypes>
 
 using std::string;
 using std::vector;
