@@ -72,6 +72,7 @@ public:
   static           int test_truncate;
   static           int expect_matches;
 
+  static           uint64_t input_sndfile_flags;
   static           Format input_format;
   static           Format output_format;
 

@@ -42,6 +42,7 @@ bool   Params::test_no_limiter = false; // disable limiter
 int    Params::test_truncate   = 0;
 int    Params::expect_matches  = -1;
 
+uint64_t Params::input_sndfile_flags = 0;
 Format Params::input_format     = Format::AUTO;
 Format Params::output_format    = Format::AUTO;
 
