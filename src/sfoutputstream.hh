@@ -37,6 +37,7 @@ private:
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
   int         m_n_channels = 0;
+  bool        m_write_float_data = false;
 
   enum class State {
     NEW,

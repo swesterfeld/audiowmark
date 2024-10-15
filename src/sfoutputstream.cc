@@ -80,8 +80,11 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
      {
        case OutFormat::WAV:
          sfinfo.format |= SF_FORMAT_WAV;
-         if (Params::output_format == Format::AUTO && (WAV_SUBFORMATS & Params::input_sndfile_flags))
+         if (Params::output_format == Format::AUTO && (WAV_SUBFORMATS & Params::input_sndfile_flags)) {
            sfinfo.format = SF_FORMAT_WAV | (WAV_SUBFORMATS & Params::input_sndfile_flags);      /* preserve input format */
+           m_write_float_data = (sfinfo.format & SF_FORMAT_DOUBLE) == SF_FORMAT_DOUBLE ||
+                                (sfinfo.format & SF_FORMAT_FLOAT) == SF_FORMAT_FLOAT;
+         }
          break;
        case OutFormat::RF64: sfinfo.format |= SF_FORMAT_RF64;
                              break;
@@ -121,12 +124,16 @@ SFOutputStream::close()
 Error
 SFOutputStream::write_frames (const vector<float>& samples)
 {
-  vector<int> isamples (samples.size());
-  for (size_t i = 0; i < samples.size(); i++)
-    isamples[i] = float_to_int_clip<32> (samples[i]);
-
-  sf_count_t frames = samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (m_sndfile, isamples.data(), frames);
+  const sf_count_t frames = samples.size() / m_n_channels;
+  sf_count_t count;
+  if (m_write_float_data)
+    count = sf_writef_float (m_sndfile, samples.data(), frames);
+  else {
+    vector<int> isamples (samples.size());
+    for (size_t i = 0; i < samples.size(); i++)
+      isamples[i] = float_to_int_clip<32> (samples[i]);
+    count = sf_writef_int (m_sndfile, isamples.data(), frames);
+  }
 
   if (sf_error (m_sndfile))
     return Error (sf_strerror (m_sndfile));
