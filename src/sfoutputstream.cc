@@ -18,6 +18,7 @@
 #include "sfoutputstream.hh"
 #include "rawconverter.hh"
 #include "utils.hh"
+#include "wmcommon.hh"
 
 #include <math.h>
 #include <assert.h>
@@ -38,6 +39,21 @@ SFOutputStream::open (const string& filename, int n_channels, int sample_rate, i
   }, n_channels, sample_rate, bit_depth, out_format);
 }
 
+// supported WAV subtypes
+static constexpr uint64_t WAV_SUBFORMATS =
+  SF_FORMAT_PCM_U8    |
+  SF_FORMAT_PCM_16    |
+  SF_FORMAT_PCM_24    |
+  SF_FORMAT_PCM_32    |
+  SF_FORMAT_FLOAT     |
+  SF_FORMAT_DOUBLE    |
+  SF_FORMAT_ULAW      |
+  SF_FORMAT_ALAW      |
+  SF_FORMAT_IMA_ADPCM |
+  SF_FORMAT_MS_ADPCM  |
+  0;
+
+
 Error
 SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
 {
@@ -50,26 +66,29 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
   sfinfo.samplerate = sample_rate;
   sfinfo.channels   = n_channels;
 
-   switch (out_format)
-     {
-       case OutFormat::WAV:  sfinfo.format = SF_FORMAT_WAV;
-                             break;
-       case OutFormat::RF64: sfinfo.format = SF_FORMAT_RF64;
-                             break;
-       case OutFormat::FLAC: sfinfo.format = SF_FORMAT_FLAC;
-                             break;
-       default:              assert (false);
-     }
   if (bit_depth > 16)
     {
-      sfinfo.format |= SF_FORMAT_PCM_24;
+      sfinfo.format = SF_FORMAT_PCM_24;
       m_bit_depth   = 24;
     }
   else
     {
-      sfinfo.format |= SF_FORMAT_PCM_16;
+      sfinfo.format = SF_FORMAT_PCM_16;
       m_bit_depth   = 16;
     }
+   switch (out_format)
+     {
+       case OutFormat::WAV:
+         sfinfo.format |= SF_FORMAT_WAV;
+         if (Params::output_format == Format::AUTO && (WAV_SUBFORMATS & Params::input_sndfile_flags))
+           sfinfo.format = SF_FORMAT_WAV | (WAV_SUBFORMATS & Params::input_sndfile_flags);      /* preserve input format */
+         break;
+       case OutFormat::RF64: sfinfo.format |= SF_FORMAT_RF64;
+                             break;
+       case OutFormat::FLAC: sfinfo.format |= SF_FORMAT_FLAC;
+                             break;
+       default:              assert (false);
+     }
 
   m_sndfile = open_func (&sfinfo);
   int error = sf_error (m_sndfile);
