@@ -16,6 +16,7 @@
  */
 
 #include "sfinputstream.hh"
+#include "wmcommon.hh"
 
 #include <assert.h>
 #include <string.h>
@@ -71,6 +72,9 @@ SFInputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func)
   m_n_channels  = sfinfo.channels;
   m_n_frames    = (sfinfo.frames == SF_COUNT_MAX) ? N_FRAMES_UNKNOWN : sfinfo.frames;
   m_sample_rate = sfinfo.samplerate;
+
+  if (!Params::input_sndfile_flags)
+    Params::input_sndfile_flags = sfinfo.format; // saved for output_format detection
 
   switch (sfinfo.format & SF_FORMAT_SUBMASK)
     {
