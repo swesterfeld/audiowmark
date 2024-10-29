@@ -113,22 +113,28 @@ HLSOutputStream::add_stream (const AVCodec **codec, enum AVCodecID codec_id)
       if (!match)
         return Error (string_printf ("no codec support for sample rate %d", m_sample_rate));
     }
-  uint64_t want_layout = av_get_channel_layout (m_channel_layout.c_str());
-  if (!want_layout)
+
+
+  AVChannelLayout channel_layout = { AVChannelOrder (0), };
+  if (av_channel_layout_from_string (&channel_layout, m_channel_layout.c_str()) != 0)
     return Error (string_printf ("bad channel layout '%s'", m_channel_layout.c_str()));
-  m_enc->channel_layout = want_layout;
-  if ((*codec)->channel_layouts)
+  av_channel_layout_uninit (&m_enc->ch_layout);
+  av_channel_layout_copy (&m_enc->ch_layout, &channel_layout);
+  if ((*codec)->ch_layouts)
     {
-      m_enc->channel_layout = (*codec)->channel_layouts[0];
-      for (int i = 0; (*codec)->channel_layouts[i]; i++)
+      av_channel_layout_uninit (&m_enc->ch_layout);
+      av_channel_layout_copy (&m_enc->ch_layout, &(*codec)->ch_layouts[0]);
+      for (int i = 0; (*codec)->ch_layouts[i].nb_channels; i++)
         {
-          if ((*codec)->channel_layouts[i] == want_layout)
-              m_enc->channel_layout = want_layout;
+          if (av_channel_layout_compare (&(*codec)->ch_layouts[i], &channel_layout) == 0) {
+            av_channel_layout_uninit (&m_enc->ch_layout);
+            av_channel_layout_copy (&m_enc->ch_layout, &(*codec)->ch_layouts[i]);
+          }
         }
     }
-  if (want_layout != m_enc->channel_layout)
+  if (av_channel_layout_compare (&channel_layout, &m_enc->ch_layout) != 0)
     return Error (string_printf ("codec: unsupported channel layout '%s'", m_channel_layout.c_str()));
-  m_enc->channels = av_get_channel_layout_nb_channels (m_enc->channel_layout);
+  av_channel_layout_uninit (&channel_layout);
   m_st->time_base = (AVRational){ 1, m_enc->sample_rate };
 
   /* Some formats want stream headers to be separate. */
@@ -140,7 +146,7 @@ HLSOutputStream::add_stream (const AVCodec **codec, enum AVCodecID codec_id)
 
 
 AVFrame *
-HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples, Error& err)
+HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, const AVChannelLayout *channel_layout, int sample_rate, int nb_samples, Error& err)
 {
   AVFrame *frame = av_frame_alloc();
 
@@ -151,7 +157,7 @@ HLSOutputStream::alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_
     }
 
   frame->format = sample_fmt;
-  frame->channel_layout = channel_layout;
+  av_channel_layout_copy (&frame->ch_layout, channel_layout);
   frame->sample_rate = sample_rate;
   frame->nb_samples = nb_samples;
 
@@ -189,11 +195,11 @@ HLSOutputStream::open_audio (const AVCodec *codec, AVDictionary *opt_arg)
     nb_samples = m_enc->frame_size;
 
   Error err;
-  m_frame     = alloc_audio_frame (m_enc->sample_fmt, m_enc->channel_layout, m_enc->sample_rate, nb_samples, err);
+  m_frame     = alloc_audio_frame (m_enc->sample_fmt, &m_enc->ch_layout, m_enc->sample_rate, nb_samples, err);
   if (err)
     return err;
 
-  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_FLT, m_enc->channel_layout, m_enc->sample_rate, nb_samples, err);
+  m_tmp_frame = alloc_audio_frame (AV_SAMPLE_FMT_FLT, &m_enc->ch_layout, m_enc->sample_rate, nb_samples, err);
   if (err)
     return err;
 
@@ -212,10 +218,10 @@ HLSOutputStream::open_audio (const AVCodec *codec, AVDictionary *opt_arg)
     return Error ("could not allocate resampler context");
 
   /* set options */
-  av_opt_set_int        (m_swr_ctx, "in_channel_count",   m_enc->channels,       0);
+  av_opt_set_chlayout   (m_swr_ctx, "in_chlayout",        &m_enc->ch_layout,     0);
   av_opt_set_int        (m_swr_ctx, "in_sample_rate",     m_enc->sample_rate,    0);
   av_opt_set_sample_fmt (m_swr_ctx, "in_sample_fmt",      AV_SAMPLE_FMT_FLT,     0);
-  av_opt_set_int        (m_swr_ctx, "out_channel_count",  m_enc->channels,       0);
+  av_opt_set_chlayout   (m_swr_ctx, "out_chlayout",       &m_enc->ch_layout,     0);
   av_opt_set_int        (m_swr_ctx, "out_sample_rate",    m_enc->sample_rate,    0);
   av_opt_set_sample_fmt (m_swr_ctx, "out_sample_fmt",     m_enc->sample_fmt,     0);
 

@@ -76,7 +76,7 @@ class HLSOutputStream : public AudioOutputStream {
   };
   EncResult write_audio_frame (Error& err);
   void close_stream();
-  AVFrame *alloc_audio_frame (AVSampleFormat sample_fmt, uint64_t channel_layout, int sample_rate, int nb_samples, Error& err);
+  AVFrame *alloc_audio_frame (AVSampleFormat sample_fmt, const AVChannelLayout *channel_layout, int sample_rate, int nb_samples, Error& err);
 
   int write_frame (const AVRational *time_base, AVStream *st, AVPacket *pkt);
 public:
