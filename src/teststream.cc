@@ -41,7 +41,7 @@ main (int argc, char **argv)
       fprintf (stderr, "teststream: open input failed: %s\n", err.message());
       return 1;
     }
-  err = out.open (in.n_channels(), in.sample_rate(), 16, in.n_frames(), false);
+  err = out.open (in.n_channels(), in.sample_rate(), 16, Encoding::SIGNED, in.n_frames(), false);
   if (err)
     {
       fprintf (stderr, "teststream: open output failed: %s\n", err.message());

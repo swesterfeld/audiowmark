@@ -583,9 +583,15 @@ public:
 void
 info_format (const string& label, const RawFormat& format)
 {
+  string e = "*unknown encoding*";
+  switch (format.encoding())
+  {
+    case Encoding::SIGNED:    e = "signed";   break;
+    case Encoding::UNSIGNED:  e = "unsigned"; break;
+    case Encoding::FLOAT:     e = "float";    break;
+  }
   info ("%-13s %d Hz, %d Channels, %d Bit (%s %s-endian)\n", (label + ":").c_str(),
-      format.sample_rate(), format.n_channels(), format.bit_depth(),
-      format.encoding() == Encoding::SIGNED ? "signed" : "unsigned",
+      format.sample_rate(), format.n_channels(), format.bit_depth(), e.c_str(),
       format.endian() == RawFormat::Endian::LITTLE ? "little" : "big");
 }
 

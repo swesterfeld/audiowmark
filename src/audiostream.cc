@@ -98,7 +98,7 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
 
       StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
       out_stream.reset (swstream);
-      err = swstream->open (n_channels, sample_rate, bit_depth, n_frames, wav_pipe);
+      err = swstream->open (n_channels, sample_rate, bit_depth, encoding, n_frames, wav_pipe);
       if (err)
         return nullptr;
     }

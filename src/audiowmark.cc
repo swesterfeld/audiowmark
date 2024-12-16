@@ -144,6 +144,8 @@ parse_encoding (const string& str)
     return Encoding::SIGNED;
   if (str == "unsigned")
     return Encoding::UNSIGNED;
+  if (str == "float")
+    return Encoding::FLOAT;
   error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
   exit (1);
 }
