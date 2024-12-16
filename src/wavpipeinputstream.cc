@@ -111,7 +111,11 @@ WavPipeInputStream::open (const string& filename)
             return read_error ("wav input is incomplete (error reading fmt chunk)");
 
           int format_type = header_get_u16 (&buffer[0]);
-          if (format_type != 1)
+          if (format_type == 3) // float encoding
+            {
+              format.set_encoding (Encoding::FLOAT);
+            }
+          else if (format_type != 1)
             {
               if (format_type == 0xFFFE && chunk_size >= 40) /* extended */
                 {
