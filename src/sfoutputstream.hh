@@ -24,6 +24,7 @@
 
 #include "audiostream.hh"
 #include "sfinputstream.hh"
+#include "rawinputstream.hh"
 
 class SFOutputStream : public AudioOutputStream
 {
@@ -45,12 +46,12 @@ private:
   };
   State       m_state = State::NEW;
 
-  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, OutFormat out_format);
+  Error open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format);
 public:
   ~SFOutputStream();
 
-  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
-  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, OutFormat out_format = OutFormat::WAV);
+  Error  open (const std::string& filename, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format = OutFormat::WAV);
+  Error  open (std::vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format = OutFormat::WAV);
   Error  write_frames (const std::vector<float>& frames) override AUDIOWMARK_EXTRA_OPT;
   Error  close() override;
   int    bit_depth() const override;

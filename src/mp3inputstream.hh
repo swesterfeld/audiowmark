@@ -51,6 +51,7 @@ public:
   int     sample_rate() const override;
   int     n_channels()  const override;
   size_t  n_frames() const override;
+  Encoding encoding() const override;
 
   static bool detect (const std::string& filename);
 };

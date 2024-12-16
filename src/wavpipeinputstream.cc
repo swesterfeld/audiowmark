@@ -188,6 +188,12 @@ WavPipeInputStream::n_channels() const
   return m_format.n_channels();
 }
 
+Encoding
+WavPipeInputStream::encoding() const
+{
+  return m_format.encoding();
+}
+
 Error
 WavPipeInputStream::read_frames (vector<float>& samples, size_t count)
 {

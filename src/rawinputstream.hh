@@ -32,16 +32,12 @@ public:
     LITTLE,
     BIG
   };
-  enum Encoding {
-    SIGNED,
-    UNSIGNED
-  };
 private:
   int       m_n_channels  = 2;
   int       m_sample_rate = 0;
   int       m_bit_depth   = 16;
   Endian    m_endian      = LITTLE;
-  Encoding  m_encoding    = SIGNED;
+  Encoding  m_encoding    = Encoding::SIGNED;
 public:
   RawFormat();
   RawFormat (int n_channels, int sample_rate, int bit_depth);
@@ -86,6 +82,7 @@ public:
   int     sample_rate() const override;
   size_t  n_frames() const override;
   int     n_channels() const override;
+  Encoding encoding() const override;
 };
 
 #endif /* AUDIOWMARK_RAW_INPUT_STREAM_HH */

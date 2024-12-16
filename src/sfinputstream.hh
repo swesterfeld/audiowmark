@@ -45,7 +45,7 @@ private:
   size_t      m_n_frames = 0;
   int         m_bit_depth = 0;
   int         m_sample_rate = 0;
-  bool        m_read_float_data = false;
+  Encoding    m_encoding = Encoding::SIGNED;
   bool        m_is_stdin = false;
 
   enum class State {
@@ -71,6 +71,7 @@ public:
   }
   int sample_rate() const override;
   int bit_depth() const override;
+  Encoding encoding() const override;
   size_t
   n_frames() const override
   {

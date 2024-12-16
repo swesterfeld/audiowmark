@@ -54,6 +54,7 @@ public:
   int     sample_rate() const override;
   size_t  n_frames() const override;
   int     n_channels() const override;
+  Encoding encoding() const override;
 };
 
 #endif /* AUDIOWMARK_WAV_PIPE_INPUT_STREAM_HH */

@@ -585,7 +585,7 @@ info_format (const string& label, const RawFormat& format)
 {
   info ("%-13s %d Hz, %d Channels, %d Bit (%s %s-endian)\n", (label + ":").c_str(),
       format.sample_rate(), format.n_channels(), format.bit_depth(),
-      format.encoding() == RawFormat::Encoding::SIGNED ? "signed" : "unsigned",
+      format.encoding() == Encoding::SIGNED ? "signed" : "unsigned",
       format.endian() == RawFormat::Endian::LITTLE ? "little" : "big");
 }
 
@@ -774,9 +774,15 @@ add_watermark (const Key& key, const string& infile, const string& outfile, cons
     }
 
   /* open output stream */
-  const int out_bit_depth = in_stream->bit_depth() > 16 ? 24 : 16;
+  int out_bit_depth = in_stream->bit_depth();
+  Encoding out_encoding = in_stream->encoding();
+  if (in_stream->bit_depth() < 16)
+    {
+      out_bit_depth = 16;
+      out_encoding = Encoding::SIGNED;
+    }
   std::unique_ptr<AudioOutputStream> out_stream;
-  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, in_stream->n_frames(), err);
+  out_stream = AudioOutputStream::create (outfile, in_stream->n_channels(), in_stream->sample_rate(), out_bit_depth, out_encoding, in_stream->n_frames(), err);
   if (err)
     {
       error ("audiowmark: error writing to %s: %s\n", outfile.c_str(), err.message());

@@ -75,30 +75,38 @@ SFInputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func)
   switch (sfinfo.format & SF_FORMAT_SUBMASK)
     {
       case SF_FORMAT_PCM_U8:
+          m_bit_depth = 8;
+          m_encoding = Encoding::UNSIGNED;
+          break;
+
       case SF_FORMAT_PCM_S8:
           m_bit_depth = 8;
+          m_encoding = Encoding::SIGNED;
           break;
 
       case SF_FORMAT_PCM_16:
           m_bit_depth = 16;
+          m_encoding = Encoding::SIGNED;
           break;
 
       case SF_FORMAT_PCM_24:
           m_bit_depth = 24;
+          m_encoding = Encoding::SIGNED;
           break;
 
       case SF_FORMAT_PCM_32:
           m_bit_depth = 32;
+          m_encoding = Encoding::SIGNED;
           break;
 
       case SF_FORMAT_FLOAT:
           m_bit_depth = 32;
-          m_read_float_data = true;
+          m_encoding = Encoding::FLOAT;
           break;
 
       case SF_FORMAT_DOUBLE:
           m_bit_depth = 64;
-          m_read_float_data = true;
+          m_encoding = Encoding::FLOAT;
           break;
 
       default:
@@ -121,12 +129,18 @@ SFInputStream::bit_depth() const
   return m_bit_depth;
 }
 
+Encoding
+SFInputStream::encoding() const
+{
+  return m_encoding;
+}
+
 Error
 SFInputStream::read_frames (vector<float>& samples, size_t count)
 {
   assert (m_state == State::OPEN);
 
-  if (m_read_float_data) /* float or double input */
+  if (m_encoding == Encoding::FLOAT) /* float or double input */
     {
       samples.resize (count * m_n_channels);
 

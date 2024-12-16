@@ -137,13 +137,13 @@ parse_endian (const string& str)
   exit (1);
 }
 
-RawFormat::Encoding
+Encoding
 parse_encoding (const string& str)
 {
   if (str == "signed")
-    return RawFormat::Encoding::SIGNED;
+    return Encoding::SIGNED;
   if (str == "unsigned")
-    return RawFormat::Encoding::UNSIGNED;
+    return Encoding::UNSIGNED;
   error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
   exit (1);
 }

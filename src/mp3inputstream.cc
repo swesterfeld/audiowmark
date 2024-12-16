@@ -181,6 +181,12 @@ MP3InputStream::bit_depth() const
   return 24; /* mp3 decoder is running on floats */
 }
 
+Encoding
+MP3InputStream::encoding() const
+{
+  return Encoding::SIGNED; /* should use 24-bit pcm output */
+}
+
 int
 MP3InputStream::sample_rate() const
 {

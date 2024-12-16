@@ -53,7 +53,7 @@ main (int argc, char **argv)
     in_samples[k] = (-1 + double (2 * k) / K);
   for (auto bit_depth : { 16, 24, 32 })
     {
-      for (auto encoding : { RawFormat::SIGNED, RawFormat::UNSIGNED })
+      for (auto encoding : { Encoding::SIGNED, Encoding::UNSIGNED })
         {
           for (auto endian : { RawFormat::LITTLE, RawFormat::BIG })
             {
@@ -81,7 +81,7 @@ main (int argc, char **argv)
                 max_err = std::max (max_err, std::abs (double (in_samples[i]) - double (out_samples[i])));
               double ebits = log2 (max_err);
               printf ("%s %d %s endian %f",
-                  format.encoding() == RawFormat::SIGNED ? "signed" : "unsigned",
+                  format.encoding() == Encoding::SIGNED ? "signed" : "unsigned",
                   format.bit_depth(),
                   format.endian() == RawFormat::LITTLE ? "little" : "big",
                   ebits);
