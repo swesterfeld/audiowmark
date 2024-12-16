@@ -16,7 +16,7 @@ audiowmark_SOURCES = audiowmark.cc $(COMMON_SRC)
 audiowmark_LDFLAGS = $(COMMON_LIBS)
 
 noinst_PROGRAMS = testconvcode testrandom testmp3 teststream testlimiter testshortcode testmpegts testthreadpool \
-		  testrawconverter
+		  testrawconverter testwavformat
 
 testconvcode_SOURCES = testconvcode.cc $(COMMON_SRC)
 testconvcode_LDFLAGS = $(COMMON_LIBS)
@@ -44,6 +44,9 @@ testthreadpool_LDFLAGS = $(COMMON_LIBS)
 
 testrawconverter_SOURCES = testrawconverter.cc $(COMMON_SRC)
 testrawconverter_LDFLAGS = $(COMMON_LIBS)
+
+testwavformat_SOURCES = testwavformat.cc $(COMMON_SRC)
+testwavformat_LDFLAGS = $(COMMON_LIBS)
 
 if COND_WITH_FFMPEG
 COMMON_SRC += hlsoutputstream.cc hlsoutputstream.hh
