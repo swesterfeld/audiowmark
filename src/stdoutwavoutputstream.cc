@@ -93,10 +93,6 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, Enc
       return Error ("unable to write wav format to standard out without input length information");
     }
 
-  // 32-bit output is a faster (less conversion overhead), so we use it for pipes
-  if (bit_depth > 16 && wav_pipe) // FIXME: Encoding
-    bit_depth = 32;
-
   RawFormat format;
   format.set_bit_depth (bit_depth);
   format.set_encoding (encoding);
