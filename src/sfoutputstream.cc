@@ -79,6 +79,8 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
             sfinfo.format |= SF_FORMAT_DOUBLE;
           else
             sfinfo.format |= SF_FORMAT_FLOAT;
+
+          m_write_float_data = true;
         }
       else
         {
@@ -131,12 +133,26 @@ SFOutputStream::close()
 Error
 SFOutputStream::write_frames (const vector<float>& samples)
 {
-  vector<int> isamples (samples.size());
-  for (size_t i = 0; i < samples.size(); i++)
-    isamples[i] = float_to_int_clip<32> (samples[i]);
-
   sf_count_t frames = samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (m_sndfile, isamples.data(), frames);
+  sf_count_t count;
+
+  if (m_write_float_data)
+    {
+      vector<float> fsamples (samples.size());
+      for (size_t i = 0; i < samples.size(); i++)
+        fsamples[i] = float_clip (samples[i]);
+
+      count = sf_writef_float (m_sndfile, fsamples.data(), frames);
+    }
+  else
+    {
+      vector<int> isamples (samples.size());
+      for (size_t i = 0; i < samples.size(); i++)
+        isamples[i] = float_to_int_clip<32> (samples[i]);
+
+      count = sf_writef_int (m_sndfile, isamples.data(), frames);
+    }
+
 
   if (sf_error (m_sndfile))
     return Error (sf_strerror (m_sndfile));
