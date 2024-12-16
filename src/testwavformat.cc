@@ -65,19 +65,13 @@ main (int argc, char **argv)
       fprintf (stderr, "unsupported format %d\n", sfinfo.format);
       return 1;
     }
-  else
+  else if (argc == 5 && !strcmp (argv[1], "convert"))
     {
       SFInputStream in;
 
-      if (argc != 4)
-        {
-          fprintf (stderr, "usage: testwavformat convert <in_filename> <out_filename> <format>\n");
-          fprintf (stderr, "or     testwavformat detect <in_filename>\n");
-          return 1;
-        }
-      std::string in_filename = argv[1];
-      std::string out_filename = argv[2];
-      std::string out_format = argv[3];
+      std::string in_filename = argv[2];
+      std::string out_filename = argv[3];
+      std::string out_format = argv[4];
 
       Error err = in.open (in_filename.c_str());
       if (err)
@@ -116,5 +110,12 @@ main (int argc, char **argv)
       while (samples.size());
 
       sf_close (sndfile);
+    }
+  else
+    {
+      fprintf (stderr, "usage: testwavformat convert <in_filename> <out_filename> <format>\n");
+      fprintf (stderr, "or     testwavformat detect <in_filename>\n");
+      fprintf (stderr, "or     testwavformat list\n");
+      return 1;
     }
 }
