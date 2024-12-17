@@ -80,6 +80,7 @@ RawConverter::create (const RawFormat& raw_format, Error& error)
     }
   switch (raw_format.bit_depth())
     {
+      case 8:  return create_with_bits<8> (raw_format, error);
       case 16: return create_with_bits<16> (raw_format, error);
       case 24: return create_with_bits<24> (raw_format, error);
       case 32: return create_with_bits<32> (raw_format, error);
@@ -92,6 +93,10 @@ template<int BIT_DEPTH, RawFormat::Endian ENDIAN>
 constexpr std::array<int, 4>
 make_endian_shift ()
 {
+  if (BIT_DEPTH == 8)
+    {
+      return { 24, -1, -1, -1 }; // same shift for big/little endian
+    }
   if (BIT_DEPTH == 16)
     {
       if (ENDIAN == RawFormat::Endian::LITTLE)

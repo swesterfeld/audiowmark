@@ -137,6 +137,10 @@ WavPipeInputStream::open (const string& filename)
           format.set_sample_rate (header_get_u32 (&buffer[4]));
           format.set_bit_depth (header_get_u16 (&buffer[14]));
 
+          // 8-bit wav files are always unsigned
+          if (format.bit_depth() == 8)
+            format.set_encoding (Encoding::UNSIGNED);
+
           have_fmt_chunk = true;
         }
       else if (header_get_4cc (chunk) == "data")
