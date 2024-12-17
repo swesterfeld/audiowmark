@@ -137,17 +137,39 @@ parse_endian (const string& str)
   exit (1);
 }
 
-Encoding
-parse_encoding (const string& str)
+void
+parse_encoding (const string& str, RawFormat& fmt)
 {
   if (str == "signed")
-    return Encoding::SIGNED;
-  if (str == "unsigned")
-    return Encoding::UNSIGNED;
-  if (str == "float")
-    return Encoding::FLOAT;
-  error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
-  exit (1);
+    fmt.set_encoding (Encoding::SIGNED);
+  else if (str == "unsigned")
+    fmt.set_encoding (Encoding::UNSIGNED);
+  else if (str == "float")
+    {
+      fmt.set_encoding (Encoding::FLOAT);
+      fmt.set_bit_depth (32);
+    }
+  else if (str == "double")
+    {
+      fmt.set_encoding (Encoding::FLOAT);
+      fmt.set_bit_depth (64);
+    }
+  else
+    {
+      error ("audiowmark: unsupported encoding '%s'\n", str.c_str());
+      exit (1);
+    }
+}
+
+void
+update_raw_bits (RawFormat& fmt, int bits)
+{
+  if (fmt.encoding() == Encoding::FLOAT)
+    {
+      error ("audiowmark: bit depth can not be changed for float / double encoding\n");
+      exit (1);
+    }
+  fmt.set_bit_depth (bits);
 }
 
 int
@@ -724,19 +746,6 @@ parse_add_options (ArgParser& ap)
     {
       Params::input_format = Params::output_format = parse_format (s);
     }
-  if (ap.parse_opt ("--raw-input-bits", i))
-    {
-      Params::raw_input_format.set_bit_depth (i);
-    }
-  if (ap.parse_opt ("--raw-output-bits", i))
-    {
-      Params::raw_output_format.set_bit_depth (i);
-    }
-  if (ap.parse_opt ("--raw-bits", i))
-    {
-      Params::raw_input_format.set_bit_depth (i);
-      Params::raw_output_format.set_bit_depth (i);
-    }
   if (ap.parse_opt ( "--raw-input-endian", s))
     {
       auto e = parse_endian (s);
@@ -755,19 +764,29 @@ parse_add_options (ArgParser& ap)
     }
   if (ap.parse_opt ("--raw-input-encoding", s))
     {
-      auto e = parse_encoding (s);
-      Params::raw_input_format.set_encoding (e);
+      parse_encoding (s, Params::raw_input_format);
     }
   if (ap.parse_opt ("--raw-output-encoding", s))
     {
-      auto e = parse_encoding (s);
-      Params::raw_output_format.set_encoding (e);
+      parse_encoding (s, Params::raw_output_format);
     }
   if (ap.parse_opt ("--raw-encoding", s))
     {
-      auto e = parse_encoding (s);
-      Params::raw_input_format.set_encoding (e);
-      Params::raw_output_format.set_encoding (e);
+      parse_encoding (s, Params::raw_input_format);
+      parse_encoding (s, Params::raw_output_format);
+    }
+  if (ap.parse_opt ("--raw-input-bits", i))
+    {
+      update_raw_bits (Params::raw_input_format, i);
+    }
+  if (ap.parse_opt ("--raw-output-bits", i))
+    {
+      update_raw_bits (Params::raw_output_format, i);
+    }
+  if (ap.parse_opt ("--raw-bits", i))
+    {
+      update_raw_bits (Params::raw_input_format, i);
+      update_raw_bits (Params::raw_output_format, i);
     }
   if (ap.parse_opt ("--raw-channels", i))
     {
