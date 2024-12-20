@@ -52,7 +52,8 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
 
   if (out_format == OutFormat::FLAC)
     {
-       if (bit_depth > 16)
+      sfinfo.format = SF_FORMAT_FLAC;
+      if (bit_depth > 16)
         {
           sfinfo.format |= SF_FORMAT_PCM_24;
           m_bit_depth   = 24;

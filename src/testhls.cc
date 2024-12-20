@@ -48,6 +48,11 @@ public:
   {
     return wav_data->bit_depth();
   }
+  Encoding
+  encoding() const override
+  {
+    return Encoding::SIGNED;
+  }
   int
   sample_rate() const override
   {
