@@ -7,7 +7,7 @@ OUT1_WAV=wav-pipe-test-out1.wav
 OUT2_WAV=wav-pipe-test-out2.wav
 OUT3_WAV=wav-pipe-test-out3.wav
 
-for BITS in 16 24
+for BITS in 16 24 32
 do
   audiowmark test-gen-noise --bits $BITS $IN_WAV 200 44100
 
@@ -29,9 +29,9 @@ do
   audiowmark_cmp --expect-matches 5 --test-key 2 $OUT3_WAV $TEST_MSG
   audiowmark_cmp --expect-matches 5 --test-key 3 $OUT3_WAV $TEST_MSG
 
-  # for wav-pipe format: 16 bit input should produce 16 bit output; 24 bit input should produce 32 bit output
+  # for wav-pipe format: 16 / 24 / 32 bit input should produce the same number of output bits
   BTEST=$BITS:$(audiowmark test-info $OUT3_WAV bit_depth)
-  [[ "$BTEST" =~ ^(16:16|24:32)$ ]] || die "unexpected input/output bit depth $BTEST"
+  [[ "$BTEST" =~ ^(16:16|24:24|32:32)$ ]] || die "unexpected input/output bit depth $BTEST"
 
   rm $IN_WAV $OUT1_WAV $OUT2_WAV $OUT3_WAV
 done

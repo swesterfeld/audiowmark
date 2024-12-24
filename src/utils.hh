@@ -59,6 +59,19 @@ bound (const T& min_value, const T& value, const T& max_value)
   #define AUDIOWMARK_PRINTF(format_idx, arg_idx)      __attribute__ ((__format__ (__printf__, format_idx, arg_idx)))
 #endif
 
+/* bswap for g++ / clang++ - may need different implementation for other compilers */
+static inline uint32_t
+bswap32 (uint32_t i)
+{
+  return __builtin_bswap32 (i);
+}
+
+static inline uint64_t
+bswap64 (uint64_t i)
+{
+  return __builtin_bswap64 (i);
+}
+
 void error (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void warning (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);
 void info (const char *format, ...) AUDIOWMARK_PRINTF (1, 2);

@@ -73,25 +73,29 @@ header_append_u16 (vector<unsigned char>& bytes, uint16_t u)
 }
 
 Error
-StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, size_t n_frames, bool wav_pipe)
+StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, Encoding encoding, size_t n_frames, bool wav_pipe)
 {
   assert (m_state == State::NEW);
 
-  if (bit_depth != 16 && bit_depth != 24 && bit_depth != 32)
+  if (encoding == Encoding::FLOAT)
     {
-      return Error ("StdoutWavOutputStream::open: unsupported bit depth");
+      if (bit_depth != 32 && bit_depth != 64)
+        {
+          return Error (string_printf ("StdoutWavOutputStream::open: unsupported floating point bit depth %d", bit_depth));
+        }
+    }
+  else if (bit_depth != 16 && bit_depth != 24 && bit_depth != 32)
+    {
+      return Error (string_printf ("StdoutWavOutputStream::open: unsupported bit depth %d", bit_depth));
     }
   if (n_frames == AudioInputStream::N_FRAMES_UNKNOWN && !wav_pipe)
     {
       return Error ("unable to write wav format to standard out without input length information");
     }
 
-  // 32-bit output is a faster (less conversion overhead), so we use it for pipes
-  if (bit_depth > 16 && wav_pipe)
-    bit_depth = 32;
-
   RawFormat format;
   format.set_bit_depth (bit_depth);
+  format.set_encoding (encoding);
 
   Error err = Error::Code::NONE;
   m_raw_converter.reset (RawConverter::create (format, err));
@@ -115,7 +119,7 @@ StdoutWavOutputStream::open (int n_channels, int sample_rate, int bit_depth, siz
   // subchunk 1
   header_append_str (header_bytes, "fmt ");
   header_append_u32 (header_bytes, 16); // subchunk size
-  header_append_u16 (header_bytes, 1);  // uncompressed audio
+  header_append_u16 (header_bytes, encoding == Encoding::FLOAT ? 3 : 1);  // uncompressed audio
   header_append_u16 (header_bytes, n_channels);
   header_append_u32 (header_bytes, sample_rate);
   header_append_u32 (header_bytes, sample_rate * n_channels * bit_depth / 8); // byte rate

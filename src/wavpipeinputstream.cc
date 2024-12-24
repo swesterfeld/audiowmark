@@ -111,7 +111,11 @@ WavPipeInputStream::open (const string& filename)
             return read_error ("wav input is incomplete (error reading fmt chunk)");
 
           int format_type = header_get_u16 (&buffer[0]);
-          if (format_type != 1)
+          if (format_type == 3) // float encoding
+            {
+              format.set_encoding (Encoding::FLOAT);
+            }
+          else if (format_type != 1)
             {
               if (format_type == 0xFFFE && chunk_size >= 40) /* extended */
                 {
@@ -132,6 +136,10 @@ WavPipeInputStream::open (const string& filename)
           format.set_channels (header_get_u16 (&buffer[2]));
           format.set_sample_rate (header_get_u32 (&buffer[4]));
           format.set_bit_depth (header_get_u16 (&buffer[14]));
+
+          // 8-bit wav files are always unsigned
+          if (format.bit_depth() == 8)
+            format.set_encoding (Encoding::UNSIGNED);
 
           have_fmt_chunk = true;
         }
@@ -186,6 +194,12 @@ int
 WavPipeInputStream::n_channels() const
 {
   return m_format.n_channels();
+}
+
+Encoding
+WavPipeInputStream::encoding() const
+{
+  return m_format.encoding();
 }
 
 Error

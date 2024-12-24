@@ -568,6 +568,7 @@ hls_prepare (const string& in_dir, const string& out_dir, const string& filename
       SFOutputStream out_stream;
       err = out_stream.open (&full_flac_mem,
                              audio_master_data.n_channels(), audio_master_data.sample_rate(), audio_master_data.bit_depth(),
+                             Encoding::SIGNED, /* flac does not support floating point audio */
                              SFOutputStream::OutFormat::FLAC);
       if (err)
         {

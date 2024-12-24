@@ -80,7 +80,7 @@ AudioInputStream::create (const string& filename, Error& err)
 }
 
 std::unique_ptr<AudioOutputStream>
-AudioOutputStream::create (const string& filename, int n_channels, int sample_rate, int bit_depth, size_t n_frames, Error& err)
+AudioOutputStream::create (const string& filename, int n_channels, int sample_rate, int bit_depth, Encoding encoding, size_t n_frames, Error& err)
 {
   std::unique_ptr<AudioOutputStream> out_stream;
 
@@ -98,7 +98,7 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
 
       StdoutWavOutputStream *swstream = new StdoutWavOutputStream();
       out_stream.reset (swstream);
-      err = swstream->open (n_channels, sample_rate, bit_depth, n_frames, wav_pipe);
+      err = swstream->open (n_channels, sample_rate, bit_depth, encoding, n_frames, wav_pipe);
       if (err)
         return nullptr;
     }
@@ -113,7 +113,7 @@ AudioOutputStream::create (const string& filename, int n_channels, int sample_ra
 
       SFOutputStream *sfostream = new SFOutputStream();
       out_stream.reset (sfostream);
-      err = sfostream->open (filename, n_channels, sample_rate, bit_depth, out_format);
+      err = sfostream->open (filename, n_channels, sample_rate, bit_depth, encoding, out_format);
       if (err)
         return nullptr;
     }

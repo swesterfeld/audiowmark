@@ -22,6 +22,12 @@
 #include <memory>
 #include "utils.hh"
 
+enum class Encoding {
+  SIGNED,
+  UNSIGNED,
+  FLOAT
+};
+
 class AudioStream
 {
 public:
@@ -40,6 +46,7 @@ public:
   // for streams that do not know the number of frames in advance (i.e. raw input stream)
   static constexpr size_t N_FRAMES_UNKNOWN = ~size_t (0);
   virtual size_t n_frames() const = 0;
+  virtual Encoding encoding() const = 0;
 
   virtual Error read_frames (std::vector<float>& samples, size_t count) = 0;
 };
@@ -48,7 +55,7 @@ class AudioOutputStream : public AudioStream
 {
 public:
   static std::unique_ptr<AudioOutputStream> create (const std::string& filename,
-    int n_channels, int sample_rate, int bit_depth, size_t n_frames, Error& err);
+    int n_channels, int sample_rate, int bit_depth, Encoding encoding, size_t n_frames, Error& err);
 
   virtual Error write_frames (const std::vector<float>& frames) = 0;
   virtual Error close() = 0;

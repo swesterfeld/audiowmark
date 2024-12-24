@@ -512,9 +512,9 @@ so this parameter must always be specified for raw streams.
 --raw-output-bits <bits>::
 --raw-bits <bits>::
 
-The options can be used to set the input number of bits, the output number
-of bits or both. The number of bits can either be `16` or `24`. The default
-number of bits is `16`.
+The options can be used to set the input number of bits, the output number of
+bits or both. The number of bits can be `16`, `24` or `32`. The default number
+of bits is `16`.
 
 --raw-input-endian <endian>::
 --raw-output-endian <endian>::
@@ -528,9 +528,10 @@ endianness is `little`.
 --raw-output-encoding <encoding>::
 --raw-encoding <encoding>::
 
-These options can be used to set the input/output encoding or both.
-The <encoding> parameter can either be `signed` or `unsigned`. The
-default encoding is `signed`.
+These options can be used to set the input/output encoding or both.  The
+<encoding> parameter can be `signed`, `unsigned`, `float` or `double`. The
+default encoding is `signed`. Using `float` (or `double`) encoding
+automatically sets the number of bits to `32` (or `64`).
 
 --raw-channels <channels>::
 

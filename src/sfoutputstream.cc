@@ -31,15 +31,15 @@ SFOutputStream::~SFOutputStream()
 }
 
 Error
-SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
+SFOutputStream::open (const string& filename, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format)
 {
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open (filename.c_str(), SFM_WRITE, sfinfo);
-  }, n_channels, sample_rate, bit_depth, out_format);
+  }, n_channels, sample_rate, bit_depth, encoding, out_format);
 }
 
 Error
-SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
+SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format)
 {
   assert (m_state == State::NEW);
 
@@ -50,25 +50,57 @@ SFOutputStream::open (std::function<SNDFILE* (SF_INFO *)> open_func, int n_chann
   sfinfo.samplerate = sample_rate;
   sfinfo.channels   = n_channels;
 
-   switch (out_format)
-     {
-       case OutFormat::WAV:  sfinfo.format = SF_FORMAT_WAV;
-                             break;
-       case OutFormat::RF64: sfinfo.format = SF_FORMAT_RF64;
-                             break;
-       case OutFormat::FLAC: sfinfo.format = SF_FORMAT_FLAC;
-                             break;
-       default:              assert (false);
-     }
-  if (bit_depth > 16)
+  if (out_format == OutFormat::FLAC)
     {
-      sfinfo.format |= SF_FORMAT_PCM_24;
-      m_bit_depth   = 24;
+      sfinfo.format = SF_FORMAT_FLAC;
+      if (bit_depth > 16)
+        {
+          sfinfo.format |= SF_FORMAT_PCM_24;
+          m_bit_depth   = 24;
+        }
+      else
+        {
+          sfinfo.format |= SF_FORMAT_PCM_16;
+          m_bit_depth   = 16;
+        }
     }
   else
     {
-      sfinfo.format |= SF_FORMAT_PCM_16;
-      m_bit_depth   = 16;
+      switch (out_format)
+        {
+          case OutFormat::WAV:  sfinfo.format = SF_FORMAT_WAV;
+                                break;
+          case OutFormat::RF64: sfinfo.format = SF_FORMAT_RF64;
+                                break;
+          default:              assert (false);
+        }
+      if (encoding == Encoding::FLOAT)
+        {
+          if (bit_depth == 64)
+            sfinfo.format |= SF_FORMAT_DOUBLE;
+          else
+            sfinfo.format |= SF_FORMAT_FLOAT;
+
+          m_write_float_data = true;
+        }
+      else
+        {
+          if (bit_depth > 24)
+            {
+              sfinfo.format |= SF_FORMAT_PCM_32;
+              m_bit_depth   = 32;
+            }
+          else if (bit_depth > 16)
+            {
+              sfinfo.format |= SF_FORMAT_PCM_24;
+              m_bit_depth   = 24;
+            }
+          else
+            {
+              sfinfo.format |= SF_FORMAT_PCM_16;
+              m_bit_depth   = 16;
+            }
+        }
     }
 
   m_sndfile = open_func (&sfinfo);
@@ -102,12 +134,26 @@ SFOutputStream::close()
 Error
 SFOutputStream::write_frames (const vector<float>& samples)
 {
-  vector<int> isamples (samples.size());
-  for (size_t i = 0; i < samples.size(); i++)
-    isamples[i] = float_to_int_clip<32> (samples[i]);
-
   sf_count_t frames = samples.size() / m_n_channels;
-  sf_count_t count = sf_writef_int (m_sndfile, isamples.data(), frames);
+  sf_count_t count;
+
+  if (m_write_float_data)
+    {
+      vector<float> fsamples (samples.size());
+      for (size_t i = 0; i < samples.size(); i++)
+        fsamples[i] = float_clip (samples[i]);
+
+      count = sf_writef_float (m_sndfile, fsamples.data(), frames);
+    }
+  else
+    {
+      vector<int> isamples (samples.size());
+      for (size_t i = 0; i < samples.size(); i++)
+        isamples[i] = float_to_int_clip<32> (samples[i]);
+
+      count = sf_writef_int (m_sndfile, isamples.data(), frames);
+    }
+
 
   if (sf_error (m_sndfile))
     return Error (sf_strerror (m_sndfile));
@@ -137,11 +183,11 @@ SFOutputStream::n_channels() const
 }
 
 Error
-SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, OutFormat out_format)
+SFOutputStream::open (vector<unsigned char> *data, int n_channels, int sample_rate, int bit_depth, Encoding encoding, OutFormat out_format)
 {
   m_virtual_data.mem = data;
 
   return open ([&] (SF_INFO *sfinfo) {
     return sf_open_virtual (&m_virtual_data.io, SFM_WRITE, sfinfo, &m_virtual_data);
-  }, n_channels, sample_rate, bit_depth, out_format);
+  }, n_channels, sample_rate, bit_depth, encoding, out_format);
 }

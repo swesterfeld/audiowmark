@@ -49,4 +49,18 @@ float_to_int_clip (float f)
     return snorm;
 }
 
+static inline float
+float_clip (float f)
+{
+  const float min_value = -1;
+  const float max_value =  1;
+
+  if (f >= max_value)
+    return max_value;
+  else if (f <= min_value)
+    return min_value;
+  else
+    return f;
+}
+
 #endif /* AUDIOWMARK_RAW_CONVERTER_HH */

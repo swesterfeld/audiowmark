@@ -131,6 +131,12 @@ RawInputStream::n_channels() const
   return m_format.n_channels();
 }
 
+Encoding
+RawInputStream::encoding() const
+{
+  return m_format.encoding();
+}
+
 Error
 RawInputStream::read_frames (vector<float>& samples, size_t count)
 {

@@ -87,7 +87,7 @@ WavData::save (const string& filename) const
   std::unique_ptr<AudioOutputStream> out_stream;
   Error err;
 
-  out_stream = AudioOutputStream::create (filename, m_n_channels, m_sample_rate, m_bit_depth, m_samples.size() / m_n_channels, err);
+  out_stream = AudioOutputStream::create (filename, m_n_channels, m_sample_rate, m_bit_depth, Encoding::SIGNED, m_samples.size() / m_n_channels, err);
   if (err)
     return err;
 
