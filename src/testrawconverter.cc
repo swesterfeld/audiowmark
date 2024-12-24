@@ -59,7 +59,8 @@ test_int16 (const char *label, const vector<float>& in_samples, Encoding encodin
       else
         max_diff = std::max (fabs ((in_samples[i] + 1) * (1 << 15) - ((uint16_t *)conv.data())[i]), max_diff);
     }
-  printf ("%s: max_diff = %f\n", label, max_diff);
+  printf ("%s: max_diff = %f [ should be less than 1.01 ]\n", label, max_diff);
+  assert (max_diff < 1.01);
 }
 
 string
