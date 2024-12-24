@@ -123,8 +123,8 @@ make_endian_shift ()
 }
 
 template<RawFormat::Endian ENDIAN>
-static int32_t
-to_endian (int32_t i)
+static uint32_t
+to_endian (uint32_t i)
 {
 #ifdef WORDS_BIGENDDIAN
   constexpr bool native_endian = ENDIAN == RawFormat::BIG;
@@ -132,14 +132,14 @@ to_endian (int32_t i)
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
 #endif
   if (!native_endian)
-    return __builtin_bswap32 (i);
+    return bswap32 (i);
   else
     return i;
 }
 
 template<RawFormat::Endian ENDIAN>
-static int64_t
-to_endian (int64_t i)
+static uint64_t
+to_endian (uint64_t i)
 {
 #ifdef WORDS_BIGENDDIAN
   constexpr bool native_endian = ENDIAN == RawFormat::BIG;
@@ -147,7 +147,7 @@ to_endian (int64_t i)
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
 #endif
   if (!native_endian)
-    return __builtin_bswap64 (i);
+    return bswap64 (i);
   else
     return i;
 }
@@ -166,16 +166,16 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const float *samples, uns
           if (BIT_DEPTH == 32)
             {
               float f = float_clip (samples[i]);
-              int32_t out;
+              uint32_t out;
               std::memcpy (&out, &f, sample_width);
-              ((int32_t *) output_bytes)[i] = to_endian<ENDIAN> (out);
+              ((uint32_t *) output_bytes)[i] = to_endian<ENDIAN> (out);
             }
           if (BIT_DEPTH == 64)
             {
               double d = float_clip (samples[i]);
-              int64_t out;
+              uint64_t out;
               std::memcpy (&out, &d, sample_width);
-              ((int64_t *) output_bytes)[i] = to_endian<ENDIAN> (out);
+              ((uint64_t *) output_bytes)[i] = to_endian<ENDIAN> (out);
             }
         }
     }
@@ -230,13 +230,13 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const unsigned char *in
         {
           if (BIT_DEPTH == 32)
             {
-              int32_t in = ((int32_t *)input_bytes)[i];
+              uint32_t in = ((uint32_t *)input_bytes)[i];
               in = to_endian<ENDIAN> (in);
               std::memcpy (samples + i, &in, BIT_DEPTH / 8);
             }
           if (BIT_DEPTH == 64)
             {
-              int64_t in = ((int64_t *)input_bytes)[i];
+              uint64_t in = ((uint64_t *)input_bytes)[i];
               in = to_endian<ENDIAN> (in);
               double d;
               std::memcpy (&d, &in, BIT_DEPTH / 8);
