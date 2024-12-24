@@ -30,19 +30,28 @@ raw_test()
   rm -f $IN_WAV $OUT_WAV $OUT2_WAV
 }
 
+## little endian
+
 raw_test s16le
 raw_test s24le --raw-bits 24
 raw_test s32le --raw-bits 32
-#raw_test u16le --raw-encoding unsigned
-#raw_test u24le --raw-bits 24 --raw-encoding unsigned
-#raw_test u32le --raw-bits 32 --raw-encoding unsigned
+
+raw_test u16le --raw-encoding unsigned
+raw_test u24le --raw-bits 24 --raw-encoding unsigned
+raw_test u32le --raw-bits 32 --raw-encoding unsigned
+
 raw_test f32le --raw-encoding float
 raw_test f64le --raw-encoding double
+
+## big endian
+
 raw_test s16be --raw-endian big
 raw_test s24be --raw-bits 24 --raw-endian big
 raw_test s32be --raw-bits 32 --raw-endian big
-#raw_test u16be --raw-encoding unsigned --endian big
-#raw_test u24be --raw-bits 24 --raw-encoding unsigned --endian big
-#raw_test u32be --raw-bits 32 --raw-encoding unsigned --endian big
+
+raw_test u16be --raw-encoding unsigned --raw-endian big
+raw_test u24be --raw-bits 24 --raw-encoding unsigned --raw-endian big
+raw_test u32be --raw-bits 32 --raw-encoding unsigned --raw-endian big
+
 raw_test f32be --raw-encoding float --raw-endian big
 raw_test f64be --raw-encoding double --raw-endian big
