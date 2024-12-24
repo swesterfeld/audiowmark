@@ -2,9 +2,9 @@
 set -Eeo pipefail -x
 
 # install dependencies
-brew install autoconf-archive automake libsndfile fftw mpg123 libgcrypt libtool ffmpeg@4
-export PKG_CONFIG_PATH="$(brew --prefix ffmpeg@4)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-export PATH="$(brew --prefix ffmpeg@4)/bin:$PATH"
+brew install autoconf-archive automake libsndfile fftw mpg123 libgcrypt libtool ffmpeg@7
+export PKG_CONFIG_PATH="$(brew --prefix ffmpeg@7)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+export PATH="$(brew --prefix ffmpeg@7)/bin:$PATH"
 
 # build zita-resampler
 git clone https://github.com/swesterfeld/zita-resampler
