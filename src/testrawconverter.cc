@@ -25,9 +25,42 @@
 #include <set>
 
 #include "rawconverter.hh"
+#include "config.h"
 
 using std::vector;
 using std::string;
+
+void
+test_int16 (const char *label, const vector<float>& in_samples, Encoding encoding)
+{
+  RawFormat format;
+  format.set_bit_depth (16);
+  format.set_encoding (encoding);
+#ifdef WORDS_BIGENDDIAN
+  format.set_endian (RawFormat::BIG);
+#else
+  format.set_endian (RawFormat::LITTLE);
+#endif
+
+  Error error;
+  RawConverter *converter = RawConverter::create (format, error);
+  if (error)
+    {
+      printf ("error: %s\n", error.message());
+      exit (1);
+    }
+  vector<unsigned char> conv (in_samples.size() * 4);
+  converter->to_raw (in_samples.data(), conv.data(), in_samples.size());
+  float max_diff = 0;
+  for (size_t i = 0; i < in_samples.size(); i++)
+    {
+      if (encoding == Encoding::SIGNED)
+        max_diff = std::max (fabs (in_samples[i] * (1 << 15) - ((int16_t *)conv.data())[i]), max_diff);
+      else
+        max_diff = std::max (fabs ((in_samples[i] + 1) * (1 << 15) - ((uint16_t *)conv.data())[i]), max_diff);
+    }
+  printf ("%s: max_diff = %f\n", label, max_diff);
+}
 
 string
 hash_bytes (vector<unsigned char>& bytes)
@@ -51,6 +84,10 @@ main (int argc, char **argv)
   vector<unsigned char> bytes (K * 4);
   for (uint64_t k = 0; k <= K; k++)
     in_samples[k] = (-1 + double (2 * k) / K);
+
+  test_int16 ("int16", in_samples, Encoding::SIGNED);
+  test_int16 ("uint16", in_samples, Encoding::UNSIGNED);
+  printf ("\n");
   for (auto bit_depth : { 16, 24, 32 })
     {
       for (auto encoding : { Encoding::SIGNED, Encoding::UNSIGNED })
