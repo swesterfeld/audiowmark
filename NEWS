@@ -1,3 +1,19 @@
+Overview of Changes in audiowmark-0.6.3:
+
+* update HLS support to build with ffmpeg-7 API (#68)
+* preserve wav subformat (#64)
+  - write float/double wav output for wav float/double input
+  - write signed 16, 24 and 32 bit wav output for 16, 24, 32 bit wav input
+  - added test that wav subformat format is preserved (make check)
+* improved RawConverter:
+  - support float/double input/output (very fast on little endian systems)
+  - fix bug for unsigned integer raw input/output (16, 24 and 32 bit)
+  - better tests (make check)
+  - faster 16/32 bit conversion on little endian systems
+* add format wav-pipe for very long input/output streams on stdin/stdout
+* performance optimizations for SFOutputStream
+* add documentation for Windows/Cygwin builds (#45)
+
 Overview of Changes in audiowmark-0.6.2:
 
 * improved robustness of the watermark detection a lot for many cases
