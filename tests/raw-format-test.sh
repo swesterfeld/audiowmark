@@ -1,4 +1,8 @@
+#!/bin/bash
+
 source test-common.sh
+
+set -e
 
 IN_WAV=test-raw-format.wav
 OUT_WAV=test-raw-format-out.wav
