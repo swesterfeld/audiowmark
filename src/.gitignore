@@ -12,3 +12,5 @@ testhls
 testmpegts
 testshortcode
 testthreadpool
+testrawconverter
+testwavformat
