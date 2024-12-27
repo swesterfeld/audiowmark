@@ -1,5 +1,8 @@
 AUTOMAKE_OPTIONS = dist-zstd no-dist-gzip
 
+# build & test everything (HLS included) during make distcheck
+AM_DISTCHECK_CONFIGURE_FLAGS = --with-ffmpeg
+
 SUBDIRS = src tests
 ACLOCAL_AMFLAGS = -I m4
 
