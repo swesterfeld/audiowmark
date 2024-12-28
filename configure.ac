@@ -73,13 +73,28 @@ AC_DEFUN([AC_FFTW_CHECK],
     AC_DEFINE_UNQUOTED(SPECTMORPH_HAVE_FFTW, $SPECTMORPH_HAVE_FFTW, [Whether libfftw3 is available])
 ])
 
+dnl libgcrypt
+AC_DEFUN([AC_LIBGCRYPT_REQUIREMENTS],
+[
+    dnl newer libgcrypt versions provide a pkg-config file
+    PKG_CHECK_MODULES(LIBGCRYPT, [libgcrypt], [have_libgcrypt=yes], [have_libgcrypt=no])
+
+    dnl older libgcrypt versions provide libgcrypt-config
+    if test "x$have_libgcrypt" != "xyes"; then
+      AM_PATH_LIBGCRYPT([], [have_libgcrypt=yes])
+    fi
+
+    dnl fail if neither pkg-config file nor libgcrypt-config was found
+    if test "x$have_libgcrypt" != "xyes"; then
+      AC_MSG_ERROR([You need to install libgcrypt to build this package.])
+    fi
+])
+
 AC_SNDFILE_REQUIREMENTS
 AC_LIBMPG123_REQUIREMENTS
 AC_ZITA_REQUIREMENTS
 AC_FFTW_CHECK
-AM_PATH_LIBGCRYPT([], [], [
-  AC_MSG_ERROR([You need to install libgcrypt to build this package.])
-])
+AC_LIBGCRYPT_REQUIREMENTS
 
 dnl -------------------- ffmpeg is optional ----------------------------
 AC_ARG_WITH([ffmpeg], [AS_HELP_STRING([--with-ffmpeg], [build against ffmpeg libraries])], [], [with_ffmpeg=no])
