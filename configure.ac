@@ -77,7 +77,9 @@ AC_SNDFILE_REQUIREMENTS
 AC_LIBMPG123_REQUIREMENTS
 AC_ZITA_REQUIREMENTS
 AC_FFTW_CHECK
-AM_PATH_LIBGCRYPT
+AM_PATH_LIBGCRYPT([], [], [
+  AC_MSG_ERROR([You need to install libgcrypt to build this package.])
+])
 
 dnl -------------------- ffmpeg is optional ----------------------------
 AC_ARG_WITH([ffmpeg], [AS_HELP_STRING([--with-ffmpeg], [build against ffmpeg libraries])], [], [with_ffmpeg=no])
