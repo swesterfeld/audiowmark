@@ -2,8 +2,6 @@
 
 source test-common.sh
 
-set -e
-
 IN_WAV=test-raw-format.wav
 OUT_WAV=test-raw-format-out.wav
 OUT2_WAV=test-raw-format-out2.wav

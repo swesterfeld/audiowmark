@@ -6,8 +6,6 @@ if [ "x$Q" == "x1" ] && [ -z "$V" ]; then
   FFMPEG_Q="-v quiet"
 fi
 
-set -e
-
 HLS_DIR=hls-test-dir.$$
 mkdir -p $HLS_DIR
 

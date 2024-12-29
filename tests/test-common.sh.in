@@ -4,6 +4,10 @@ AUDIOWMARK=@top_builddir@/src/audiowmark
 TEST_MSG=f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0
 TOP_BUILDDIR=@top_builddir@
 
+## abort on error
+
+set -eo pipefail
+
 # common shell functions
 
 die()
