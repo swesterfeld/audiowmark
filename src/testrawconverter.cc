@@ -83,8 +83,8 @@ main (int argc, char **argv)
   uint64_t K = 33452759; // prime
   vector<float> in_samples (K), out_samples (K);
   vector<unsigned char> bytes (K * 4);
-  for (uint64_t k = 0; k <= K; k++)
-    in_samples[k] = (-1 + double (2 * k) / K);
+  for (uint64_t k = 0; k < K; k++)
+    in_samples[k] = (-1 + double (2 * k) / (K - 1));
 
   test_int16 ("int16", in_samples, Encoding::SIGNED);
   test_int16 ("uint16", in_samples, Encoding::UNSIGNED);
