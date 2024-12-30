@@ -16,14 +16,14 @@ raw_test()
 
   audiowmark test-gen-noise --bits 32 $IN_WAV 200 44100
 
-  ffmpeg -v quiet -i $IN_WAV -f $FFMPEG_FMT -c:a pcm_$FFMPEG_FMT - | \
+  ffmpeg -v quiet -nostdin -i $IN_WAV -f $FFMPEG_FMT -c:a pcm_$FFMPEG_FMT - | \
     audiowmark_add - - $TEST_MSG --format raw --raw-rate 44100 $AWM_FMT --test-no-limiter | \
     ffmpeg -v quiet -f $FFMPEG_FMT -ar 44100 -ac 2 -i - $OUT_WAV
 
   audiowmark_cmp --expect-matches 5 $OUT_WAV $TEST_MSG
   check_snr $IN_WAV $OUT_WAV $SNR
 
-  ffmpeg -v quiet -i $IN_WAV -f $FFMPEG_FMT -c:a pcm_$FFMPEG_FMT - | \
+  ffmpeg -v quiet -nostdin -i $IN_WAV -f $FFMPEG_FMT -c:a pcm_$FFMPEG_FMT - | \
     audiowmark_add - $OUT2_WAV $TEST_MSG --input-format raw --raw-rate 44100 $AWM_FMT --test-no-limiter
 
   check_length $IN_WAV $OUT_WAV

@@ -13,7 +13,7 @@ mkdir -p $HLS_DIR
 audiowmark test-gen-noise $HLS_DIR/test-input.wav 200 44100
 
 # convert to hls
-ffmpeg $FFMPEG_Q -i $HLS_DIR/test-input.wav \
+ffmpeg $FFMPEG_Q -nostdin -i $HLS_DIR/test-input.wav \
   -f hls \
   -c:a:0 aac -ab 192k \
   -master_pl_name replay.m3u8 \
@@ -31,7 +31,7 @@ done
 cp $HLS_DIR/as0/out.m3u8 $HLS_DIR/as0m/out.m3u8
 
 # convert watermarked hls back to wav
-ffmpeg $FFMPEG_Q -y -i $HLS_DIR/as0m/out.m3u8 $HLS_DIR/test-output.wav
+ffmpeg $FFMPEG_Q -nostdin -y -i $HLS_DIR/as0m/out.m3u8 $HLS_DIR/test-output.wav
 
 # detect watermark from wav
 audiowmark_cmp --expect-matches 5 $HLS_DIR/test-output.wav $TEST_MSG
