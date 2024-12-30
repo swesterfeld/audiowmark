@@ -192,7 +192,7 @@ ff_decode (const string& filename, WavData& out_wav_data)
   if (!tmp_file)
     return Error ("failed to create temp file");
 
-  Error err = run ({"ffmpeg", "-v", "error", "-y", "-f",  "mpegts", "-i", filename, "-f", "wav", tmp_file_name});
+  Error err = run ({"ffmpeg", "-v", "error", "-nostdin", "-y", "-f",  "mpegts", "-i", filename, "-f", "wav", tmp_file_name});
   if (err)
     return err;
 
@@ -294,7 +294,7 @@ bit_rate_from_m3u8 (const string& m3u8, const WavData& wav_data, int& bit_rate)
   if (!tmp_file)
     return Error ("failed to create temp file");
 
-  Error err = run ({"ffmpeg", "-v", "error", "-y", "-i", m3u8, "-c:a", "copy", "-f", "adts", tmp_file_name});
+  Error err = run ({"ffmpeg", "-v", "error", "-nostdin", "-y", "-i", m3u8, "-c:a", "copy", "-f", "adts", tmp_file_name});
   if (err)
     return err;
 
@@ -319,7 +319,7 @@ load_audio_master (const string& filename, WavData& audio_master_data)
     return Error ("failed to create temp file");
 
   /* extract wav */
-  Error err = run ({"ffmpeg", "-v", "error", "-y", "-i", filename, "-f", "wav", tmp_file_name});
+  Error err = run ({"ffmpeg", "-v", "error", "-nostdin", "-y", "-i", filename, "-f", "wav", tmp_file_name});
   if (err)
     return err;
 
