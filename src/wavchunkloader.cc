@@ -42,14 +42,37 @@ WavChunkLoader::load_next_chunk()
   if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
     m_time_offset += m_wav_data.n_frames() / double (m_wav_data.sample_rate());
 
-  m_samples1.clear();
+  m_samples1 = m_samples2;
+  m_samples2.clear();
 
+  bool eof = !refill (m_samples1, m_chunk_size);
+  if (!eof)
+    eof = !refill (m_samples2, 5);
+
+  if (eof)
+    {
+      /* for long files:
+       *  - ensure that last chunk is large enough -> avoid ClipDecoder
+      */
+      m_samples1.insert (m_samples1.end(), m_samples2.begin(), m_samples2.end());
+      m_samples2.clear();
+    }
+
+  m_wav_data = WavData (m_samples1, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
+  printf ("chunk size: %f minutes\n", m_samples1.size() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()));
+
+  return Error::Code::NONE;
+}
+
+bool
+WavChunkLoader::refill (std::vector<float>& samples, double time)
+{
   auto to_minutes = [&] (size_t n_samples) {
     return (n_samples / m_in_stream->n_channels()) / (60.0 * m_in_stream->sample_rate());
   };
 
   vector<float> m_buffer;
-  while (to_minutes (m_samples1.size()) < m_chunk_size)
+  while (to_minutes (samples.size()) < time)
     {
       Error err = m_in_stream->read_frames (m_buffer, 1024);
       if (err)
@@ -58,14 +81,11 @@ WavChunkLoader::load_next_chunk()
       if (!m_buffer.size())
         {
           /* reached eof */
-          break;
+          return false;
         }
-      m_samples1.insert (m_samples1.end(), m_buffer.begin(), m_buffer.end());
+      samples.insert (samples.end(), m_buffer.begin(), m_buffer.end());
     }
-  m_wav_data = WavData (m_samples1, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
-  printf ("chunk size: %f minutes\n", to_minutes (m_samples1.size()));
-
-  return Error::Code::NONE;
+  return true;
 }
 
 bool

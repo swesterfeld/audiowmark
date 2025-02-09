@@ -33,6 +33,8 @@ class WavChunkLoader
   std::vector<float>                m_samples1;
   std::vector<float>                m_samples2;
   WavData                           m_wav_data;
+
+  bool            refill (std::vector<float>& samples, double time);
 public:
   WavChunkLoader (const std::string& filename, double chunk_size, double rate);
 
