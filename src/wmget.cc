@@ -284,7 +284,7 @@ public:
     return result;
   }
   void
-  print_json (const WavData& wav_data, const std::string &json_file)
+  print_json (size_t time_length, const std::string &json_file)
   {
     FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
     if (!outfile)
@@ -292,7 +292,6 @@ public:
         perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
         exit (127);
       }
-    const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
     fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
     fprintf (outfile, "  \"matches\": [\n");
     int nth = 0;
@@ -770,11 +769,10 @@ decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_d
 }
 
 int
-report (ResultSet& result_set, const vector<int>& orig_bits)
+report (ResultSet& result_set, size_t time_length, const vector<int>& orig_bits)
 {
-  WavData fixme_wav_data;
   if (!Params::json_output.empty())
-    result_set.print_json (/* FIXME */ fixme_wav_data, Params::json_output);
+    result_set.print_json (time_length, Params::json_output);
 
   if (Params::json_output != "-")
     result_set.print();
@@ -861,5 +859,8 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
         }
     }
   result_set.sort();
-  return report (result_set, orig_bitvec);
+
+  /* chunk loader time offset at EOF is total length of the input file */
+  size_t time_length = lrint (wav_chunk_loader.time_offset());
+  return report (result_set, time_length, orig_bitvec);
 }
