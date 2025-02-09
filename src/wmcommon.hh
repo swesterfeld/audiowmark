@@ -66,6 +66,8 @@ public:
   static constexpr double limiter_block_size_ms = 1000;
   static constexpr double limiter_ceiling       = 0.99;
 
+  static           double get_chunk_size;          // chunk size for audiowmark get to reduce memory usage
+
   static           int test_cut; // for sync test
   static           bool test_no_sync;
   static           bool test_no_limiter;

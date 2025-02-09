@@ -27,6 +27,7 @@
 #include "resample.hh"
 #include "fft.hh"
 #include "threadpool.hh"
+#include "wavchunkloader.hh"
 
 using std::string;
 using std::vector;
@@ -192,6 +193,12 @@ public:
     p.speed = speed;
 
     patterns.push_back (p);
+  }
+  void
+  apply_time_offset (double time_offset)
+  {
+    for (auto& p : patterns)
+      p.time += time_offset;
   }
   void
   sort()
@@ -687,7 +694,7 @@ public:
 };
 
 static int
-decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
+decode_and_report (double time_offset, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
 {
   ResultSet result_set;
 
@@ -734,6 +741,7 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
   ClipDecoder clip_decoder (1) ;
   clip_decoder.run (key_list, wav_data, result_set);
 
+  result_set.apply_time_offset (time_offset);
   result_set.sort();
 
   if (!Params::json_output.empty())
@@ -774,31 +782,46 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
         return 1;
     }
 
-  WavData wav_data;
-  Error err = wav_data.load (infile);
-  if (err)
+  WavChunkLoader wav_chunk_loader (infile, Params::get_chunk_size, Params::mark_sample_rate);
+  while (!wav_chunk_loader.done())
     {
-      error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
-      return 1;
-    }
-
-  if (Params::test_truncate)
-    {
-      const size_t  want_n_samples = wav_data.sample_rate() * wav_data.n_channels() * Params::test_truncate;
-      vector<float> short_samples  = wav_data.samples();
-
-      if (want_n_samples < short_samples.size())
+      Error err = wav_chunk_loader.load_next_chunk();
+      if (err)
         {
-          short_samples.resize (want_n_samples);
-          wav_data.set_samples (short_samples);
+          error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
+          return 1;
+        }
+
+      if (!wav_chunk_loader.done())
+        {
+#if 0
+          if (Params::test_truncate)
+            {
+              const size_t  want_n_samples = wav_data.sample_rate() * wav_data.n_channels() * Params::test_truncate;
+              vector<float> short_samples  = wav_data.samples();
+
+              if (want_n_samples < short_samples.size())
+                {
+                  short_samples.resize (want_n_samples);
+                  wav_data.set_samples (short_samples);
+                }
+            }
+#endif
+          const WavData& wav_data = wav_chunk_loader.wav_data();
+          if (wav_data.sample_rate() == Params::mark_sample_rate)
+            {
+              int rc = decode_and_report (wav_chunk_loader.time_offset(), key_list, wav_data, orig_bitvec);
+              if (rc != 0)
+                return rc;
+            }
+          else
+            {
+              // FIXME: should never happen
+              int rc = decode_and_report (wav_chunk_loader.time_offset(), key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
+              if (rc != 0)
+                return rc;
+            }
         }
     }
-  if (wav_data.sample_rate() == Params::mark_sample_rate)
-    {
-      return decode_and_report (key_list, wav_data, orig_bitvec);
-    }
-  else
-    {
-      return decode_and_report (key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
-    }
+  return 0;
 }
