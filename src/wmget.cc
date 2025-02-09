@@ -171,6 +171,20 @@ public:
     SyncFinder::Score sync_score;
     Type              type;
     double            speed = 0;
+
+    bool
+    approx_match (const Pattern& p) const
+    {
+      const double time_delta = Params::frame_size / double (Params::mark_sample_rate);
+      const double speed_delta = 0.01;
+
+      return key == p.key &&
+            (fabs (time - p.time) < time_delta || (type == Type::ALL)) &&
+             bit_vec == p.bit_vec &&
+             sync_score.block_type == p.sync_score.block_type &&
+             type == p.type &&
+             fabs (speed - p.speed) < speed_delta;
+    }
   };
 private:
   std::mutex      pattern_mutex;
@@ -231,6 +245,21 @@ public:
           return p1bits < p2bits;
         }
     });
+  }
+  void
+  merge (ResultSet& other)
+  {
+    for (const auto& p : other.patterns)
+      {
+        bool merge = true;
+        for (auto& my_p : patterns)
+          {
+            if (my_p.approx_match (p))
+              merge = false;
+          }
+        if (merge)
+          patterns.push_back (p);
+      }
   }
   string
   json_escape (const string& s)
@@ -693,11 +722,9 @@ public:
   }
 };
 
-static int
-decode_and_report (double time_offset, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
+static void
+decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
 {
-  ResultSet result_set;
-
   /*
    * The strategy for integrating speed detection into decoding is this:
    *  - we always (unconditionally) try to decode the  watermark on the original wav data
@@ -740,12 +767,14 @@ decode_and_report (double time_offset, const vector<Key>& key_list, const WavDat
 
   ClipDecoder clip_decoder (1) ;
   clip_decoder.run (key_list, wav_data, result_set);
+}
 
-  result_set.apply_time_offset (time_offset);
-  result_set.sort();
-
+int
+report (ResultSet& result_set, const vector<int>& orig_bits)
+{
+  WavData fixme_wav_data;
   if (!Params::json_output.empty())
-    result_set.print_json (wav_data, Params::json_output);
+    result_set.print_json (/* FIXME */ fixme_wav_data, Params::json_output);
 
   if (Params::json_output != "-")
     result_set.print();
@@ -754,7 +783,7 @@ decode_and_report (double time_offset, const vector<Key>& key_list, const WavDat
     {
       int match_count = result_set.print_match_count (orig_bits);
 
-      block_decoder.print_debug_sync();
+      /* FIXME block_decoder.print_debug_sync(); */
 
       if (Params::expect_matches >= 0)
         {
@@ -774,6 +803,8 @@ decode_and_report (double time_offset, const vector<Key>& key_list, const WavDat
 int
 get_watermark (const vector<Key>& key_list, const string& infile, const string& orig_pattern)
 {
+  ResultSet result_set;
+
   vector<int> orig_bitvec;
   if (!orig_pattern.empty())
     {
@@ -810,18 +841,25 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
           const WavData& wav_data = wav_chunk_loader.wav_data();
           if (wav_data.sample_rate() == Params::mark_sample_rate)
             {
-              int rc = decode_and_report (wav_chunk_loader.time_offset(), key_list, wav_data, orig_bitvec);
-              if (rc != 0)
-                return rc;
+              ResultSet chunk_result_set;
+
+              decode (chunk_result_set, key_list, wav_data, orig_bitvec);
+              chunk_result_set.apply_time_offset (wav_chunk_loader.time_offset());
+
+              result_set.merge (chunk_result_set);
             }
           else
             {
+              assert (false);
+#if 0
               // FIXME: should never happen
               int rc = decode_and_report (wav_chunk_loader.time_offset(), key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
               if (rc != 0)
                 return rc;
+#endif
             }
         }
     }
-  return 0;
+  result_set.sort();
+  return report (result_set, orig_bitvec);
 }

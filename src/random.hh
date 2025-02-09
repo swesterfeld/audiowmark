@@ -35,6 +35,12 @@ public:
   Key();
   ~Key();
 
+  bool
+  operator== (const Key& other) const
+  {
+    return (m_aes_key == other.m_aes_key) && (m_name == other.m_name);
+  }
+
   void set_test_key (uint64_t key);
   void load_key (const std::string& filename);
   const unsigned char *aes_key() const;

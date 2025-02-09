@@ -17,6 +17,8 @@
 
 #include "wavchunkloader.hh"
 
+#include <assert.h>
+
 using std::vector;
 
 WavChunkLoader::WavChunkLoader (const std::string& filename, double chunk_size, double rate)
@@ -42,7 +44,18 @@ WavChunkLoader::load_next_chunk()
   if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
     m_time_offset += m_wav_data.n_frames() / double (m_wav_data.sample_rate());
 
-  m_samples1 = m_samples2;
+  size_t overlap = m_wav_data.sample_rate() * m_wav_data.n_channels() * 60 * 5;
+  printf ("overlap=%zd\n", overlap);
+  if (m_samples1.size() > overlap)
+    {
+      m_time_offset -= overlap / m_wav_data.sample_rate() / m_wav_data.n_channels();
+      m_samples1.erase (m_samples1.begin(), m_samples1.end() - overlap);
+    }
+  else
+    {
+      m_samples1.clear();
+    }
+  m_samples1.insert (m_samples1.end(), m_samples2.begin(), m_samples2.end());
   m_samples2.clear();
 
   bool eof = !refill (m_samples1, m_chunk_size);
