@@ -41,7 +41,7 @@ bool   Params::test_no_sync    = false; // disable sync
 bool   Params::test_no_limiter = false; // disable limiter
 int    Params::test_truncate   = 0;
 int    Params::expect_matches  = -1;
-double Params::get_chunk_size  = 29;
+double Params::get_chunk_size  = 30;
 
 Format Params::input_format     = Format::AUTO;
 Format Params::output_format    = Format::AUTO;

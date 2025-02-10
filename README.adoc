@@ -147,6 +147,10 @@ Detect and correct replay speed difference (see <<speed>>).
 --json <file>::
 Write results to <file> in machine readable JSON format.
 
+--chunk-size <minutes>::
+Set chunk size for memory/speed tradeoff. Larger chunk sizes result in
+faster detection but higher memory usage. Default: 30 minutes.
+
 [[key]]
 == Watermark Key
 
