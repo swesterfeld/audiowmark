@@ -30,7 +30,6 @@ class WavChunkLoader
   double                            m_rate;
   double                            m_time_offset;
   std::unique_ptr<AudioInputStream> m_in_stream;
-  std::vector<float>                m_samples1;
   std::vector<float>                m_samples2;
   WavData                           m_wav_data;
 

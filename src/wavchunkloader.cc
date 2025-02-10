@@ -39,26 +39,29 @@ WavChunkLoader::load_next_chunk()
       m_in_stream = AudioInputStream::create (m_filename, err);
       if (err)
         return err;
+
+      m_wav_data = WavData ({}, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
     }
 
   if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
     m_time_offset += m_wav_data.n_frames() / double (m_wav_data.sample_rate());
 
+  vector<float>& ref_samples1 = m_wav_data.mutable_samples();
   size_t overlap = m_wav_data.sample_rate() * m_wav_data.n_channels() * 60 * 5;
   printf ("overlap=%zd\n", overlap);
-  if (m_samples1.size() > overlap)
+  if (ref_samples1.size() > overlap)
     {
       m_time_offset -= overlap / m_wav_data.sample_rate() / m_wav_data.n_channels();
-      m_samples1.erase (m_samples1.begin(), m_samples1.end() - overlap);
+      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - overlap);
     }
   else
     {
-      m_samples1.clear();
+      ref_samples1.clear();
     }
-  m_samples1.insert (m_samples1.end(), m_samples2.begin(), m_samples2.end());
+  ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
   m_samples2.clear();
 
-  bool eof = !refill (m_samples1, m_chunk_size);
+  bool eof = !refill (ref_samples1, m_chunk_size);
   if (!eof)
     eof = !refill (m_samples2, 5);
 
@@ -67,12 +70,11 @@ WavChunkLoader::load_next_chunk()
       /* for long files:
        *  - ensure that last chunk is large enough -> avoid ClipDecoder
       */
-      m_samples1.insert (m_samples1.end(), m_samples2.begin(), m_samples2.end());
+      ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
       m_samples2.clear();
     }
 
-  m_wav_data = WavData (m_samples1, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
-  printf ("chunk size: %f minutes\n", m_samples1.size() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()));
+  printf ("chunk size: %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()));
 
   return Error::Code::NONE;
 }

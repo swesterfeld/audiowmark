@@ -64,6 +64,13 @@ public:
   }
 
   void set_samples (const std::vector<float>& samples);
+
+  std::vector<float>&
+  mutable_samples()
+  {
+    /* allow direct access to samples vector to optimize for performance and low memory usage */
+    return m_samples;
+  }
 };
 
 #endif /* AUDIOWMARK_WAV_DATA_HH */
