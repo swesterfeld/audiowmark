@@ -31,9 +31,12 @@ class WavChunkLoader
   double                            m_time_offset;
   std::unique_ptr<AudioInputStream> m_in_stream;
   std::vector<float>                m_samples2;
+  size_t                            m_samples2_max_size;
   WavData                           m_wav_data;
+  size_t                            m_wav_data_max_size;
 
-  bool            refill (std::vector<float>& samples, double time);
+  void            update_capacity (std::vector<float>& samples, size_t need_space, size_t max_size);
+  bool            refill (std::vector<float>& samples, size_t n_values, size_t max_size);
 public:
   WavChunkLoader (const std::string& filename, double chunk_size, double rate);
 
