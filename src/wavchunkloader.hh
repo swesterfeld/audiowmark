@@ -22,14 +22,17 @@
 
 #include "utils.hh"
 #include "wavdata.hh"
+#include "resample.hh"
 
 class WavChunkLoader
 {
   std::string                       m_filename;
   double                            m_chunk_size = 0;
-  double                            m_rate = 0;
+  int                               m_input_rate = 0;
+  int                               m_rate = 0;
   double                            m_time_offset = 0;
   std::unique_ptr<AudioInputStream> m_in_stream;
+  std::unique_ptr<ResamplerImpl>    m_resampler;
   std::vector<float>                m_samples2;
   size_t                            m_samples2_max_size = 0;
   WavData                           m_wav_data;

@@ -54,7 +54,7 @@ WavChunkLoader::load_next_chunk()
         }
       m_state = State::OPEN;
 
-      m_wav_data = WavData ({}, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
+      m_wav_data = WavData ({}, m_in_stream->n_channels(), m_rate, m_in_stream->bit_depth());
 
       /* samples2 buffer: 5 minutes */
       m_samples2_max_size = lrint (5 * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
@@ -65,6 +65,11 @@ WavChunkLoader::load_next_chunk()
 
       // only reserve 5 minutes (not chunk_size) in order to minimize memory usage for short files
       ref_samples1.reserve (m_samples2_max_size);
+
+      /* initialize resampler if input sample rate != watermark rate */
+      m_input_rate = m_in_stream->sample_rate();
+      if (m_input_rate != m_rate)
+        m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_rate));
     }
 
   if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
@@ -116,9 +121,9 @@ WavChunkLoader::load_next_chunk()
         m_state = State::DONE;
     }
 
-  printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()),
-                                                                     ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()),
-                                                                     m_samples2.capacity() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()));
+  printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_rate),
+                                                                     ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_rate),
+                                                                     m_samples2.capacity() / m_in_stream->n_channels() / (60.0 * m_rate));
   return Error::Code::NONE;
 }
 
@@ -153,22 +158,38 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
 {
   *eof = false;
 
-  vector<float> m_buffer;
+  vector<float> buffer;
   while (samples.size() < values)
     {
-      Error err = m_in_stream->read_frames (m_buffer, std::min<size_t> (1024, (values - samples.size()) / m_wav_data.n_channels()));
-      if (err)
-        return err;
+      if (m_resampler)
+        {
+          if (m_resampler->can_read_frames() < 1024)
+            {
+              Error err = m_in_stream->read_frames (buffer, 1024 * double (m_input_rate) / m_rate);
+              if (err)
+                return err;
 
-      if (!m_buffer.size())
+              m_resampler->write_frames (buffer);
+            }
+
+          buffer = m_resampler->read_frames (std::min<size_t> (m_resampler->can_read_frames(), (values - samples.size()) / m_wav_data.n_channels()));
+        }
+      else
+        {
+          Error err = m_in_stream->read_frames (buffer, std::min<size_t> (1024, (values - samples.size()) / m_wav_data.n_channels()));
+          if (err)
+            return err;
+        }
+
+      if (!buffer.size())
         {
           /* reached eof */
           *eof = true;
           return Error::Code::NONE;
         }
 
-      update_capacity (samples, samples.size() + m_buffer.size(), max_size);
-      samples.insert (samples.end(), m_buffer.begin(), m_buffer.end());
+      update_capacity (samples, samples.size() + buffer.size(), max_size);
+      samples.insert (samples.end(), buffer.begin(), buffer.end());
     }
   return Error::Code::NONE;
 }

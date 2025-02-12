@@ -837,25 +837,14 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
             }
 #endif
           const WavData& wav_data = wav_chunk_loader.wav_data();
-          if (wav_data.sample_rate() == Params::mark_sample_rate)
-            {
-              ResultSet chunk_result_set;
+          assert (wav_data.sample_rate() == Params::mark_sample_rate)
 
-              decode (chunk_result_set, key_list, wav_data, orig_bitvec);
-              chunk_result_set.apply_time_offset (wav_chunk_loader.time_offset());
+          ResultSet chunk_result_set;
 
-              result_set.merge (chunk_result_set);
-            }
-          else
-            {
-              assert (false);
-#if 0
-              // FIXME: should never happen
-              int rc = decode_and_report (wav_chunk_loader.time_offset(), key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
-              if (rc != 0)
-                return rc;
-#endif
-            }
+          decode (chunk_result_set, key_list, wav_data, orig_bitvec);
+          chunk_result_set.apply_time_offset (wav_chunk_loader.time_offset());
+
+          result_set.merge (chunk_result_set);
         }
     }
   result_set.sort();
