@@ -173,14 +173,16 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
 {
   *eof = false;
 
+  constexpr size_t block_size = 4096;
+
   vector<float> buffer;
   while (samples.size() < values)
     {
       if (m_resampler)
         {
-          if (m_resampler->can_read_frames() < 1024 && !m_resampler_in_eof)
+          if (m_resampler->can_read_frames() < block_size && !m_resampler_in_eof)
             {
-              Error err = m_in_stream->read_frames (buffer, 1024 * double (m_input_rate) / m_rate);
+              Error err = m_in_stream->read_frames (buffer, block_size * double (m_input_rate) / m_rate);
               if (err)
                 return err;
 
@@ -197,7 +199,7 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
         }
       else
         {
-          Error err = m_in_stream->read_frames (buffer, std::min<size_t> (1024, (values - samples.size()) / m_wav_data.n_channels()));
+          Error err = m_in_stream->read_frames (buffer, std::min<size_t> (block_size, (values - samples.size()) / m_wav_data.n_channels()));
           if (err)
             return err;
         }
