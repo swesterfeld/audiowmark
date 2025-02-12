@@ -837,7 +837,7 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
             }
 #endif
           const WavData& wav_data = wav_chunk_loader.wav_data();
-          assert (wav_data.sample_rate() == Params::mark_sample_rate)
+          assert (wav_data.sample_rate() == Params::mark_sample_rate);
 
           ResultSet chunk_result_set;
 
