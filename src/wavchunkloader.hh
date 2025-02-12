@@ -26,17 +26,27 @@
 class WavChunkLoader
 {
   std::string                       m_filename;
-  double                            m_chunk_size;
-  double                            m_rate;
-  double                            m_time_offset;
+  double                            m_chunk_size = 0;
+  double                            m_rate = 0;
+  double                            m_time_offset = 0;
   std::unique_ptr<AudioInputStream> m_in_stream;
   std::vector<float>                m_samples2;
-  size_t                            m_samples2_max_size;
+  size_t                            m_samples2_max_size = 0;
   WavData                           m_wav_data;
-  size_t                            m_wav_data_max_size;
+  size_t                            m_wav_data_max_size = 0;
+
+  enum class State
+  {
+    NEW,
+    OPEN,
+    LAST_CHUNK,
+    DONE,
+    ERROR
+  };
+  State                             m_state = State::NEW;
 
   void            update_capacity (std::vector<float>& samples, size_t need_space, size_t max_size);
-  bool            refill (std::vector<float>& samples, size_t n_values, size_t max_size);
+  Error           refill (std::vector<float>& samples, size_t n_values, size_t max_size, bool *eof);
 public:
   WavChunkLoader (const std::string& filename, double chunk_size, double rate);
 

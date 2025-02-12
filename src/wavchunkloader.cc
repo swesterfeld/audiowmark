@@ -27,22 +27,32 @@ WavChunkLoader::WavChunkLoader (const std::string& filename, double chunk_size, 
   m_filename = filename;
   m_chunk_size = chunk_size;
   m_rate = rate;
-  m_time_offset = 0;
 }
 
 Error
 WavChunkLoader::load_next_chunk()
 {
+  assert (m_state != State::ERROR);
+
+  if (m_state == State::LAST_CHUNK)
+    {
+      m_state = State::DONE;
+      return Error::Code::NONE;
+    }
+
   vector<float>& ref_samples1 = m_wav_data.mutable_samples();
 
-  if (!m_in_stream)
+  if (m_state == State::NEW)
     {
       Error err;
 
       m_in_stream = AudioInputStream::create (m_filename, err);
       if (err)
-        return err;
-
+        {
+          m_state = State::ERROR;
+          return err;
+        }
+      m_state = State::OPEN;
 
       m_wav_data = WavData ({}, m_in_stream->n_channels(), m_in_stream->sample_rate(), m_in_stream->bit_depth());
 
@@ -74,9 +84,23 @@ WavChunkLoader::load_next_chunk()
   ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
   m_samples2.clear();
 
-  bool eof = !refill (ref_samples1, m_wav_data_max_size - m_samples2_max_size, m_wav_data_max_size);
+  bool eof = false;
+  Error err = refill (ref_samples1, m_wav_data_max_size - m_samples2_max_size, m_wav_data_max_size, &eof);
+  if (err)
+    {
+      m_state = State::ERROR;
+      return err;
+    }
+
   if (!eof)
-    eof = !refill (m_samples2, m_samples2_max_size, m_samples2_max_size);
+    {
+      err = refill (m_samples2, m_samples2_max_size, m_samples2_max_size, &eof);
+      if (err)
+        {
+          m_state = State::ERROR;
+          return err;
+        }
+    }
 
   if (eof)
     {
@@ -85,6 +109,11 @@ WavChunkLoader::load_next_chunk()
       */
       ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
       m_samples2.clear();
+
+      if (ref_samples1.size())
+        m_state = State::LAST_CHUNK;
+      else
+        m_state = State::DONE;
     }
 
   printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_in_stream->sample_rate()),
@@ -119,9 +148,11 @@ WavChunkLoader::update_capacity (vector<float>& samples, size_t need_space, size
   assert (samples.capacity() >= need_space);
 }
 
-bool
-WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_size)
+Error
+WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_size, bool *eof)
 {
+  *eof = false;
+
   vector<float> m_buffer;
   while (samples.size() < values)
     {
@@ -132,19 +163,20 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
       if (!m_buffer.size())
         {
           /* reached eof */
-          return false;
+          *eof = true;
+          return Error::Code::NONE;
         }
 
       update_capacity (samples, samples.size() + m_buffer.size(), max_size);
       samples.insert (samples.end(), m_buffer.begin(), m_buffer.end());
     }
-  return true;
+  return Error::Code::NONE;
 }
 
 bool
 WavChunkLoader::done()
 {
-  return m_wav_data.n_frames() == 0;
+  return m_state == State::DONE;
 }
 
 const WavData&
