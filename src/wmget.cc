@@ -849,7 +849,6 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
     }
   result_set.sort();
 
-  /* chunk loader time offset at EOF is total length of the input file */
-  size_t time_length = lrint (wav_chunk_loader.time_offset());
+  size_t time_length = lrint (wav_chunk_loader.length());
   return report (result_set, time_length, orig_bitvec);
 }
