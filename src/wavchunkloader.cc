@@ -163,13 +163,19 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
     {
       if (m_resampler)
         {
-          if (m_resampler->can_read_frames() < 1024)
+          if (m_resampler->can_read_frames() < 1024 && !m_resampler_in_eof)
             {
               Error err = m_in_stream->read_frames (buffer, 1024 * double (m_input_rate) / m_rate);
               if (err)
                 return err;
 
               m_resampler->write_frames (buffer);
+              if (!buffer.size())
+                {
+                  /* input file reached eof */
+                  m_resampler->write_trailing_frames();
+                  m_resampler_in_eof = true;
+                }
             }
 
           buffer = m_resampler->read_frames (std::min<size_t> (m_resampler->can_read_frames(), (values - samples.size()) / m_wav_data.n_channels()));
@@ -190,6 +196,7 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
 
       update_capacity (samples, samples.size() + buffer.size(), max_size);
       samples.insert (samples.end(), buffer.begin(), buffer.end());
+      m_n_total_samples += buffer.size();
     }
   return Error::Code::NONE;
 }
@@ -198,6 +205,14 @@ bool
 WavChunkLoader::done()
 {
   return m_state == State::DONE;
+}
+
+double
+WavChunkLoader::length()
+{
+  assert (m_state == State::DONE);
+
+  return m_n_total_samples / double (m_wav_data.sample_rate() * m_wav_data.n_channels());
 }
 
 const WavData&

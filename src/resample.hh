@@ -33,6 +33,7 @@ public:
 
   virtual size_t             skip (size_t zeros) = 0;
   virtual void               write_frames (const std::vector<float>& frames) = 0;
+  virtual void               write_trailing_frames() = 0;
   virtual std::vector<float> read_frames (size_t frames) = 0;
   virtual size_t             can_read_frames() const = 0;
 

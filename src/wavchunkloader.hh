@@ -33,10 +33,12 @@ class WavChunkLoader
   double                            m_time_offset = 0;
   std::unique_ptr<AudioInputStream> m_in_stream;
   std::unique_ptr<ResamplerImpl>    m_resampler;
+  bool                              m_resampler_in_eof = false;
   std::vector<float>                m_samples2;
   size_t                            m_samples2_max_size = 0;
   WavData                           m_wav_data;
   size_t                            m_wav_data_max_size = 0;
+  size_t                            m_n_total_samples = 0;
 
   enum class State
   {
@@ -57,6 +59,7 @@ public:
   bool            done();
   const WavData&  wav_data();
   double          time_offset();
+  double          length();
 };
 
 #endif

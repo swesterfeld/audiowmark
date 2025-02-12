@@ -183,6 +183,13 @@ public:
         start = frames.size() / n_channels - m_resampler.inp_count;
       }
   }
+  void
+  write_trailing_frames()
+  {
+    /* zita resampler needs k/2 samples after actual input */
+    std::vector<float> samples ((m_resampler.inpsize() / 2 - 1) * n_channels);
+    write_frames (samples);
+  }
   vector<float>
   read_frames (size_t frames)
   {
