@@ -16,6 +16,7 @@
  */
 
 #include "resample.hh"
+#include "wmcommon.hh"
 
 #include <assert.h>
 #include <math.h>
@@ -107,4 +108,139 @@ resample_ratio (const WavData& wav_data, double ratio, int new_rate)
   return WavData (out, wav_data.n_channels(), new_rate, wav_data.bit_depth());
 }
 
+template<class Resampler>
+class BufferedResamplerImpl : public ResamplerImpl
+{
+  const int     n_channels = 0;
+  const int     old_rate = 0;
+  const int     new_rate = 0;
+  bool          first_write = true;
+  Resampler     m_resampler;
 
+  vector<float> buffer;
+public:
+  BufferedResamplerImpl (int n_channels, int old_rate, int new_rate) :
+    n_channels (n_channels),
+    old_rate (old_rate),
+    new_rate (new_rate)
+  {
+  }
+  Resampler&
+  resampler()
+  {
+    return m_resampler;
+  }
+  size_t
+  skip (size_t zeros)
+  {
+    /* skipping a whole 1 second block should end in the same resampler state we had at the beginning */
+    size_t seconds = 0;
+    if (zeros >= Params::frame_size)
+      seconds = (zeros - Params::frame_size) / old_rate;
+
+    const size_t extra = new_rate * seconds;
+    zeros -= old_rate * seconds;
+
+    write_frames (vector<float> (zeros * n_channels));
+
+    size_t out = can_read_frames() + extra;
+    out -= out % Params::frame_size; /* always skip whole frames */
+    read_frames (out - extra);
+    return out;
+  }
+  void
+  write_frames (const vector<float>& frames)
+  {
+    if (first_write)
+      {
+        /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
+        m_resampler.inp_count = m_resampler.inpsize () / 2 - 1;
+        m_resampler.inp_data  = nullptr;
+
+        m_resampler.out_count = 1000000; // <- just needs to be large enough that all input is consumed
+        m_resampler.out_data  = nullptr;
+        m_resampler.process();
+
+        first_write = false;
+      }
+
+    uint start = 0;
+    while (start != frames.size() / n_channels)
+      {
+        const int out_count = Params::frame_size;
+        float out[out_count * n_channels];
+
+        m_resampler.out_count = out_count;
+        m_resampler.out_data  = out;
+
+        m_resampler.inp_count = frames.size() / n_channels - start;
+        m_resampler.inp_data  = const_cast<float *> (&frames[start * n_channels]);
+        m_resampler.process();
+
+        size_t count = out_count - m_resampler.out_count;
+        buffer.insert (buffer.end(), out, out + count * n_channels);
+
+        start = frames.size() / n_channels - m_resampler.inp_count;
+      }
+  }
+  vector<float>
+  read_frames (size_t frames)
+  {
+    assert (frames * n_channels <= buffer.size());
+    const auto begin = buffer.begin();
+    const auto end   = begin + frames * n_channels;
+    vector<float> result (begin, end);
+    buffer.erase (begin, end);
+    return result;
+  }
+  size_t
+  can_read_frames() const
+  {
+    return buffer.size() / n_channels;
+  }
+};
+
+ResamplerImpl *
+ResamplerImpl::create (int n_channels, int old_rate, int new_rate)
+{
+  if (old_rate == new_rate)
+    {
+      return nullptr; // should not be using create_resampler for that case
+    }
+  else
+    {
+      /* zita-resampler provides two resampling algorithms
+       *
+       * a fast optimized version: Resampler
+       *   this is an optimized version, which works for many common cases,
+       *   like resampling between 22050, 32000, 44100, 48000, 96000 Hz
+       *
+       * a slower version: VResampler
+       *   this works for arbitary rates (like 33333 -> 44100 resampling)
+       *
+       * so we try using Resampler, and if that fails fall back to VResampler
+       */
+      const int hlen = 16;
+
+      auto resampler = new BufferedResamplerImpl<Resampler> (n_channels, old_rate, new_rate);
+      if (resampler->resampler().setup (old_rate, new_rate, n_channels, hlen) == 0)
+        {
+          return resampler;
+        }
+      else
+        delete resampler;
+
+      auto vresampler = new BufferedResamplerImpl<VResampler> (n_channels, old_rate, new_rate);
+      const double ratio = double (new_rate) / old_rate;
+      if (vresampler->resampler().setup (ratio, n_channels, hlen) == 0)
+        {
+          return vresampler;
+        }
+      else
+        {
+          error ("audiowmark: resampling from old_rate=%d to new_rate=%d not implemented\n", old_rate, new_rate);
+          delete vresampler;
+          return nullptr;
+        }
+    }
+}
