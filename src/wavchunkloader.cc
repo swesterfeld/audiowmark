@@ -56,6 +56,11 @@ WavChunkLoader::load_next_chunk()
 
       m_wav_data = WavData ({}, m_in_stream->n_channels(), m_rate, m_in_stream->bit_depth());
 
+      /* initialize resampler if input sample rate != watermark rate */
+      m_input_rate = m_in_stream->sample_rate();
+      if (m_input_rate != m_rate)
+        m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_rate));
+
       /* samples2 buffer: 5 minutes */
       m_samples2_max_size = lrint (5 * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
       m_samples2.reserve (m_samples2_max_size);
@@ -63,13 +68,23 @@ WavChunkLoader::load_next_chunk()
       /* samples1 buffer: chunk_size minutes + 5 minutes (to merge with samples2 buffer) */
       m_wav_data_max_size = m_samples2_max_size + lrint (m_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
-      // only reserve 5 minutes (not chunk_size) in order to minimize memory usage for short files
-      ref_samples1.reserve (m_samples2_max_size);
+      if (m_in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
+        {
+          size_t n_reserve_frames = m_in_stream->n_frames() * double (m_rate) / m_input_rate;
 
-      /* initialize resampler if input sample rate != watermark rate */
-      m_input_rate = m_in_stream->sample_rate();
-      if (m_input_rate != m_rate)
-        m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_rate));
+          /* since we possibly resample the input signal, we expect a slight difference between
+           * predicted and actual space requirements, so we reserve a bit more than predicted
+           */
+          n_reserve_frames *= 1.001;
+          n_reserve_frames += 100;
+
+          ref_samples1.reserve (std::min (m_wav_data_max_size, n_reserve_frames * m_wav_data.n_channels()));
+        }
+      else
+        {
+          // unknown size: only reserve 5 minutes (not chunk_size) in order to minimize memory usage for short files
+          ref_samples1.reserve (m_samples2_max_size);
+        }
     }
 
   if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
