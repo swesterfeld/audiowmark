@@ -27,9 +27,6 @@
 class WavChunkLoader
 {
   std::string                       m_filename;
-  double                            m_chunk_size = 0;
-  int                               m_input_rate = 0;
-  int                               m_rate = 0;
   double                            m_time_offset = 0;
   std::unique_ptr<AudioInputStream> m_in_stream;
   std::unique_ptr<ResamplerImpl>    m_resampler;
@@ -55,7 +52,7 @@ class WavChunkLoader
   void            update_capacity (std::vector<float>& samples, size_t need_space, size_t max_size);
   Error           refill (std::vector<float>& samples, size_t n_values, size_t max_size, bool *eof);
 public:
-  WavChunkLoader (const std::string& filename, double chunk_size, double rate);
+  WavChunkLoader (const std::string& filename);
 
   Error           load_next_chunk();
   bool            done();

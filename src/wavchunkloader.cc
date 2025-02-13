@@ -23,11 +23,9 @@
 
 using std::vector;
 
-WavChunkLoader::WavChunkLoader (const std::string& filename, double chunk_size, double rate)
+WavChunkLoader::WavChunkLoader (const std::string& filename) :
+  m_filename (filename)
 {
-  m_filename = filename;
-  m_chunk_size = chunk_size;
-  m_rate = rate;
 }
 
 Error
@@ -44,12 +42,11 @@ WavChunkLoader::open()
     }
   m_state = State::OPEN;
 
-  m_wav_data = WavData ({}, m_in_stream->n_channels(), m_rate, m_in_stream->bit_depth());
+  m_wav_data = WavData ({}, m_in_stream->n_channels(), Params::mark_sample_rate, m_in_stream->bit_depth());
 
   /* initialize resampler if input sample rate != watermark rate */
-  m_input_rate = m_in_stream->sample_rate();
-  if (m_input_rate != m_rate)
-    m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_rate));
+  if (m_in_stream->sample_rate() != m_wav_data.sample_rate())
+    m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_wav_data.sample_rate()));
 
   /* samples2 buffer: a bit larger than the maximum length ClipDecoder uses (* speed_factor) */
   double speed_factor = 1.3;
@@ -57,15 +54,15 @@ WavChunkLoader::open()
   m_samples2_max_size = lrint (clip_decoder_max_blocks() * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
   m_samples2.reserve (m_samples2_max_size);
 
-  /* samples1 buffer: chunk_size minutes + 5 minutes (to merge with samples2 buffer) */
-  m_wav_data_max_size = m_samples2_max_size + lrint (m_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
+  /* samples1 buffer: chunk_size minutes + maximum size of the samples2 buffer */
+  m_wav_data_max_size = m_samples2_max_size + lrint (Params::get_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   /* overlap size: BlockDecoder needs an overlap of 1 AB block (* speed factor) */
   m_n_overlap_samples = lrint (2 * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   if (m_in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
-      size_t n_reserve_frames = m_in_stream->n_frames() * double (m_rate) / m_input_rate;
+      size_t n_reserve_frames = m_in_stream->n_frames() * double (m_wav_data.sample_rate()) / m_in_stream->sample_rate();
 
       /* since we possibly resample the input signal, we expect a slight difference between
        * predicted and actual space requirements, so we reserve a bit more than predicted
@@ -164,9 +161,9 @@ WavChunkLoader::load_next_chunk()
         m_state = State::DONE;
     }
 
-  printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_rate),
-                                                                     ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_rate),
-                                                                     m_samples2.capacity() / m_in_stream->n_channels() / (60.0 * m_rate));
+  printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
+                                                                     ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
+                                                                     m_samples2.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
   return Error::Code::NONE;
 }
 
@@ -210,7 +207,7 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
         {
           if (m_resampler->can_read_frames() < block_size && !m_resampler_in_eof)
             {
-              Error err = m_in_stream->read_frames (buffer, block_size * double (m_input_rate) / m_rate);
+              Error err = m_in_stream->read_frames (buffer, block_size * double (m_in_stream->sample_rate()) / m_wav_data.sample_rate());
               if (err)
                 return err;
 

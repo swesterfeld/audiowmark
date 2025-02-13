@@ -835,7 +835,7 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
         return 1;
     }
 
-  WavChunkLoader wav_chunk_loader (infile, Params::get_chunk_size, Params::mark_sample_rate);
+  WavChunkLoader wav_chunk_loader (infile);
   while (!wav_chunk_loader.done())
     {
       Error err = wav_chunk_loader.load_next_chunk();
