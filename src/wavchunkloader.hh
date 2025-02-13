@@ -50,6 +50,7 @@ class WavChunkLoader
   };
   State                             m_state = State::NEW;
 
+  Error           open();
   void            update_capacity (std::vector<float>& samples, size_t need_space, size_t max_size);
   Error           refill (std::vector<float>& samples, size_t n_values, size_t max_size, bool *eof);
 public:
