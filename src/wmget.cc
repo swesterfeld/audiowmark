@@ -189,6 +189,7 @@ public:
 private:
   std::mutex      pattern_mutex;
   vector<Pattern> patterns;
+  std::string     debug_sync;
 
 public:
   void
@@ -260,6 +261,10 @@ public:
         if (merge)
           patterns.push_back (p);
       }
+
+    /* only keep track of debug sync information for the first chunk */
+    if (debug_sync.empty())
+      debug_sync = other.debug_sync;
   }
   string
   json_escape (const string& s)
@@ -393,6 +398,16 @@ public:
       }
     printf ("match_count %d %zd\n", match_count, patterns.size());
     return match_count;
+  }
+  void
+  set_debug_sync (const std::string& ds)
+  {
+    debug_sync = ds;
+  }
+  void
+  print_debug_sync()
+  {
+    printf ("%s", debug_sync.c_str());
   }
   double
   best_quality() const
@@ -542,12 +557,12 @@ public:
 
     debug_sync_frame_count = frame_count (wav_data);
   }
-  void
-  print_debug_sync()
+  std::string
+  debug_sync()
   {
     /* this is really only useful for debugging, and should be used with exactly one key */
     if (key_results.size() != 1)
-      return;
+      return "";
 
     const auto& sync_scores = key_results[0].sync_scores;
 
@@ -568,7 +583,7 @@ public:
               }
           }
       }
-    printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+    return string_printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
   }
 };
 
@@ -773,6 +788,8 @@ decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_d
 
   ClipDecoder clip_decoder (1) ;
   clip_decoder.run (key_list, wav_data, result_set);
+
+  result_set.set_debug_sync (block_decoder.debug_sync());
 }
 
 int
@@ -788,7 +805,7 @@ report (ResultSet& result_set, size_t time_length, const vector<int>& orig_bits)
     {
       int match_count = result_set.print_match_count (orig_bits);
 
-      /* FIXME block_decoder.print_debug_sync(); */
+      result_set.print_debug_sync();
 
       if (Params::expect_matches >= 0)
         {
