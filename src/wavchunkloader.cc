@@ -103,18 +103,14 @@ WavChunkLoader::load_next_chunk()
         return err;
     }
 
-  if (m_wav_data.n_values()) // avoid division by zero for empty wav_data
-    m_time_offset += m_wav_data.n_frames() / double (m_wav_data.sample_rate());
-
   vector<float>& ref_samples1 = m_wav_data.mutable_samples();
-
   if (!ref_samples1.empty()) /* second block or later */
     {
       /* overlap samples1 with last block */
       assert (ref_samples1.size() >= m_n_overlap_samples);
-      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - m_n_overlap_samples);
 
-      m_time_offset -= (m_n_overlap_samples / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
+      m_time_offset += ((ref_samples1.size() - m_n_overlap_samples) / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
+      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - m_n_overlap_samples);
 
       /* append samples2 to samples1 */
       ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
