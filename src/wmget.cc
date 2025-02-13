@@ -823,19 +823,6 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
 
       if (!wav_chunk_loader.done())
         {
-#if 0
-          if (Params::test_truncate)
-            {
-              const size_t  want_n_samples = wav_data.sample_rate() * wav_data.n_channels() * Params::test_truncate;
-              vector<float> short_samples  = wav_data.samples();
-
-              if (want_n_samples < short_samples.size())
-                {
-                  short_samples.resize (want_n_samples);
-                  wav_data.set_samples (short_samples);
-                }
-            }
-#endif
           const WavData& wav_data = wav_chunk_loader.wav_data();
           assert (wav_data.sample_rate() == Params::mark_sample_rate);
 

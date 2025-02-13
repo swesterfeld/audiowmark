@@ -16,6 +16,7 @@
  */
 
 #include "wavchunkloader.hh"
+#include "wmcommon.hh"
 
 #include <math.h>
 #include <assert.h>
@@ -129,6 +130,21 @@ WavChunkLoader::load_next_chunk()
       */
       ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
       m_samples2.clear();
+
+      if (ref_samples1.size())
+        m_state = State::LAST_CHUNK;
+      else
+        m_state = State::DONE;
+    }
+
+  if (Params::test_truncate)
+    {
+      const size_t want_n_samples = m_wav_data.sample_rate() * m_wav_data.n_channels() * Params::test_truncate;
+      if (want_n_samples > m_wav_data_max_size - m_samples2_max_size)
+        return Error ("test truncate must be less than chunk size");
+
+      if (want_n_samples < ref_samples1.size())
+        ref_samples1.resize (want_n_samples);
 
       if (ref_samples1.size())
         m_state = State::LAST_CHUNK;
