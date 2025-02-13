@@ -51,12 +51,17 @@ WavChunkLoader::open()
   if (m_input_rate != m_rate)
     m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_rate));
 
-  /* samples2 buffer: 5 minutes */
-  m_samples2_max_size = lrint (5 * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
+  /* samples2 buffer: a bit larger than the maximum length ClipDecoder uses (* speed_factor) */
+  double speed_factor = 1.3;
+  double block_seconds = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size / double (Params::mark_sample_rate);
+  m_samples2_max_size = lrint (clip_decoder_max_blocks() * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
   m_samples2.reserve (m_samples2_max_size);
 
   /* samples1 buffer: chunk_size minutes + 5 minutes (to merge with samples2 buffer) */
   m_wav_data_max_size = m_samples2_max_size + lrint (m_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
+
+  /* overlap size: BlockDecoder needs an overlap of 1 AB block (* speed factor) */
+  m_n_overlap_samples = lrint (2 * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   if (m_in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
@@ -103,19 +108,18 @@ WavChunkLoader::load_next_chunk()
 
   vector<float>& ref_samples1 = m_wav_data.mutable_samples();
 
-  size_t overlap = m_wav_data.sample_rate() * m_wav_data.n_channels() * 60 * 5;
-  printf ("overlap=%zd\n", overlap);
-  if (ref_samples1.size() > overlap)
+  if (!ref_samples1.empty()) /* second block or later */
     {
-      m_time_offset -= overlap / m_wav_data.sample_rate() / m_wav_data.n_channels();
-      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - overlap);
+      /* overlap samples1 with last block */
+      assert (ref_samples1.size() >= m_n_overlap_samples);
+      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - m_n_overlap_samples);
+
+      m_time_offset -= (m_n_overlap_samples / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
+
+      /* append samples2 to samples1 */
+      ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
+      m_samples2.clear();
     }
-  else
-    {
-      ref_samples1.clear();
-    }
-  ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
-  m_samples2.clear();
 
   bool eof = false;
   Error err = refill (ref_samples1, m_wav_data_max_size - m_samples2_max_size, m_wav_data_max_size, &eof);

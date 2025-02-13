@@ -709,17 +709,24 @@ public:
     speed (speed)
   {
   }
+  static constexpr double max_blocks = 3.1;
   void
   run (const vector<Key>& key_list, const WavData& wav_data, ResultSet& result_set)
   {
     const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
-    if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
+    if (wav_frames < frames_per_block * max_blocks) /* clip decoder is only used for small wavs */
       {
         run_block (key_list, wav_data, result_set, Pos::START);
         run_block (key_list, wav_data, result_set, Pos::END);
       }
   }
 };
+
+double
+clip_decoder_max_blocks()
+{
+  return ClipDecoder::max_blocks;
+}
 
 static void
 decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)

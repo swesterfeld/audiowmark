@@ -38,6 +38,7 @@ class WavChunkLoader
   size_t                            m_samples2_max_size = 0;
   WavData                           m_wav_data;
   size_t                            m_wav_data_max_size = 0;
+  size_t                            m_n_overlap_samples = 0;
   size_t                            m_n_total_samples = 0;
 
   enum class State
