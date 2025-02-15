@@ -23,6 +23,35 @@
 
 using std::vector;
 
+/* WavChunkLoader reads the input file, resamples it to the watermark sample
+ * rate and splits it into overlapping chunks. This works without knowing the
+ * length of the input file before eof is reached.
+ *
+ * Example:
+ *          <-------- m_wav_data --------->
+ *          <-overlap->
+ * Chunk 1: [ A A A A A A A A A A A A A A ]
+ *
+ * Chunk 2: [ A A A A A B B B B B B B B B ]
+ *
+ * Chunk 3: [ B B B B B C C ]
+ *
+ * Chunk 1: Fill m_wav_data by reading from the input stream (A).
+ *
+ * Chunk 2: Keep some overlap samples from the end of m_wav_data (A) and
+ * fill the remaining space by reading from the input stream (B).
+ *
+ * Chunk 3: Keep some overlap samples (B) and try to fill the block from the
+ * input stream (C).
+ *
+ * Since EOF was reached, we're done at this point.
+ *
+ * Note that overlap should be
+ *  - larger than the maximum length for the ClipDecoder
+ *     => to avoid running ClipDecoder on the last chunk
+ *  - larger than one BlockDecoder AB block
+ *     => to get all BlockDecoder results
+ */
 WavChunkLoader::WavChunkLoader (const std::string& filename) :
   m_filename (filename)
 {
@@ -48,17 +77,18 @@ WavChunkLoader::open()
   if (m_in_stream->sample_rate() != m_wav_data.sample_rate())
     m_resampler.reset (ResamplerImpl::create (m_in_stream->n_channels(), m_in_stream->sample_rate(), m_wav_data.sample_rate()));
 
-  /* samples2 buffer: a bit larger than the maximum length ClipDecoder uses (* speed_factor) */
+  /* maximum length of the m_wav_data samples (chunk size) */
+  m_wav_data_max_size = lrint (Params::get_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
+
+  /* overlap size:
+   *   - larger than the maximum length ClipDecoder uses
+   *   - should also be large enough for BlockDecoder overlap (1 AB block == 2 blocks)
+   *   - take speed factor into account for speed detection
+   */
+  double overlap_blocks = std::max (clip_decoder_max_blocks(), 2.0);
   double speed_factor = 1.3;
   double block_seconds = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size / double (Params::mark_sample_rate);
-  m_samples2_max_size = lrint (clip_decoder_max_blocks() * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
-  m_samples2.reserve (m_samples2_max_size);
-
-  /* samples1 buffer: chunk_size minutes + maximum size of the samples2 buffer */
-  m_wav_data_max_size = m_samples2_max_size + lrint (Params::get_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
-
-  /* overlap size: BlockDecoder needs an overlap of 1 AB block (* speed factor) */
-  m_n_overlap_samples = lrint (2 * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
+  m_n_overlap_samples = lrint (overlap_blocks * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   if (m_in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
     {
@@ -71,11 +101,6 @@ WavChunkLoader::open()
       n_reserve_frames += 100;
 
       m_wav_data.mutable_samples().reserve (std::min (m_wav_data_max_size, n_reserve_frames * m_wav_data.n_channels()));
-    }
-  else
-    {
-      // unknown size: only reserve 5 minutes (not chunk_size) in order to minimize memory usage for short files
-      m_wav_data.mutable_samples().reserve (m_samples2_max_size);
     }
   return Error::Code::NONE;
 }
@@ -108,38 +133,18 @@ WavChunkLoader::load_next_chunk()
 
       m_time_offset += ((ref_samples1.size() - m_n_overlap_samples) / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
       ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - m_n_overlap_samples);
-
-      /* append samples2 to samples1 */
-      ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
-      m_samples2.clear();
     }
 
   bool eof = false;
-  Error err = refill (ref_samples1, m_wav_data_max_size - m_samples2_max_size, m_wav_data_max_size, &eof);
+  Error err = refill (ref_samples1, m_wav_data_max_size, m_wav_data_max_size, &eof);
   if (err)
     {
       m_state = State::ERROR;
       return err;
     }
 
-  if (!eof)
-    {
-      err = refill (m_samples2, m_samples2_max_size, m_samples2_max_size, &eof);
-      if (err)
-        {
-          m_state = State::ERROR;
-          return err;
-        }
-    }
-
   if (eof)
     {
-      /* for long files:
-       *  - ensure that last chunk is large enough -> avoid ClipDecoder
-      */
-      ref_samples1.insert (ref_samples1.end(), m_samples2.begin(), m_samples2.end());
-      m_samples2.clear();
-
       if (ref_samples1.size())
         m_state = State::LAST_CHUNK;
       else
@@ -149,7 +154,7 @@ WavChunkLoader::load_next_chunk()
   if (Params::test_truncate)
     {
       const size_t want_n_samples = m_wav_data.sample_rate() * m_wav_data.n_channels() * Params::test_truncate;
-      if (want_n_samples > m_wav_data_max_size - m_samples2_max_size)
+      if (want_n_samples > m_wav_data_max_size)
         return Error ("test truncate must be less than chunk size");
 
       if (want_n_samples < ref_samples1.size())
@@ -161,9 +166,8 @@ WavChunkLoader::load_next_chunk()
         m_state = State::DONE;
     }
 
-  printf ("chunk size: %f minutes, cap %f minutes and %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
-                                                                     ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
-                                                                     m_samples2.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
+  printf ("chunk size: %f minutes, cap %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
+                                                      ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
   return Error::Code::NONE;
 }
 

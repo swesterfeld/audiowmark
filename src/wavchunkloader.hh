@@ -31,8 +31,6 @@ class WavChunkLoader
   std::unique_ptr<AudioInputStream> m_in_stream;
   std::unique_ptr<ResamplerImpl>    m_resampler;
   bool                              m_resampler_in_eof = false;
-  std::vector<float>                m_samples2;
-  size_t                            m_samples2_max_size = 0;
   WavData                           m_wav_data;
   size_t                            m_wav_data_max_size = 0;
   size_t                            m_n_overlap_samples = 0;
