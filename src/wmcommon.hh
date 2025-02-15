@@ -156,7 +156,6 @@ std::vector<MixEntry> gen_mix_entries (const Key& key);
 
 size_t mark_data_frame_count();
 size_t mark_sync_frame_count();
-double clip_decoder_max_blocks();
 
 int frame_count (const WavData& wav_data);
 

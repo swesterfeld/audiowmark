@@ -724,12 +724,11 @@ public:
     speed (speed)
   {
   }
-  static constexpr double max_blocks = 3.1;
   void
   run (const vector<Key>& key_list, const WavData& wav_data, ResultSet& result_set)
   {
     const int wav_frames = wav_data.n_values() / (Params::frame_size * wav_data.n_channels());
-    if (wav_frames < frames_per_block * max_blocks) /* clip decoder is only used for small wavs */
+    if (wav_frames < frames_per_block * 3.1) /* clip decoder is only used for small wavs */
       {
         run_block (key_list, wav_data, result_set, Pos::START);
         run_block (key_list, wav_data, result_set, Pos::END);
@@ -737,14 +736,8 @@ public:
   }
 };
 
-double
-clip_decoder_max_blocks()
-{
-  return ClipDecoder::max_blocks;
-}
-
 static void
-decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
+decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits, bool first_chunk)
 {
   /*
    * The strategy for integrating speed detection into decoding is this:
@@ -778,16 +771,22 @@ decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_d
           BlockDecoder block_decoder (speed_result.speed);
           block_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
 
-          ClipDecoder clip_decoder (speed_result.speed);
-          clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+          if (first_chunk)
+            {
+              ClipDecoder clip_decoder (speed_result.speed);
+              clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+            }
         }
     }
 
   BlockDecoder block_decoder (1);
   block_decoder.run (key_list, wav_data, result_set);
 
-  ClipDecoder clip_decoder (1) ;
-  clip_decoder.run (key_list, wav_data, result_set);
+  if (first_chunk)
+    {
+      ClipDecoder clip_decoder (1);
+      clip_decoder.run (key_list, wav_data, result_set);
+    }
 
   result_set.set_debug_sync (block_decoder.debug_sync());
 }
@@ -835,6 +834,7 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
         return 1;
     }
 
+  bool first_chunk = true;
   WavChunkLoader wav_chunk_loader (infile);
   while (!wav_chunk_loader.done())
     {
@@ -852,10 +852,11 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
 
           ResultSet chunk_result_set;
 
-          decode (chunk_result_set, key_list, wav_data, orig_bitvec);
+          decode (chunk_result_set, key_list, wav_data, orig_bitvec, first_chunk);
           chunk_result_set.apply_time_offset (wav_chunk_loader.time_offset());
 
           result_set.merge (chunk_result_set);
+          first_chunk = false;
         }
     }
   result_set.sort();

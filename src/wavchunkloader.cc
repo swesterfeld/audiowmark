@@ -42,15 +42,9 @@ using std::vector;
  * fill the remaining space by reading from the input stream (B).
  *
  * Chunk 3: Keep some overlap samples (B) and try to fill the block from the
- * input stream (C).
+ * input stream (C). Since EOF was reached, we're done at this point.
  *
- * Since EOF was reached, we're done at this point.
- *
- * Note that overlap should be
- *  - larger than the maximum length for the ClipDecoder
- *     => to avoid running ClipDecoder on the last chunk
- *  - larger than one BlockDecoder AB block
- *     => to get all BlockDecoder results
+ * Overlap should be larger than one AB block to get all BlockDecoder results.
  */
 WavChunkLoader::WavChunkLoader (const std::string& filename) :
   m_filename (filename)
@@ -81,11 +75,10 @@ WavChunkLoader::open()
   m_wav_data_max_size = lrint (Params::get_chunk_size * 60 * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   /* overlap size:
-   *   - larger than the maximum length ClipDecoder uses
-   *   - should also be large enough for BlockDecoder overlap (1 AB block == 2 blocks)
-   *   - take speed factor into account for speed detection
+   *  - should be large enough for BlockDecoder overlap (1 AB block == 2 blocks)
+   *  - take speed factor into account for speed detection
    */
-  double overlap_blocks = std::max (clip_decoder_max_blocks(), 2.0);
+  int overlap_blocks = 2;
   double speed_factor = 1.3;
   double block_seconds = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size / double (Params::mark_sample_rate);
   m_n_overlap_samples = lrint (overlap_blocks * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
