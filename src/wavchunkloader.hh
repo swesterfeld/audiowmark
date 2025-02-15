@@ -48,7 +48,7 @@ class WavChunkLoader
 
   Error           open();
   void            update_capacity (std::vector<float>& samples, size_t need_space, size_t max_size);
-  Error           refill (std::vector<float>& samples, size_t n_values, size_t max_size, bool *eof);
+  Error           refill (std::vector<float>& samples, size_t max_size, bool *eof);
 public:
   WavChunkLoader (const std::string& filename);
 

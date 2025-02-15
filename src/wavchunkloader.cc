@@ -136,7 +136,7 @@ WavChunkLoader::load_next_chunk()
     }
 
   bool eof = false;
-  Error err = refill (ref_samples1, m_wav_data_max_size, m_wav_data_max_size, &eof);
+  Error err = refill (ref_samples1, m_wav_data_max_size, &eof);
   if (err)
     {
       m_state = State::ERROR;
@@ -198,14 +198,14 @@ WavChunkLoader::update_capacity (vector<float>& samples, size_t need_space, size
 }
 
 Error
-WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_size, bool *eof)
+WavChunkLoader::refill (std::vector<float>& samples, size_t max_size, bool *eof)
 {
   *eof = false;
 
   constexpr size_t block_size = 4096;
 
   vector<float> buffer;
-  while (samples.size() < values)
+  while (samples.size() < max_size)
     {
       if (m_resampler)
         {
@@ -224,11 +224,11 @@ WavChunkLoader::refill (std::vector<float>& samples, size_t values, size_t max_s
                 }
             }
 
-          buffer = m_resampler->read_frames (std::min<size_t> (m_resampler->can_read_frames(), (values - samples.size()) / m_wav_data.n_channels()));
+          buffer = m_resampler->read_frames (std::min<size_t> (m_resampler->can_read_frames(), (max_size - samples.size()) / m_wav_data.n_channels()));
         }
       else
         {
-          Error err = m_in_stream->read_frames (buffer, std::min<size_t> (block_size, (values - samples.size()) / m_wav_data.n_channels()));
+          Error err = m_in_stream->read_frames (buffer, std::min<size_t> (block_size, (max_size - samples.size()) / m_wav_data.n_channels()));
           if (err)
             return err;
         }
