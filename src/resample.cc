@@ -187,7 +187,7 @@ public:
   write_trailing_frames()
   {
     /* zita resampler needs k/2 samples after actual input */
-    std::vector<float> samples ((m_resampler.inpsize() / 2 - 1) * n_channels);
+    std::vector<float> samples ((m_resampler.inpsize() / 2) * n_channels);
     write_frames (samples);
   }
   vector<float>
