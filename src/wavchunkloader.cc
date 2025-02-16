@@ -118,18 +118,18 @@ WavChunkLoader::load_next_chunk()
         return err;
     }
 
-  vector<float>& ref_samples1 = m_wav_data.mutable_samples();
-  if (!ref_samples1.empty()) /* second block or later */
+  vector<float>& ref_samples = m_wav_data.mutable_samples();
+  if (!ref_samples.empty()) /* second block or later */
     {
-      /* overlap samples1 with last block */
-      assert (ref_samples1.size() >= m_n_overlap_samples);
+      /* overlap samples with last block */
+      assert (ref_samples.size() >= m_n_overlap_samples);
 
-      m_time_offset += ((ref_samples1.size() - m_n_overlap_samples) / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
-      ref_samples1.erase (ref_samples1.begin(), ref_samples1.end() - m_n_overlap_samples);
+      m_time_offset += ((ref_samples.size() - m_n_overlap_samples) / m_wav_data.n_channels()) / double (m_wav_data.sample_rate());
+      ref_samples.erase (ref_samples.begin(), ref_samples.end() - m_n_overlap_samples);
     }
 
   bool eof = false;
-  Error err = refill (ref_samples1, m_wav_data_max_size, &eof);
+  Error err = refill (ref_samples, m_wav_data_max_size, &eof);
   if (err)
     {
       m_state = State::ERROR;
@@ -138,7 +138,7 @@ WavChunkLoader::load_next_chunk()
 
   if (eof)
     {
-      if (ref_samples1.size())
+      if (ref_samples.size())
         m_state = State::LAST_CHUNK;
       else
         m_state = State::DONE;
@@ -150,17 +150,17 @@ WavChunkLoader::load_next_chunk()
       if (want_n_samples > m_wav_data_max_size)
         return Error ("test truncate must be less than chunk size");
 
-      if (want_n_samples < ref_samples1.size())
-        ref_samples1.resize (want_n_samples);
+      if (want_n_samples < ref_samples.size())
+        ref_samples.resize (want_n_samples);
 
-      if (ref_samples1.size())
+      if (ref_samples.size())
         m_state = State::LAST_CHUNK;
       else
         m_state = State::DONE;
     }
 
-  printf ("chunk size: %f minutes, cap %f minutes\n", ref_samples1.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
-                                                      ref_samples1.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
+  printf ("chunk size: %f minutes, cap %f minutes\n", ref_samples.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
+                                                      ref_samples.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
   return Error::Code::NONE;
 }
 
