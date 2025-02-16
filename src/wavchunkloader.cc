@@ -78,9 +78,9 @@ WavChunkLoader::open()
    *  - should be large enough for BlockDecoder overlap (1 AB block == 2 blocks)
    *  - take speed factor into account for speed detection
    */
-  int overlap_blocks = 2;
-  double speed_factor = 1.3;
-  double block_seconds = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size / double (Params::mark_sample_rate);
+  const int overlap_blocks = 2;
+  const double speed_factor = 1.3;
+  const double block_seconds = (mark_sync_frame_count() + mark_data_frame_count()) * Params::frame_size / double (Params::mark_sample_rate);
   m_n_overlap_samples = lrint (overlap_blocks * block_seconds * speed_factor * m_wav_data.sample_rate()) * m_wav_data.n_channels();
 
   if (m_in_stream->n_frames() != AudioInputStream::N_FRAMES_UNKNOWN)
@@ -159,8 +159,6 @@ WavChunkLoader::load_next_chunk()
         m_state = State::DONE;
     }
 
-  printf ("chunk size: %f minutes, cap %f minutes\n", ref_samples.size() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()),
-                                                      ref_samples.capacity() / m_in_stream->n_channels() / (60.0 * m_wav_data.sample_rate()));
   return Error::Code::NONE;
 }
 
