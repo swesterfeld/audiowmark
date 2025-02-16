@@ -23,4 +23,21 @@
 WavData resample (const WavData& wav_data, int rate);
 WavData resample_ratio (const WavData& wav_data, double ratio, int new_rate);
 
+class ResamplerImpl
+{
+public:
+  virtual
+  ~ResamplerImpl()
+  {
+  }
+
+  virtual size_t             skip (size_t zeros) = 0;
+  virtual void               write_frames (const std::vector<float>& frames) = 0;
+  virtual void               write_trailing_frames() = 0;
+  virtual std::vector<float> read_frames (size_t frames) = 0;
+  virtual size_t             can_read_frames() const = 0;
+
+  static ResamplerImpl *create (int n_channels, int old_rate, int new_rate);
+};
+
 #endif /* AUDIOWMARK_RESAMPLE_HH */

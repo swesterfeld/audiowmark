@@ -34,6 +34,7 @@ std::vector<unsigned char> hex_str_to_vec (const std::string& str);
 std::string                vec_to_hex_str (const std::vector<unsigned char>& vec);
 
 double get_time();
+void print_memory_usage (const std::string& where);
 
 template<typename T>
 inline const T&

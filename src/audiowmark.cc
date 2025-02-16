@@ -855,6 +855,15 @@ parse_get_options (ArgParser& ap)
     {
       Params::json_output = s;
     }
+  if (ap.parse_opt ("--chunk-size", f))
+    {
+      if (f < 10)
+        {
+          error ("audiowmark: --chunk-size needs to be at least 10 minutes\n");
+          exit (1);
+        }
+      Params::get_chunk_size = f;
+    }
 }
 
 template <class ... Args>

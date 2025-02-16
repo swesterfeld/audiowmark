@@ -27,6 +27,7 @@
 #include "resample.hh"
 #include "fft.hh"
 #include "threadpool.hh"
+#include "wavchunkloader.hh"
 
 using std::string;
 using std::vector;
@@ -170,10 +171,25 @@ public:
     SyncFinder::Score sync_score;
     Type              type;
     double            speed = 0;
+
+    bool
+    approx_match (const Pattern& p) const
+    {
+      const double time_delta = Params::frame_size / double (Params::mark_sample_rate);
+      const double speed_delta = 0.01;
+
+      return key == p.key &&
+            (fabs (time - p.time) < time_delta || (type == Type::ALL)) &&
+             bit_vec == p.bit_vec &&
+             sync_score.block_type == p.sync_score.block_type &&
+             type == p.type &&
+             fabs (speed - p.speed) < speed_delta;
+    }
   };
 private:
   std::mutex      pattern_mutex;
   vector<Pattern> patterns;
+  std::string     debug_sync;
 
 public:
   void
@@ -192,6 +208,12 @@ public:
     p.speed = speed;
 
     patterns.push_back (p);
+  }
+  void
+  apply_time_offset (double time_offset)
+  {
+    for (auto& p : patterns)
+      p.time += time_offset;
   }
   void
   sort()
@@ -225,6 +247,25 @@ public:
         }
     });
   }
+  void
+  merge (ResultSet& other)
+  {
+    for (const auto& p : other.patterns)
+      {
+        bool merge = true;
+        for (auto& my_p : patterns)
+          {
+            if (my_p.approx_match (p))
+              merge = false;
+          }
+        if (merge)
+          patterns.push_back (p);
+      }
+
+    /* only keep track of debug sync information for the first chunk */
+    if (debug_sync.empty())
+      debug_sync = other.debug_sync;
+  }
   string
   json_escape (const string& s)
   {
@@ -248,7 +289,7 @@ public:
     return result;
   }
   void
-  print_json (const WavData& wav_data, const std::string &json_file)
+  print_json (size_t time_length, const std::string &json_file)
   {
     FILE *outfile = fopen (json_file == "-" ? "/dev/stdout" : json_file.c_str(), "w");
     if (!outfile)
@@ -256,7 +297,6 @@ public:
         perror (("audiowmark: failed to open \"" + json_file + "\":").c_str());
         exit (127);
       }
-    const size_t time_length = (wav_data.samples().size() / wav_data.n_channels() + wav_data.sample_rate()/2) / wav_data.sample_rate();
     fprintf (outfile, "{ \"length\": \"%ld:%02ld\",\n", time_length / 60, time_length % 60);
     fprintf (outfile, "  \"matches\": [\n");
     int nth = 0;
@@ -358,6 +398,16 @@ public:
       }
     printf ("match_count %d %zd\n", match_count, patterns.size());
     return match_count;
+  }
+  void
+  set_debug_sync (const std::string& ds)
+  {
+    debug_sync = ds;
+  }
+  void
+  print_debug_sync()
+  {
+    printf ("%s", debug_sync.c_str());
   }
   double
   best_quality() const
@@ -507,12 +557,12 @@ public:
 
     debug_sync_frame_count = frame_count (wav_data);
   }
-  void
-  print_debug_sync()
+  std::string
+  debug_sync()
   {
     /* this is really only useful for debugging, and should be used with exactly one key */
     if (key_results.size() != 1)
-      return;
+      return "";
 
     const auto& sync_scores = key_results[0].sync_scores;
 
@@ -533,7 +583,7 @@ public:
               }
           }
       }
-    printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
+    return string_printf ("sync_match %d %zd\n", sync_match, sync_scores.size());
   }
 };
 
@@ -686,11 +736,9 @@ public:
   }
 };
 
-static int
-decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits)
+static void
+decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_data, const vector<int>& orig_bits, bool first_chunk)
 {
-  ResultSet result_set;
-
   /*
    * The strategy for integrating speed detection into decoding is this:
    *  - we always (unconditionally) try to decode the  watermark on the original wav data
@@ -723,21 +771,31 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
           BlockDecoder block_decoder (speed_result.speed);
           block_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
 
-          ClipDecoder clip_decoder (speed_result.speed);
-          clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+          if (first_chunk)
+            {
+              ClipDecoder clip_decoder (speed_result.speed);
+              clip_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
+            }
         }
     }
 
   BlockDecoder block_decoder (1);
   block_decoder.run (key_list, wav_data, result_set);
 
-  ClipDecoder clip_decoder (1) ;
-  clip_decoder.run (key_list, wav_data, result_set);
+  if (first_chunk)
+    {
+      ClipDecoder clip_decoder (1);
+      clip_decoder.run (key_list, wav_data, result_set);
+    }
 
-  result_set.sort();
+  result_set.set_debug_sync (block_decoder.debug_sync());
+}
 
+int
+report (ResultSet& result_set, size_t time_length, const vector<int>& orig_bits)
+{
   if (!Params::json_output.empty())
-    result_set.print_json (wav_data, Params::json_output);
+    result_set.print_json (time_length, Params::json_output);
 
   if (Params::json_output != "-")
     result_set.print();
@@ -746,7 +804,7 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
     {
       int match_count = result_set.print_match_count (orig_bits);
 
-      block_decoder.print_debug_sync();
+      result_set.print_debug_sync();
 
       if (Params::expect_matches >= 0)
         {
@@ -766,6 +824,8 @@ decode_and_report (const vector<Key>& key_list, const WavData& wav_data, const v
 int
 get_watermark (const vector<Key>& key_list, const string& infile, const string& orig_pattern)
 {
+  ResultSet result_set;
+
   vector<int> orig_bitvec;
   if (!orig_pattern.empty())
     {
@@ -774,31 +834,33 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
         return 1;
     }
 
-  WavData wav_data;
-  Error err = wav_data.load (infile);
-  if (err)
+  bool first_chunk = true;
+  WavChunkLoader wav_chunk_loader (infile);
+  while (!wav_chunk_loader.done())
     {
-      error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
-      return 1;
-    }
-
-  if (Params::test_truncate)
-    {
-      const size_t  want_n_samples = wav_data.sample_rate() * wav_data.n_channels() * Params::test_truncate;
-      vector<float> short_samples  = wav_data.samples();
-
-      if (want_n_samples < short_samples.size())
+      Error err = wav_chunk_loader.load_next_chunk();
+      if (err)
         {
-          short_samples.resize (want_n_samples);
-          wav_data.set_samples (short_samples);
+          error ("audiowmark: error loading %s: %s\n", infile.c_str(), err.message());
+          return 1;
+        }
+
+      if (!wav_chunk_loader.done())
+        {
+          const WavData& wav_data = wav_chunk_loader.wav_data();
+          assert (wav_data.sample_rate() == Params::mark_sample_rate);
+
+          ResultSet chunk_result_set;
+
+          decode (chunk_result_set, key_list, wav_data, orig_bitvec, first_chunk);
+          chunk_result_set.apply_time_offset (wav_chunk_loader.time_offset());
+
+          result_set.merge (chunk_result_set);
+          first_chunk = false;
         }
     }
-  if (wav_data.sample_rate() == Params::mark_sample_rate)
-    {
-      return decode_and_report (key_list, wav_data, orig_bitvec);
-    }
-  else
-    {
-      return decode_and_report (key_list, resample (wav_data, Params::mark_sample_rate), orig_bitvec);
-    }
+  result_set.sort();
+
+  size_t time_length = lrint (wav_chunk_loader.length());
+  return report (result_set, time_length, orig_bitvec);
 }
