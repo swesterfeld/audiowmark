@@ -51,6 +51,8 @@ public:
 
   void add_job (std::function<void()> fun);
   void wait_all();
+
+  size_t n_threads();
 };
 
 #endif /* AUDIOWMARK_THREAD_POOL_HH */

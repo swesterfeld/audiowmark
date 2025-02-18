@@ -89,6 +89,12 @@ ThreadPool::wait_all()
     }
 }
 
+size_t
+ThreadPool::n_threads()
+{
+  return threads.size();
+}
+
 ThreadPool::~ThreadPool()
 {
   {
