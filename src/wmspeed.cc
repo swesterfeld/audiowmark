@@ -588,6 +588,53 @@ get_best_clip_location (const Key& key, const WavData& in_data, double seconds, 
   return clip_location;
 }
 
+/* Try to process blocks of jobs on our ThreadPool with high concurrency. Examples:
+ *
+ * number of jobs: split_jobs with threads == 32
+* 1: 1
+* 2: 2
+* 3: 3
+* [...]
+* 31: 31
+* 32: 32
+* 33: 17 16
+* 34: 17 17
+* 35: 18 17
+* 36: 18 18
+* [...]
+* 63: 32 31
+* 64: 32 32
+* 65: 32 17 16
+* 66: 32 17 17
+* [...]
+*/
+vector<int>
+split_jobs (int jobs, int threads)
+{
+  vector<int> split_jobs;
+
+  auto update_split_jobs = [&] (int j) {
+    assert (j >= 0 && j <= jobs);
+    if (j)
+      {
+        split_jobs.push_back (j);
+        jobs -= j;
+      }
+  };
+  /* as long as the remaining number of jobs is very large, simply process one block using all threads */
+  while (jobs > 2 * threads)
+    update_split_jobs (threads);
+
+  /* remaining jobs in [threads, 2 * threads]: process half of the remaining jobs */
+  if (jobs > threads)
+    update_split_jobs ((jobs + 1) / 2);
+
+  /* process remaining jobs */
+  update_split_jobs (jobs);
+
+  return split_jobs;
+}
+
 vector<DetectSpeedResult>
 detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_results)
 {
@@ -664,10 +711,8 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
       }
 
     size_t start = 0;
-    while (start != jobs.size())
+    for (size_t count : split_jobs (jobs.size(), thread_pool.n_threads()))
       {
-        size_t count = min<size_t> (jobs.size() - start, thread_pool.n_threads());
-
         for (size_t i = 0; i < count; i++)
           thread_pool.add_job (jobs[start + i].prepare_job);
 
@@ -686,6 +731,7 @@ detect_speed (const vector<Key>& key_list, const WavData& in_data, bool print_re
 
         start += count;
       }
+    assert (start == jobs.size());
 
     for (auto& key_speed_search : key_speed_search_vec)
       key_speed_search.scores = key_speed_search.speed_search->get_results();
