@@ -145,7 +145,7 @@ public:
     frames_per_block (mark_sync_frame_count() + mark_data_frame_count())
   {
     // constructor is run in the main thread; everything that is not thread-safe must happen here
-    auto sync_finder_bits = SyncFinder::get_sync_bits (key, in_data, SyncFinder::Mode::BLOCK);
+    auto sync_finder_bits = SyncFinder::get_sync_bits (key, SyncFinder::Mode::BLOCK);
     for (size_t bit = 0; bit < sync_finder_bits.size(); bit++)
       {
         for (const auto& frame_bit : sync_finder_bits[bit])
@@ -230,7 +230,9 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
     {
       int col = 0;
       const std::vector<float>& samples = in_data_sub.samples();
-      vector<float> fft_out_db;
+      std::array<float, Params::max_band - Params::min_band + 1> fft_out_db;
+
+      fft_out_db.fill (0);
 
       for (int ch = 0; ch < in_data_sub.n_channels(); ch++)
         {
@@ -244,7 +246,7 @@ SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
             {
               const float min_db = -96;
 
-              fft_out_db.push_back (db_from_complex (out[i * 2], out[i * 2 + 1], min_db));
+              fft_out_db[i - Params::min_band] += db_from_complex (out[i * 2], out[i * 2 + 1], min_db);
             }
         }
       for (const auto& sync_bit : sync_bits)

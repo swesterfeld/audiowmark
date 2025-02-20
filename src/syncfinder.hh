@@ -102,7 +102,7 @@ private:
   size_t wav_data_last = 0;
 public:
   std::vector<KeyResult> search (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
-  static std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, const WavData& wav_data, Mode mode);
+  static std::vector<std::vector<FrameBit>> get_sync_bits (const Key& key, Mode mode);
 
   static double bit_quality (float umag, float dmag, int bit);
   static double normalize_sync_quality (double raw_quality);

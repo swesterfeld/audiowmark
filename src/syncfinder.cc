@@ -28,7 +28,7 @@ using std::string;
 using std::min;
 
 vector<vector<SyncFinder::FrameBit>>
-SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
+SyncFinder::get_sync_bits (const Key& key, Mode mode)
 {
   vector<vector<SyncFinder::FrameBit>> sync_bits;
 
@@ -36,7 +36,6 @@ SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
   //   the sync bits pattern is repeated after the end of the first block
   const int first_block_end = mark_sync_frame_count() + mark_data_frame_count();
   const int block_count = mode == Mode::CLIP ? 2 : 1;
-  size_t n_bands = Params::max_band - Params::min_band + 1;
 
   UpDownGen up_down_gen (key, Random::Stream::sync_up_down);
   BitPosGen bit_pos_gen (key);
@@ -52,22 +51,19 @@ SyncFinder::get_sync_bits (const Key& key, const WavData& wav_data, Mode mode)
             {
               FrameBit frame_bit;
               frame_bit.frame = bit_pos_gen.sync_frame (f + bit * Params::sync_frames_per_bit) + block * first_block_end;
-              for (int ch = 0; ch < wav_data.n_channels(); ch++)
+              if (block == 0)
                 {
-                  if (block == 0)
-                    {
-                      for (auto u : frame_up)
-                        frame_bit.up.push_back (u - Params::min_band + n_bands * ch);
-                      for (auto d : frame_down)
-                        frame_bit.down.push_back (d - Params::min_band + n_bands * ch);
-                    }
-                  else
-                    {
-                      for (auto u : frame_up)
-                        frame_bit.down.push_back (u - Params::min_band + n_bands * ch);
-                      for (auto d : frame_down)
-                        frame_bit.up.push_back (d - Params::min_band + n_bands * ch);
-                    }
+                  for (auto u : frame_up)
+                    frame_bit.up.push_back (u - Params::min_band);
+                  for (auto d : frame_down)
+                    frame_bit.down.push_back (d - Params::min_band);
+                }
+              else
+                {
+                  for (auto u : frame_up)
+                    frame_bit.down.push_back (u - Params::min_band);
+                  for (auto d : frame_down)
+                    frame_bit.up.push_back (d - Params::min_band);
                 }
               std::sort (frame_bit.up.begin(), frame_bit.up.end());
               std::sort (frame_bit.down.begin(), frame_bit.down.end());
@@ -138,7 +134,7 @@ SyncFinder::sync_decode (const vector<vector<FrameBit>>& sync_bits,
         {
           if (have_frames[start_frame + frame_bit.frame])
             {
-              const int index = ((start_frame + frame_bit.frame) * wav_data.n_channels()) * n_bands;
+              const int index = (start_frame + frame_bit.frame) * n_bands;
               for (size_t i = 0; i < frame_bit.up.size(); i++)
                 {
                   umag += fft_out_db[index + frame_bit.up[i]];
@@ -202,7 +198,7 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
       vector<int> start_frames;
       for (int start_frame = 0; start_frame < frame_count (wav_data); start_frame++)
         {
-          if ((start_frame + total_frame_count) * wav_data.n_channels() * n_bands < fft_db.size())
+          if ((start_frame + total_frame_count) * n_bands < fft_db.size())
             start_frames.push_back (start_frame);
         }
 
@@ -395,7 +391,7 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
       KeyResult key_result;
       key_result.key = key;
       key_results.push_back (key_result);
-      sync_bits.push_back (get_sync_bits (key, wav_data, mode));
+      sync_bits.push_back (get_sync_bits (key, mode));
     }
 
   search_approx (key_results, sync_bits, wav_data, mode);
@@ -427,7 +423,7 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
   const size_t n_bands = Params::max_band - Params::min_band + 1;
   int out_pos = 0;
 
-  fft_out_db.resize (wav_data.n_channels() * n_bands * frame_count);
+  fft_out_db.resize (n_bands * frame_count);
   have_frames.resize (frame_count);
 
   for (size_t f = 0; f < frame_count; f++)
@@ -439,7 +435,7 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
       ||  (f_last < wav_data_first)                 // frame in silence before input?
       ||  (f_first > wav_data_last))                // frame in silence after input?
         {
-          out_pos += n_bands * wav_data.n_channels();
+          out_pos += n_bands;
         }
       else
         {
@@ -450,7 +446,9 @@ SyncFinder::sync_fft (const WavData& wav_data, size_t index, size_t frame_count,
           /* computing db-magnitude is expensive, so we better do it here */
           for (int ch = 0; ch < wav_data.n_channels(); ch++)
             for (int i = Params::min_band; i <= Params::max_band; i++)
-              fft_out_db[out_pos++] = db_from_complex (frame_result[ch][i], min_db);
+              fft_out_db[out_pos + i - Params::min_band] += db_from_complex (frame_result[ch][i], min_db);
+
+          out_pos += n_bands;
 
           have_frames[f] = 1;
         }
