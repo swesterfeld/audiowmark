@@ -31,21 +31,6 @@ using std::max;
 using std::min;
 
 static WavData
-truncate (const WavData& in_data, double seconds)
-{
-  WavData out_data = in_data;
-  vector<float> short_samples = in_data.samples();
-
-  const size_t want_n_samples = lrint (in_data.sample_rate() * seconds) * in_data.n_channels();
-  if (short_samples.size() > want_n_samples)
-    {
-      short_samples.resize (want_n_samples);
-      out_data.set_samples (short_samples);
-    }
-  return out_data;
-}
-
-static WavData
 get_speed_clip (double location, const WavData& in_data, double clip_seconds)
 {
   double end_sec = double (in_data.n_frames()) / in_data.sample_rate();
@@ -219,10 +204,8 @@ public:
 void
 SpeedSync::prepare_mags (const SpeedScanParams& scan_params)
 {
-  WavData in_data_trc (truncate (in_data, scan_params.seconds / center));
-
   // we downsample the audio by factor 2 to improve performance
-  WavData in_data_sub (resample_ratio (in_data_trc, center / 2, Params::mark_sample_rate / 2));
+  WavData in_data_sub (resample_ratio_truncate (in_data, center / 2, Params::mark_sample_rate / 2, /* truncate to length */ scan_params.seconds / center));
 
   const int sub_frame_size = Params::frame_size / 2;
   const int sub_sync_search_step = Params::sync_search_step / 2;

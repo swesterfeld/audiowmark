@@ -25,21 +25,22 @@
 #include <zita-resampler/vresampler.h>
 
 using std::vector;
+using std::min;
 
 template<class R>
 static void
-process_resampler (R& resampler, const vector<float>& in, vector<float>& out)
+process_resampler (R& resampler, const float *in, size_t in_size, float *out, size_t out_size)
 {
-  resampler.out_count = out.size() / resampler.nchan();
-  resampler.out_data = &out[0];
+  resampler.out_count = out_size / resampler.nchan();
+  resampler.out_data = out;
 
   /* avoid timeshift: zita needs k/2 - 1 samples before the actual input */
   resampler.inp_count = resampler.inpsize () / 2 - 1;
   resampler.inp_data  = nullptr;
   resampler.process();
 
-  resampler.inp_count = in.size() / resampler.nchan();
-  resampler.inp_data = (float *) &in[0];
+  resampler.inp_count = in_size / resampler.nchan();
+  resampler.inp_data = (float *) in;
   resampler.process();
 
   /* zita needs k/2 samples after the actual input */
@@ -79,14 +80,14 @@ resample (const WavData& wav_data, int rate)
   Resampler resampler;
   if (resampler.setup (wav_data.sample_rate(), rate, wav_data.n_channels(), hlen) == 0)
     {
-      process_resampler (resampler, in, out_ref);
+      process_resampler (resampler, in.data(), in.size(), out_ref.data(), out_ref.size());
       return wav_data_out;
     }
 
   VResampler vresampler;
   if (vresampler.setup (ratio, wav_data.n_channels(), hlen) == 0)
     {
-      process_resampler (vresampler, in, out_ref);
+      process_resampler (vresampler, in.data(), in.size(), out_ref.data(), out_ref.size());
       return wav_data_out;
     }
   error ("audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
@@ -94,11 +95,18 @@ resample (const WavData& wav_data, int rate)
 }
 
 WavData
-resample_ratio (const WavData& wav_data, double ratio, int new_rate)
+resample_ratio_truncate (const WavData& wav_data, double ratio, int new_rate, double max_in_seconds)
 {
   const int hlen = 16;
   const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+  size_t in_size_truncate = in.size();
+  if (max_in_seconds > 0)
+    in_size_truncate = min<size_t> (in_size_truncate, wav_data.n_channels() * lrint (wav_data.sample_rate() * max_in_seconds));
+
+  WavData wav_data_out ({}, wav_data.n_channels(), new_rate, wav_data.bit_depth());
+
+  vector<float>& out_ref = wav_data_out.mutable_samples();
+  out_ref.resize (lrint (in_size_truncate / wav_data.n_channels() * ratio) * wav_data.n_channels());
 
   VResampler vresampler;
   if (vresampler.setup (ratio, wav_data.n_channels(), hlen) != 0)
@@ -107,8 +115,8 @@ resample_ratio (const WavData& wav_data, double ratio, int new_rate)
       exit (1);
     }
 
-  process_resampler (vresampler, in, out);
-  return WavData (out, wav_data.n_channels(), new_rate, wav_data.bit_depth());
+  process_resampler (vresampler, in.data(), in_size_truncate, out_ref.data(), out_ref.size());
+  return wav_data_out;
 }
 
 template<class Resampler>

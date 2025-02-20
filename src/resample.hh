@@ -21,7 +21,7 @@
 #include "wavdata.hh"
 
 WavData resample (const WavData& wav_data, int rate);
-WavData resample_ratio (const WavData& wav_data, double ratio, int new_rate);
+WavData resample_ratio_truncate (const WavData& wav_data, double ratio, int new_rate, double max_seconds);
 
 class ResamplerImpl
 {
