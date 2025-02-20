@@ -115,7 +115,7 @@ SyncFinder::bit_quality (float umag, float dmag, int bit)
 
 double
 SyncFinder::sync_decode (const vector<vector<FrameBit>>& sync_bits,
-                         const WavData& wav_data, const size_t start_frame,
+                         const size_t start_frame,
                          const vector<float>& fft_out_db,
                          const vector<char>&  have_frames,
                          ConvBlockType *block_type)
@@ -212,7 +212,7 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
                   for (auto start_frame : split_start_frames)
                     {
                       ConvBlockType block_type;
-                      double quality = sync_decode (sync_bits[k], wav_data, start_frame, fft_db, have_frames, &block_type);
+                      double quality = sync_decode (sync_bits[k], start_frame, fft_db, have_frames, &block_type);
                       // printf ("%zd %f\n", sync_index, quality);
                       const size_t sync_index = start_frame * Params::frame_size + sync_shift;
                       {
@@ -316,7 +316,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
               if (fft_db.size())
                 {
                   ConvBlockType block_type;
-                  double        q = sync_decode (sync_bits, wav_data, 0, fft_db, have_frames, &block_type);
+                  double        q = sync_decode (sync_bits, 0, fft_db, have_frames, &block_type);
 
                   if (q > best_quality)
                     {

@@ -86,7 +86,7 @@ public:
   };
 private:
   double  sync_decode (const std::vector<std::vector<FrameBit>>& sync_bits,
-                       const WavData& wav_data, const size_t start_frame,
+                       const size_t start_frame,
                        const std::vector<float>& fft_out_db,
                        const std::vector<char>&  have_frames,
                        ConvBlockType *block_type);
