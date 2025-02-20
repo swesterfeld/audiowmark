@@ -60,7 +60,10 @@ resample (const WavData& wav_data, int rate)
   const double ratio = double (rate) / wav_data.sample_rate();
 
   const vector<float>& in = wav_data.samples();
-  vector<float> out (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
+
+  WavData wav_data_out ({}, wav_data.n_channels(), rate, wav_data.bit_depth());
+  vector<float>& out_ref = wav_data_out.mutable_samples();
+  out_ref.resize (lrint (in.size() / wav_data.n_channels() * ratio) * wav_data.n_channels());
 
   /* zita-resampler provides two resampling algorithms
    *
@@ -76,15 +79,15 @@ resample (const WavData& wav_data, int rate)
   Resampler resampler;
   if (resampler.setup (wav_data.sample_rate(), rate, wav_data.n_channels(), hlen) == 0)
     {
-      process_resampler (resampler, in, out);
-      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+      process_resampler (resampler, in, out_ref);
+      return wav_data_out;
     }
 
   VResampler vresampler;
   if (vresampler.setup (ratio, wav_data.n_channels(), hlen) == 0)
     {
-      process_resampler (vresampler, in, out);
-      return WavData (out, wav_data.n_channels(), rate, wav_data.bit_depth());
+      process_resampler (vresampler, in, out_ref);
+      return wav_data_out;
     }
   error ("audiowmark: resampling from rate %d to rate %d not supported.\n", wav_data.sample_rate(), rate);
   exit (1);
