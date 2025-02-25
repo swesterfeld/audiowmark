@@ -62,6 +62,9 @@ do
           printf "%02x" $((RANDOM % 256))
         done
       )
+    elif [ "x$AWM_DRAND_PATTERN" != "x" ]; then
+      # different "random" pattern per file, but reproducable for fair comparisions
+      PATTERN=$(echo "$i:$SEED" | md5sum | awk '{print $1;}')
     else
       # pseudo random pattern, 128 bit
       PATTERN=4e1243bd22c66e76c2ba9eddc1f91394
