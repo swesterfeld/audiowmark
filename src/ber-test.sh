@@ -92,7 +92,7 @@ do
         # first (optional) mp3 step: simulate quality loss before speed change
         lame -b "$AWM_SPEED_PRE_MP3" ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
         rm ${AWM_FILE}.wav
-        ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
+        ffmpeg -f mp3 -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
       fi
 
       [ -z $SPEED_SEED ] && SPEED_SEED=0
@@ -128,7 +128,7 @@ do
       # first mp3 step (fixed bitrate)
       lame -b 128 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
       rm ${AWM_FILE}.wav
-      ffmpeg -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
+      ffmpeg -f mp3 -i ${AWM_FILE}.mp3 ${AWM_FILE}.wav -v quiet -nostdin
 
       # second mp3 step
       lame -b $2 ${AWM_FILE}.wav ${AWM_FILE}.mp3 --quiet
