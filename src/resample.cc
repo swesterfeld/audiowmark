@@ -119,6 +119,12 @@ resample_ratio_truncate (const WavData& wav_data, double ratio, int new_rate, do
   return wav_data_out;
 }
 
+WavData
+resample_ratio (const WavData& wav_data, double ratio, int new_rate)
+{
+  return resample_ratio_truncate (wav_data, ratio, new_rate, /* no truncation */ -1);
+}
+
 template<class Resampler>
 class BufferedResamplerImpl : public ResamplerImpl
 {
