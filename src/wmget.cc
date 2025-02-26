@@ -766,7 +766,7 @@ decode (ResultSet& result_set, const vector<Key>& key_list, const WavData& wav_d
 
       for (const auto& speed_result : speed_results)
         {
-          WavData wav_data_speed = resample (wav_data, Params::mark_sample_rate * speed_result.speed);
+          WavData wav_data_speed = resample_ratio (wav_data, speed_result.speed, Params::mark_sample_rate * speed_result.speed);
 
           BlockDecoder block_decoder (speed_result.speed);
           block_decoder.run ({ speed_result.key }, wav_data_speed, result_set);
