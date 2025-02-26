@@ -426,7 +426,7 @@ test_change_speed (const string& in_file, const string& out_file, double speed)
       error ("audiowmark: error loading %s: %s\n", in_file.c_str(), err.message());
       return 1;
     }
-  WavData out_data = resample_ratio (in_data, 1 / speed, in_data.sample_rate());
+  WavData out_data = resample_ratio_truncate (in_data, 1 / speed, in_data.sample_rate(), /* max seconds: whole input */ -1);
   err = out_data.save (out_file);
   if (err)
     {
