@@ -1,4 +1,4 @@
-AC_INIT([audiowmark],[0.6.3])
+AC_INIT([audiowmark],[0.6.4])
 AC_CONFIG_SRCDIR([src/audiowmark.cc])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_MACRO_DIR([m4])
