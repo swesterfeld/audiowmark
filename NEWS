@@ -1,3 +1,13 @@
+Overview of Changes in audiowmark-0.6.4:
+
+* reduce memory usage:
+  - for speed detection, especially when using multiple keys
+  - for resampling of input files with sample rate != 44100
+  - split long input files into smaller chunks (get --chunk-size option)
+* optimize performance for speed detection / normal sync
+* improve detection for libgcrypt, use pkg-config if available (#72)
+* fix problems in make check (#72)
+
 Overview of Changes in audiowmark-0.6.3:
 
 * update HLS support to build with ffmpeg-7 API (#68)
