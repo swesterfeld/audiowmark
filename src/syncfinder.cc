@@ -225,24 +225,22 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
       /* compute local mean for all scores */
       for (int i = 0; i < key_result.scores.size(); i++)
         {
-          auto q = [&] (int idx) {
-            if (idx < 0)
-              idx = 0;
-            if (idx > (key_result.scores.size() - 1))
-              idx = key_result.scores.size() - 1;
-            return key_result.scores[idx].raw_quality;
-          };
           double avg = 0;
           int n = 0;
           for (int j = -20; j <= 20; j++)
             {
               if (std::abs (j) >= 4)
                 {
-                  avg += q (i - j);
-                  n++;
+                  int idx = i + j;
+                  if (idx >= 0 && idx < int (key_result.scores.size()))
+                    {
+                      avg += key_result.scores[idx].raw_quality;
+                      n++;
+                    }
                 }
             }
-          avg /= n;
+          if (n > 0)
+            avg /= n;
           if (getenv ("NOAVG"))
             avg = 0;
           key_result.scores[i].local_mean = avg;
