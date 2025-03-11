@@ -58,7 +58,7 @@ public:
   static constexpr int sync_frames_per_bit = 85;
   static constexpr int sync_search_step    = 256;
   static constexpr int sync_search_fine    = 8;
-  static constexpr double sync_threshold2  = 0.35; // minimum refined quality
+  static           double sync_threshold2;         // minimum refined quality
 
   static constexpr size_t frames_pad_start = 250; // padding at start, in case track starts with silence
   static constexpr int mark_sample_rate = 44100; // watermark generation and detection sample rate

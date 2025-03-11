@@ -864,6 +864,10 @@ parse_get_options (ArgParser& ap)
         }
       Params::get_chunk_size = f;
     }
+  if (ap.parse_opt ("--sync-threshold", f))
+    {
+      Params::sync_threshold2 = f;
+    }
 }
 
 template <class ... Args>

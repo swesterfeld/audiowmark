@@ -223,7 +223,7 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
       sort (key_result.scores.begin(), key_result.scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
 
       /* compute local mean for all scores */
-      for (int i = 0; i < key_result.scores.size(); i++)
+      for (int i = 0; i < int (key_result.scores.size()); i++)
         {
           double avg = 0;
           int n = 0;
@@ -252,14 +252,7 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
 void
 SyncFinder::sync_select_by_threshold (vector<SearchScore>& sync_scores)
 {
-  /* for strength 8 and above:
-   *   -> more false positive candidates are rejected, so we can use a lower threshold
-   *
-   * for strength 7 and below:
-   *   -> we need a higher threshold, because otherwise watermark detection takes too long
-   */
-  const double strength = Params::water_delta * 1000;
-  const double sync_threshold1 = 0.3;
+  const double sync_threshold1 = Params::sync_threshold2 * 0.75;
 
   vector<SearchScore> selected_scores;
 

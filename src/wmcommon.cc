@@ -34,6 +34,7 @@ bool   Params::detect_speed    = false;
 bool   Params::detect_speed_patient = false;
 double Params::try_speed       = -1;
 double Params::test_speed      = -1;
+double Params::sync_threshold2 = 0.35;
 size_t Params::payload_size    = 128;
 bool   Params::payload_short   = false;
 int    Params::test_cut        = 0; // for sync test
