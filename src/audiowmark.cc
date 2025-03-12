@@ -814,6 +814,7 @@ parse_get_options (ArgParser& ap)
 {
   string s;
   float f;
+  int i;
 
   ap.parse_opt ("--test-cut", Params::test_cut);
   ap.parse_opt ("--test-truncate", Params::test_truncate);
@@ -867,6 +868,15 @@ parse_get_options (ArgParser& ap)
   if (ap.parse_opt ("--sync-threshold", f))
     {
       Params::sync_threshold2 = f;
+    }
+  if (ap.parse_opt ("--n-best", i))
+    {
+      if (i < 0)
+        {
+          error ("audiowmark: --n-best should not be a negative number\n");
+          exit (1);
+        }
+      Params::get_n_best = i;
     }
 }
 

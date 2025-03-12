@@ -250,6 +250,31 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
 }
 
 void
+SyncFinder::sync_select_local_maxima (vector<SearchScore>& sync_scores)
+{
+  vector<SearchScore> selected_scores;
+
+  for (size_t i = 0; i < sync_scores.size(); i++)
+    {
+      double q = sync_scores[i].abs_quality();
+      double q_last = 0;
+      double q_next = 0;
+      if (i > 0)
+        q_last = sync_scores[i - 1].abs_quality();
+
+      if (i + 1 < sync_scores.size())
+        q_next = sync_scores[i + 1].abs_quality();
+
+      if (q >= q_last && q >= q_next)
+        {
+          selected_scores.emplace_back (sync_scores[i]);
+          i++; // score with quality q_next cannot be a local maximum
+        }
+    }
+  sync_scores = selected_scores;
+}
+
+void
 SyncFinder::sync_select_by_threshold (vector<SearchScore>& sync_scores)
 {
   const double sync_threshold1 = Params::sync_threshold2 * 0.75;
@@ -280,7 +305,28 @@ SyncFinder::sync_select_by_threshold (vector<SearchScore>& sync_scores)
 }
 
 void
-SyncFinder::sync_select_n_best (vector<SearchScore>& sync_scores, size_t n)
+SyncFinder::sync_select_threshold_and_n_best (vector<SearchScore>& scores, double threshold)
+{
+  std::sort (scores.begin(), scores.end(), [](SearchScore& s1, SearchScore& s2) { return s1.abs_quality() > s2.abs_quality(); });
+
+  /* keep all matches with (quality > threshold) */
+  int i = 0;
+  while (i < int (scores.size()) && scores[i].abs_quality() > threshold)
+    i++;
+  if (i >= Params::get_n_best)
+    {
+      /* have more than n_best matches with (quality > threshold), keep all of them */
+      scores.resize (i);
+    }
+  else if (int (scores.size()) > Params::get_n_best)
+    {
+      /* if we have less than n_best matches with (quality > threshold), keep n_best matches */
+      scores.resize (Params::get_n_best);
+    }
+}
+
+void
+SyncFinder::sync_select_truncate_n (vector<SearchScore>& sync_scores, size_t n)
 {
   std::sort (sync_scores.begin(), sync_scores.end(), [](SearchScore& s1, SearchScore& s2) { return s1.abs_quality() > s2.abs_quality(); });
   if (sync_scores.size() > n)
@@ -338,16 +384,15 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& 
                 }
             }
           //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index).c_str(), best_quality);
-          if (fabs (best_quality - score.local_mean) > Params::sync_threshold2)
-            {
-              std::lock_guard<std::mutex> lg (result_mutex);
-              SearchScore refined_score;
-              refined_score.index = best_index;
-              refined_score.raw_quality = best_quality;
-              refined_score.local_mean = score.local_mean;
+          {
+            std::lock_guard<std::mutex> lg (result_mutex);
+            SearchScore refined_score;
+            refined_score.index = best_index;
+            refined_score.raw_quality = best_quality;
+            refined_score.local_mean = score.local_mean;
 
-              result_scores.push_back (refined_score);
-            }
+            result_scores.push_back (refined_score);
+          }
         });
     }
   thread_pool.wait_all();
@@ -415,16 +460,30 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
   vector<SyncFinder::KeyResult> key_results;
   for (size_t k = 0; k < search_key_results.size(); k++)
     {
-      /* find local maxima, select by threshold */
-      sync_select_by_threshold (search_key_results[k].scores);
+      /* find local maxima */
+      auto& search_scores = search_key_results[k].scores;
+      sync_select_local_maxima (search_scores);
+
+      /* select: threshold1 & at least n_best */
+      sync_select_threshold_and_n_best (search_scores, Params::sync_threshold2 * 0.75);
+
       if (mode == Mode::CLIP)
-        sync_select_n_best (search_key_results[k].scores, 5);
+        {
+          /* ClipDecoder: enforce a maximum number of matches: at most n_best but at least 5 */
+          size_t n_max = std::max (Params::get_n_best, 5);
+          sync_select_truncate_n (search_scores, n_max);
+        }
 
       search_refine (wav_data, mode, search_key_results[k], sync_bits[k]);
 
+      /* select: threshold2 & at least n_best */
+      sync_select_threshold_and_n_best (search_scores, Params::sync_threshold2);
+
+      sort (search_scores.begin(), search_scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
+
       KeyResult key_result;
       key_result.key = search_key_results[k].key;
-      for (auto search_score : search_key_results[k].scores)
+      for (auto search_score : search_scores)
         {
           double q = search_score.raw_quality - search_score.local_mean;
 

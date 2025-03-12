@@ -105,8 +105,10 @@ private:
                        const std::vector<char>&  have_frames);
   void scan_silence (const WavData& wav_data);
   void search_approx (std::vector<SearchKeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
+  void sync_select_local_maxima (std::vector<SearchScore>& sync_scores);
   void sync_select_by_threshold (std::vector<SearchScore>& sync_scores);
-  void sync_select_n_best (std::vector<SearchScore>& sync_scores, size_t n);
+  void sync_select_threshold_and_n_best (std::vector<SearchScore>& sync_scores, double threshold);
+  void sync_select_truncate_n (std::vector<SearchScore>& sync_scores, size_t n);
   void search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& key_result, const std::vector<std::vector<FrameBit>>& sync_bits);
   std::vector<KeyResult> fake_sync (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
 
