@@ -554,11 +554,14 @@ public:
         vector<size_t> best_all_blocks;
         for (size_t i = 0; i < pattern_raw_vec.size(); i++)
           {
+            size_t count = mark_sync_frame_count() + mark_data_frame_count();
+            size_t max_block_idx = lrint (pattern_raw_vec.back().index / double (count * Params::frame_size) + 0.5);
+
             vector<size_t> all_blocks;
             all_blocks.push_back (i);
-            for (size_t block_idx = 1; block_idx < pattern_raw_vec.size(); block_idx++)
+
+            for (size_t block_idx = 1; block_idx <= max_block_idx; block_idx++)
               {
-                size_t count = mark_sync_frame_count() + mark_data_frame_count();
                 size_t expect_start = pattern_raw_vec[i].index + block_idx * (count * Params::frame_size);
                 int    best_j = -1;
                 int    best_abs_dist = Params::frame_size / 2;
