@@ -560,44 +560,51 @@ public:
             vector<size_t> all_blocks;
             all_blocks.push_back (i);
 
-            for (size_t block_idx = 1; block_idx <= max_block_idx; block_idx++)
+            size_t block_idx = 1;
+            while (block_idx <= max_block_idx)
               {
-                size_t expect_start = pattern_raw_vec[i].index + block_idx * (count * Params::frame_size);
+                size_t expect_start = pattern_raw_vec[all_blocks.back()].index + block_idx * (count * Params::frame_size);
                 int    best_j = -1;
-                int    best_abs_dist = Params::frame_size / 2;
-                for (size_t j = i; j < pattern_raw_vec.size(); j++)
+                int    best_abs_dist = block_idx * Params::frame_size / 2;
+
+                /* enforce A B A B block ordering */
+                auto   expect_block_type = pattern_raw_vec[all_blocks.back()].block_type;
+                if (block_idx & 1)
+                  expect_block_type = expect_block_type == ConvBlockType::a ? ConvBlockType::b : ConvBlockType::a;
+
+                for (size_t j = all_blocks.back(); j < pattern_raw_vec.size(); j++)
                   {
                     int abs_dist = std::abs (int (expect_start) - int (pattern_raw_vec[j].index));
                     if (abs_dist < best_abs_dist)
                       {
-                        best_j = j;
-                        best_abs_dist = abs_dist;
+                        if (pattern_raw_vec[j].block_type == expect_block_type)
+                          {
+                            best_j = j;
+                            best_abs_dist = abs_dist;
+                          }
                       }
                   }
 
                 if (best_j >= 0)
-                  all_blocks.push_back (best_j);
-              }
-            if (all_blocks.size() == best_all_blocks.size())
-              {
-                /* for two all patterns which have the same amount of blocks:
-                 * prefer pattern with higher sync score sum
-                 */
-                auto sync_sum = [&] (auto blocks)
                   {
-                    float sum = 0;
-                    for (auto block_idx : blocks)
-                      sum += pattern_raw_vec[block_idx].quality;
-                    return sum;
-                  };
-                if (sync_sum (all_blocks) > sync_sum (best_all_blocks))
-                    best_all_blocks = all_blocks;
+                    all_blocks.push_back (best_j);
+                    block_idx = 1;
+                  }
+                else
+                  {
+                    block_idx++;
+                  }
               }
-            if (all_blocks.size() > best_all_blocks.size())
+            auto sync_sum = [&] (auto blocks)
               {
-                /* prefer all patterns with higher number of blocks */
-                best_all_blocks = all_blocks;
-              }
+                float sum = 0;
+                for (auto block_idx : blocks)
+                  sum += pattern_raw_vec[block_idx].quality;
+                return sum;
+              };
+            /* prefer "all" patterns with higher sync sum */
+            if (sync_sum (all_blocks) > sync_sum (best_all_blocks))
+              best_all_blocks = all_blocks;
           }
         /* all pattern: average the A / B bits of the consecutive blocks for an "all" pattern */
         if (best_all_blocks.size() > 1)
