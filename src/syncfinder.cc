@@ -222,12 +222,21 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
     {
       sort (key_result.scores.begin(), key_result.scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
 
+      /*
+       * Raw sync quality has a key and audio-dependent local bias, meaning
+       * that in some regions, the values tend to be larger than zero, while in
+       * others, they tend to be smaller than zero.
+       *
+       * Estimating and subtracting the local mean improves our ability to find
+       * the most relevant sync peaks.
+       */
+
       /* compute local mean for all scores */
       for (int i = 0; i < int (key_result.scores.size()); i++)
         {
           double avg = 0;
           int n = 0;
-          for (int j = -20; j <= 20; j++)
+          for (int j = -local_mean_distance; j <= local_mean_distance; j++)
             {
               if (std::abs (j) >= 4)
                 {
@@ -241,7 +250,7 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
             }
           if (n > 0)
             avg /= n;
-          if (getenv ("NOAVG"))
+          if (getenv ("NOAVG")) /* FIXME: remove me in final version */
             avg = 0;
           key_result.scores[i].local_mean = avg;
           //printf ("%f %f #Q\n", key_result.scores[i].raw_quality, key_result.scores[i].local_mean);
@@ -254,16 +263,21 @@ SyncFinder::sync_select_local_maxima (vector<SearchScore>& sync_scores)
 {
   vector<SearchScore> selected_scores;
 
+  /* FIXME: which of these options is better? */
+  auto get_quality = [&] (auto score) {
+    return fabs (score.raw_quality);
+    // return score.abs_quality();
+  };
   for (size_t i = 0; i < sync_scores.size(); i++)
     {
-      double q = sync_scores[i].abs_quality();
+      double q = get_quality (sync_scores[i]);
       double q_last = 0;
       double q_next = 0;
       if (i > 0)
-        q_last = sync_scores[i - 1].abs_quality();
+        q_last = get_quality (sync_scores[i - 1]);
 
       if (i + 1 < sync_scores.size())
-        q_next = sync_scores[i + 1].abs_quality();
+        q_next = get_quality (sync_scores[i + 1]);
 
       if (q >= q_last && q >= q_next)
         {
@@ -272,6 +286,57 @@ SyncFinder::sync_select_local_maxima (vector<SearchScore>& sync_scores)
         }
     }
   sync_scores = selected_scores;
+}
+
+/*
+ * One downside of subtracting the local mean is that, around each peak,
+ * we subtract the peak from the quality, which creates a bias in the
+ * opposite direction of the peak.
+ *
+ * To avoid false positive blocks around peaks, we ignore peaks with smaller
+ * amplitude and the opposite sign. This works especially well for large peaks
+ * (clean/strong watermark).
+ */
+void
+SyncFinder::sync_mask_avg_false_positives (vector<SearchScore>& sync_scores)
+{
+  static constexpr int    mask_distance = local_mean_distance + 3;
+  static constexpr double mask_factor   = 3;
+  vector<SearchScore> out_scores;
+
+  auto quality_sign = [] (const SearchScore& score) {
+    if (score.raw_quality - score.local_mean < 0)
+      return -1;
+    else
+      return 1;
+  };
+  for (int i = 0; i < int (sync_scores.size()); i++)
+    {
+      bool mask = false;
+
+      // d is larger the effective distance between the two peaks, because sync_scores
+      // only contains the peaks
+      for (int d = -mask_distance; d <= mask_distance; d++)
+        {
+          int j = i + d;
+          if (i != j && j >= 0 && j < int (sync_scores.size()))
+            {
+              // distance between the two peaks
+              int distance = std::abs (int (sync_scores[i].index) - int (sync_scores[j].index)) / Params::sync_search_step;
+              if (distance <= mask_distance)
+                {
+                  if (sync_scores[j].abs_quality() > sync_scores[i].abs_quality() * mask_factor &&
+                      quality_sign (sync_scores[j]) != quality_sign (sync_scores[i]))
+                    {
+                      mask = true;
+                    }
+                }
+            }
+        }
+      if (!mask)
+        out_scores.push_back (sync_scores[i]);
+    }
+  sync_scores = out_scores;
 }
 
 void
@@ -364,7 +429,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& 
           //printf ("%zd %s %f", score.index, find_closest_sync (score.index).c_str(), score.quality);
 
           // refine match
-          double best_quality       = 0;
+          double best_quality       = score.raw_quality;
           size_t best_index         = score.index;
 
           int start = std::max (int (score.index) - Params::sync_search_step, 0);
@@ -376,7 +441,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& 
                 {
                   double q = sync_decode (sync_bits, 0, fft_db, have_frames);
 
-                  if (fabs (q) > fabs (best_quality))
+                  if (fabs (q - score.local_mean) > fabs (best_quality - score.local_mean))
                     {
                       best_quality = q;
                       best_index   = fine_index;
@@ -463,6 +528,7 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
       /* find local maxima */
       auto& search_scores = search_key_results[k].scores;
       sync_select_local_maxima (search_scores);
+      sync_mask_avg_false_positives (search_scores);
 
       /* select: threshold1 & at least n_best */
       sync_select_threshold_and_n_best (search_scores, Params::sync_threshold2 * 0.75);

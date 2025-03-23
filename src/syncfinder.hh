@@ -85,12 +85,13 @@ public:
     std::vector<Score> sync_scores;
   };
 private:
+  static constexpr int local_mean_distance = 20;
   struct SearchScore {
     size_t index;
     double raw_quality;
     double local_mean;
 
-    double abs_quality()
+    double abs_quality() const
     {
       return fabs (raw_quality - local_mean);
     }
@@ -106,6 +107,7 @@ private:
   void scan_silence (const WavData& wav_data);
   void search_approx (std::vector<SearchKeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
   void sync_select_local_maxima (std::vector<SearchScore>& sync_scores);
+  void sync_mask_avg_false_positives (std::vector<SearchScore>& sync_scores);
   void sync_select_by_threshold (std::vector<SearchScore>& sync_scores);
   void sync_select_threshold_and_n_best (std::vector<SearchScore>& sync_scores, double threshold);
   void sync_select_truncate_n (std::vector<SearchScore>& sync_scores, size_t n);
