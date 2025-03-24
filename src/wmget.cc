@@ -17,6 +17,7 @@
 
 #include <string>
 #include <algorithm>
+#include <map>
 
 #include "wavdata.hh"
 #include "wmcommon.hh"
@@ -31,6 +32,7 @@
 
 using std::string;
 using std::vector;
+using std::map;
 using std::min;
 using std::max;
 using std::complex;
@@ -171,6 +173,7 @@ public:
     SyncFinder::Score sync_score;
     Type              type;
     double            speed = 0;
+    double            rating = 0;
 
     bool
     approx_match (const Pattern& p) const
@@ -191,6 +194,36 @@ private:
   vector<Pattern> patterns;
   std::string     debug_sync;
 
+  void
+  rate_patterns (const Key& key)
+  {
+    map<string, float> pattern_rating;
+
+    /* compute pattern rating for key */
+    for (const auto& p : patterns)
+      {
+        if (p.key == key)
+          {
+            /* all pattern is a combination of multiple patterns, which means that
+             * the error correction is really good; so if an all pattern exists,
+             * it is likely to be the correct result
+             */
+            float all_factor = (p.type == Type::ALL) ? 2 : 1;
+
+            /* use sync quality sum to priorize patterns */
+            string bits = bit_vec_to_str (p.bit_vec);
+            pattern_rating[bits] += p.sync_score.quality * all_factor;
+          }
+      }
+    for (auto& p : patterns)
+      {
+        if (p.key == key)
+          {
+            string bits = bit_vec_to_str (p.bit_vec);
+            p.rating = pattern_rating[bits];
+          }
+      }
+  }
 public:
   void
   add_pattern (const Key& key, double time, SyncFinder::Score sync_score, const vector<int>& bit_vec, float decode_error, Type pattern_type, double speed)
@@ -216,8 +249,11 @@ public:
       p.time += time_offset;
   }
   void
-  sort()
+  sort (const vector<Key>& key_list)
   {
+    for (const auto& key : key_list)
+      rate_patterns (key);
+
     std::sort (patterns.begin(), patterns.end(), [](const Pattern& p1, const Pattern& p2) {
       const int all1 = p1.type == Type::ALL;
       const int all2 = p2.type == Type::ALL;
@@ -235,6 +271,8 @@ public:
 
       if (p1.key.name() != p2.key.name())
         return p1.key.name() < p2.key.name();
+      else if (p1.rating != p2.rating)
+        return p1.rating > p2.rating;
       else if (all1 != all2)
         return all1 < all2;
       else if (p1.time != p2.time)
@@ -321,11 +359,11 @@ public:
 
         const int seconds = pattern.time;
 
-        fprintf (outfile, "    { \"key\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"type\": \"%s\", \"speed\": %.6f }",
+        fprintf (outfile, "    { \"key\": \"%s\", \"pos\": \"%d:%02d\", \"bits\": \"%s\", \"quality\": %.5f, \"error\": %.6f, \"rating\": %.5f, \"type\": \"%s\", \"speed\": %.6f }",
                  json_escape (pattern.key.name()).c_str(),
                  seconds / 60, seconds % 60,
                  bit_vec_to_str (pattern.bit_vec).c_str(),
-                 pattern.sync_score.quality, pattern.decode_error,
+                 pattern.sync_score.quality, pattern.decode_error, pattern.rating,
                  btype.c_str(),
                  pattern.speed);
       }
@@ -953,7 +991,7 @@ get_watermark (const vector<Key>& key_list, const string& infile, const string& 
           first_chunk = false;
         }
     }
-  result_set.sort();
+  result_set.sort (key_list);
 
   size_t time_length = lrint (wav_chunk_loader.length());
   return report (result_set, time_length, orig_bitvec);
