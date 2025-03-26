@@ -374,6 +374,7 @@ public:
   print()
   {
     string last_key_name;
+    bool   print_speed = true;
 
     for (const auto& pattern : patterns)
       {
@@ -381,14 +382,18 @@ public:
           {
             printf ("key %s\n", pattern.key.name().c_str());
             last_key_name = pattern.key.name();
-
+            print_speed = true; // one speed per key
+          }
+        if (print_speed)
+          {
             // currently we assume that speed detection returns one best speed for each key
             for (auto p : patterns)
-              if (p.key.name() == pattern.key.name() && p.speed != 1)
+              if (p.key == pattern.key && p.speed != 1)
                 {
                   printf ("speed %.6f\n", p.speed);
                   break;
                 }
+            print_speed = false;
           }
         if (pattern.type == Type::ALL) /* this is the combined pattern "all" */
           {
