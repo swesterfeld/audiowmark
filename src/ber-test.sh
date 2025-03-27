@@ -138,7 +138,10 @@ do
         echo "need ogg bitrate" >&2
         exit 1
       fi
-      oggenc -b $2 ${AWM_FILE}.wav -o ${AWM_FILE}.ogg --quiet
+      if [ "x$AWM_OGG_RATE" != "x" ]; then
+        OGG_ARGS="--resample $AWM_OGG_RATE"
+      fi
+      oggenc $OGG_ARGS -b $2 ${AWM_FILE}.wav -o ${AWM_FILE}.ogg --quiet
       OUT_FILE=${AWM_FILE}.ogg
     elif [ "x$TRANSFORM" == "x" ]; then
       OUT_FILE=${AWM_FILE}.wav
@@ -169,15 +172,15 @@ do
   done
 done | {
   if [ "x$AWM_REPORT" == "xfer" ]; then
-    awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
+    stdbuf -oL awk 'BEGIN { bad = n = 0 } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xferv" ]; then
-    awk 'BEGIN { bad = n = 0 } { print "###", $0; } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
+    stdbuf -oL awk 'BEGIN { bad = n = 0 } { print "###", $0; } $1 == "match_count" { if ($2 == 0) bad++; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xsync" ]; then
-    awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
+    stdbuf -oL awk 'BEGIN { bad = n = 0 } $1 == "sync_match" { bad += (3 - $2) / 3.0; n++; } END { print bad, n, bad * 100.0 / (n > 0 ? n : 1); }'
   elif [ "x$AWM_REPORT" == "xsyncv" ]; then
-    awk '{ print "###", $0; } $1 == "sync_match" { correct += $2; missing += 3 - $2; incorrect += $3-$2; print "correct:", correct, "missing:", missing, "incorrect:", incorrect; }'
+    stdbuf -oL awk '{ print "###", $0; } $1 == "sync_match" { correct += $2; missing += 3 - $2; incorrect += $3-$2; print "correct:", correct, "missing:", missing, "incorrect:", incorrect; }'
   elif [ "x$AWM_REPORT" == "xtruncv" ]; then
-    awk ' {
+    stdbuf -oL awk ' {
             print "###", $0;
           }
           $2 == "match_count" {
