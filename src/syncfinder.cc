@@ -263,21 +263,16 @@ SyncFinder::sync_select_local_maxima (vector<SearchScore>& sync_scores)
 {
   vector<SearchScore> selected_scores;
 
-  /* FIXME: which of these options is better? */
-  auto get_quality = [&] (auto score) {
-    return fabs (score.raw_quality);
-    // return score.abs_quality();
-  };
   for (size_t i = 0; i < sync_scores.size(); i++)
     {
-      double q = get_quality (sync_scores[i]);
+      double q = sync_scores[i].abs_quality();
       double q_last = 0;
       double q_next = 0;
       if (i > 0)
-        q_last = get_quality (sync_scores[i - 1]);
+        q_last = sync_scores[i - 1].abs_quality();
 
       if (i + 1 < sync_scores.size())
-        q_next = get_quality (sync_scores[i + 1]);
+        q_next = sync_scores[i + 1].abs_quality();
 
       if (q >= q_last && q >= q_next)
         {
