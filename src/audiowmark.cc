@@ -662,11 +662,6 @@ void
 parse_shared_options (ArgParser& ap)
 {
   int i;
-  float f;
-  if (ap.parse_opt ("--strength", f))
-    {
-      Params::water_delta = f / 1000;
-    }
   if (ap.parse_opt ("--short", i))
     {
       Params::payload_size = i;
@@ -727,6 +722,7 @@ parse_add_options (ArgParser& ap)
 {
   string s;
   int i;
+  float f;
 
   ap.parse_opt ("--set-input-label", Params::input_label);
   ap.parse_opt ("--set-output-label", Params::output_label);
@@ -806,6 +802,10 @@ parse_add_options (ArgParser& ap)
     {
       error ("audiowmark: using rf64 as input format has no effect\n");
       exit (1);
+    }
+  if (ap.parse_opt ("--strength", f))
+    {
+      Params::water_delta = f / 1000;
     }
 }
 
