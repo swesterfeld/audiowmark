@@ -288,7 +288,17 @@ public:
   void
   merge (ResultSet& other)
   {
-    for (const auto& p : other.patterns)
+    /* since the ResultSet "other" was usually filled from a ThreadPool, the order
+     * of the patterns to merge is not always the same - to make the output of
+     * audiowmark deterministic, sort the patterns to be merged by timestamp
+     */
+    vector<Pattern> to_merge = other.patterns;
+
+    std::sort (to_merge.begin(), to_merge.end(),
+      [](const Pattern& p1, const Pattern& p2) {
+        return p1.time < p2.time;
+      });
+    for (const auto& p : to_merge)
       {
         bool merge = true;
         for (auto& my_p : patterns)
