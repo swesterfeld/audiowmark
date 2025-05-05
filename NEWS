@@ -8,6 +8,7 @@ Overview of Changes in audiowmark-0.6.5:
   - distance based ALL pattern merging
   - change output order: print most relevant matches first
   - deprecate short payload
+* fix speed detection result output for default key
 
 Overview of Changes in audiowmark-0.6.4:
 
