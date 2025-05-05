@@ -251,7 +251,6 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
           if (n > 0)
             avg /= n;
           key_result.scores[i].local_mean = avg;
-          //printf ("%f %f #Q\n", key_result.scores[i].raw_quality, key_result.scores[i].local_mean);
         }
     }
 }
