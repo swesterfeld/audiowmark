@@ -1,3 +1,14 @@
+Overview of Changes in audiowmark-0.6.5:
+
+* improve robustness for low quality material
+  - robust sync score peak selection using local mean
+  - use lower sync threshold (introduce --sync-threshold option)
+  - always decode n best matches (introduce --n-best option)
+  - distance based AB pattern merging
+  - distance based ALL pattern merging
+  - change output order: print most relevant matches first
+  - deprecate short payload
+
 Overview of Changes in audiowmark-0.6.4:
 
 * reduce memory usage:

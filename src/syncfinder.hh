@@ -85,16 +85,33 @@ public:
     std::vector<Score> sync_scores;
   };
 private:
+  static constexpr int local_mean_distance = 20;
+  struct SearchScore {
+    size_t index;
+    double raw_quality;
+    double local_mean;
+
+    double abs_quality() const
+    {
+      return fabs (raw_quality - local_mean);
+    }
+  };
+  struct SearchKeyResult {
+    Key                      key;
+    std::vector<SearchScore> scores;
+  };
   double  sync_decode (const std::vector<std::vector<FrameBit>>& sync_bits,
                        const size_t start_frame,
                        const std::vector<float>& fft_out_db,
-                       const std::vector<char>&  have_frames,
-                       ConvBlockType *block_type);
+                       const std::vector<char>&  have_frames);
   void scan_silence (const WavData& wav_data);
-  void search_approx (std::vector<KeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
-  void sync_select_by_threshold (std::vector<Score>& sync_scores);
-  void sync_select_n_best (std::vector<Score>& sync_scores, size_t n);
-  void search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const std::vector<std::vector<FrameBit>>& sync_bits);
+  void search_approx (std::vector<SearchKeyResult>& key_results, const std::vector<std::vector<std::vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode);
+  void sync_select_local_maxima (std::vector<SearchScore>& sync_scores);
+  void sync_mask_avg_false_positives (std::vector<SearchScore>& sync_scores);
+  void sync_select_by_threshold (std::vector<SearchScore>& sync_scores);
+  void sync_select_threshold_and_n_best (std::vector<SearchScore>& sync_scores, double threshold);
+  void sync_select_truncate_n (std::vector<SearchScore>& sync_scores, size_t n);
+  void search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& key_result, const std::vector<std::vector<FrameBit>>& sync_bits);
   std::vector<KeyResult> fake_sync (const std::vector<Key>& key_list, const WavData& wav_data, Mode mode);
 
   // non-zero sample range: [wav_data_first, wav_data_last)

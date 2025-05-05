@@ -117,8 +117,7 @@ double
 SyncFinder::sync_decode (const vector<vector<FrameBit>>& sync_bits,
                          const size_t start_frame,
                          const vector<float>& fft_out_db,
-                         const vector<char>&  have_frames,
-                         ConvBlockType *block_type)
+                         const vector<char>&  have_frames)
 {
   double sync_quality = 0;
 
@@ -150,16 +149,7 @@ SyncFinder::sync_decode (const vector<vector<FrameBit>>& sync_bits,
     sync_quality /= bit_count;
   sync_quality = normalize_sync_quality (sync_quality);
 
-  if (sync_quality < 0)
-    {
-      *block_type = ConvBlockType::b;
-      return -sync_quality;
-    }
-  else
-    {
-      *block_type = ConvBlockType::a;
-      return sync_quality;
-    }
+  return sync_quality;
 }
 
 void
@@ -179,7 +169,7 @@ SyncFinder::scan_silence (const WavData& wav_data)
 }
 
 void
-SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode)
+SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<vector<vector<FrameBit>>>& sync_bits, const WavData& wav_data, Mode mode)
 {
   ThreadPool    thread_pool;
   vector<float> fft_db;
@@ -211,13 +201,16 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
                 {
                   for (auto start_frame : split_start_frames)
                     {
-                      ConvBlockType block_type;
-                      double quality = sync_decode (sync_bits[k], start_frame, fft_db, have_frames, &block_type);
+                      double quality = sync_decode (sync_bits[k], start_frame, fft_db, have_frames);
                       // printf ("%zd %f\n", sync_index, quality);
                       const size_t sync_index = start_frame * Params::frame_size + sync_shift;
                       {
                         std::lock_guard<std::mutex> lg (result_mutex);
-                        key_results[k].sync_scores.emplace_back (Score { sync_index, quality, block_type });
+                        SearchScore search_score;
+                        search_score.index       = sync_index;
+                        search_score.raw_quality = quality;
+                        search_score.local_mean  = 0; // fill this after all search scores are ready
+                        key_results[k].scores.push_back (search_score);
                       }
                     }
                 });
@@ -226,36 +219,140 @@ SyncFinder::search_approx (vector<KeyResult>& key_results, const vector<vector<v
       thread_pool.wait_all();
     }
   for (auto& key_result : key_results)
-    sort (key_result.sync_scores.begin(), key_result.sync_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
+    {
+      sort (key_result.scores.begin(), key_result.scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
+
+      /*
+       * Raw sync quality has a key and audio-dependent local bias, meaning
+       * that in some regions, the values tend to be larger than zero, while in
+       * others, they tend to be smaller than zero.
+       *
+       * Estimating and subtracting the local mean improves our ability to find
+       * the most relevant sync peaks.
+       */
+
+      /* compute local mean for all scores */
+      for (int i = 0; i < int (key_result.scores.size()); i++)
+        {
+          double avg = 0;
+          int n = 0;
+          for (int j = -local_mean_distance; j <= local_mean_distance; j++)
+            {
+              if (std::abs (j) >= 4)
+                {
+                  int idx = i + j;
+                  if (idx >= 0 && idx < int (key_result.scores.size()))
+                    {
+                      avg += key_result.scores[idx].raw_quality;
+                      n++;
+                    }
+                }
+            }
+          if (n > 0)
+            avg /= n;
+          key_result.scores[i].local_mean = avg;
+          //printf ("%f %f #Q\n", key_result.scores[i].raw_quality, key_result.scores[i].local_mean);
+        }
+    }
 }
 
 void
-SyncFinder::sync_select_by_threshold (vector<Score>& sync_scores)
+SyncFinder::sync_select_local_maxima (vector<SearchScore>& sync_scores)
 {
-  /* for strength 8 and above:
-   *   -> more false positive candidates are rejected, so we can use a lower threshold
-   *
-   * for strength 7 and below:
-   *   -> we need a higher threshold, because otherwise watermark detection takes too long
-   */
-  const double strength = Params::water_delta * 1000;
-  const double sync_threshold1 = strength > 7.5 ? 0.4 : 0.5;
-
-  vector<Score> selected_scores;
+  vector<SearchScore> selected_scores;
 
   for (size_t i = 0; i < sync_scores.size(); i++)
     {
-      if (sync_scores[i].quality > sync_threshold1)
+      double q = sync_scores[i].abs_quality();
+      double q_last = 0;
+      double q_next = 0;
+      if (i > 0)
+        q_last = sync_scores[i - 1].abs_quality();
+
+      if (i + 1 < sync_scores.size())
+        q_next = sync_scores[i + 1].abs_quality();
+
+      if (q >= q_last && q >= q_next)
         {
-          double q_last = -1;
-          double q_next = -1;
+          selected_scores.emplace_back (sync_scores[i]);
+          i++; // score with quality q_next cannot be a local maximum
+        }
+    }
+  sync_scores = selected_scores;
+}
+
+/*
+ * One downside of subtracting the local mean is that, around each peak,
+ * we subtract the peak from the quality, which creates a bias in the
+ * opposite direction of the peak.
+ *
+ * To avoid false positive blocks around peaks, we ignore peaks with smaller
+ * amplitude and the opposite sign. This works especially well for large peaks
+ * (clean/strong watermark).
+ */
+void
+SyncFinder::sync_mask_avg_false_positives (vector<SearchScore>& sync_scores)
+{
+  static constexpr int    mask_distance = local_mean_distance + 3;
+  static constexpr double mask_factor   = 3;
+  vector<SearchScore> out_scores;
+
+  auto quality_sign = [] (const SearchScore& score) {
+    if (score.raw_quality - score.local_mean < 0)
+      return -1;
+    else
+      return 1;
+  };
+  for (int i = 0; i < int (sync_scores.size()); i++)
+    {
+      bool mask = false;
+
+      // d is larger the effective distance between the two peaks, because sync_scores
+      // only contains the peaks
+      for (int d = -mask_distance; d <= mask_distance; d++)
+        {
+          int j = i + d;
+          if (i != j && j >= 0 && j < int (sync_scores.size()))
+            {
+              // distance between the two peaks
+              int distance = std::abs (int (sync_scores[i].index) - int (sync_scores[j].index)) / Params::sync_search_step;
+              if (distance <= mask_distance)
+                {
+                  if (sync_scores[j].abs_quality() > sync_scores[i].abs_quality() * mask_factor &&
+                      quality_sign (sync_scores[j]) != quality_sign (sync_scores[i]))
+                    {
+                      mask = true;
+                    }
+                }
+            }
+        }
+      if (!mask)
+        out_scores.push_back (sync_scores[i]);
+    }
+  sync_scores = out_scores;
+}
+
+void
+SyncFinder::sync_select_by_threshold (vector<SearchScore>& sync_scores)
+{
+  const double sync_threshold1 = Params::sync_threshold2 * 0.75;
+
+  vector<SearchScore> selected_scores;
+
+  for (size_t i = 0; i < sync_scores.size(); i++)
+    {
+      double q = sync_scores[i].abs_quality();
+      if (q > sync_threshold1)
+        {
+          double q_last = 0;
+          double q_next = 0;
           if (i > 0)
-            q_last = sync_scores[i - 1].quality;
+            q_last = sync_scores[i - 1].abs_quality();
 
           if (i + 1 < sync_scores.size())
-            q_next = sync_scores[i + 1].quality;
+            q_next = sync_scores[i + 1].abs_quality();
 
-          if (sync_scores[i].quality >= q_last && sync_scores[i].quality >= q_next)
+          if (q >= q_last && q >= q_next)
             {
               selected_scores.emplace_back (sync_scores[i]);
               i++; // score with quality q_next cannot be a local maximum
@@ -266,20 +363,41 @@ SyncFinder::sync_select_by_threshold (vector<Score>& sync_scores)
 }
 
 void
-SyncFinder::sync_select_n_best (vector<Score>& sync_scores, size_t n)
+SyncFinder::sync_select_threshold_and_n_best (vector<SearchScore>& scores, double threshold)
 {
-  std::sort (sync_scores.begin(), sync_scores.end(), [](Score& s1, Score& s2) { return s1.quality > s2.quality; });
+  std::sort (scores.begin(), scores.end(), [](SearchScore& s1, SearchScore& s2) { return s1.abs_quality() > s2.abs_quality(); });
+
+  /* keep all matches with (quality > threshold) */
+  int i = 0;
+  while (i < int (scores.size()) && scores[i].abs_quality() > threshold)
+    i++;
+  if (i >= Params::get_n_best)
+    {
+      /* have more than n_best matches with (quality > threshold), keep all of them */
+      scores.resize (i);
+    }
+  else if (int (scores.size()) > Params::get_n_best)
+    {
+      /* if we have less than n_best matches with (quality > threshold), keep n_best matches */
+      scores.resize (Params::get_n_best);
+    }
+}
+
+void
+SyncFinder::sync_select_truncate_n (vector<SearchScore>& sync_scores, size_t n)
+{
+  std::sort (sync_scores.begin(), sync_scores.end(), [](SearchScore& s1, SearchScore& s2) { return s1.abs_quality() > s2.abs_quality(); });
   if (sync_scores.size() > n)
     sync_scores.resize (n);
 }
 
 void
-SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_result, const vector<vector<FrameBit>>& sync_bits)
+SyncFinder::search_refine (const WavData& wav_data, Mode mode, SearchKeyResult& key_result, const vector<vector<FrameBit>>& sync_bits)
 {
-  ThreadPool    thread_pool;
-  std::mutex    result_mutex;
-  vector<Score> result_scores;
-  BitPosGen     bit_pos_gen (key_result.key);
+  ThreadPool          thread_pool;
+  std::mutex          result_mutex;
+  vector<SearchScore> result_scores;
+  BitPosGen           bit_pos_gen (key_result.key);
 
   int total_frame_count = mark_sync_frame_count() + mark_data_frame_count();
   const int first_block_end = total_frame_count;
@@ -294,7 +412,7 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
         want_frames[first_block_end + bit_pos_gen.sync_frame (f)] = 1;
     }
 
-  for (const auto& score : key_result.sync_scores)
+  for (const auto& score : key_result.scores)
     {
       thread_pool.add_job ([this, score, total_frame_count,
                             &wav_data, &want_frames, &sync_bits, &result_scores, &result_mutex] ()
@@ -304,9 +422,8 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
           //printf ("%zd %s %f", score.index, find_closest_sync (score.index).c_str(), score.quality);
 
           // refine match
-          double best_quality       = score.quality;
+          double best_quality       = score.raw_quality;
           size_t best_index         = score.index;
-          ConvBlockType best_block_type = score.block_type; /* doesn't really change during refinement */
 
           int start = std::max (int (score.index) - Params::sync_search_step, 0);
           int end   = score.index + Params::sync_search_step;
@@ -315,10 +432,9 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
               sync_fft (wav_data, fine_index, total_frame_count, fft_db, have_frames, want_frames);
               if (fft_db.size())
                 {
-                  ConvBlockType block_type;
-                  double        q = sync_decode (sync_bits, 0, fft_db, have_frames, &block_type);
+                  double q = sync_decode (sync_bits, 0, fft_db, have_frames);
 
-                  if (q > best_quality)
+                  if (fabs (q - score.local_mean) > fabs (best_quality - score.local_mean))
                     {
                       best_quality = q;
                       best_index   = fine_index;
@@ -326,16 +442,20 @@ SyncFinder::search_refine (const WavData& wav_data, Mode mode, KeyResult& key_re
                 }
             }
           //printf (" => refined: %zd %s %f\n", best_index, find_closest_sync (best_index).c_str(), best_quality);
-          if (best_quality > Params::sync_threshold2)
-            {
-              std::lock_guard<std::mutex> lg (result_mutex);
-              result_scores.push_back (Score { best_index, best_quality, best_block_type });
-            }
+          {
+            std::lock_guard<std::mutex> lg (result_mutex);
+            SearchScore refined_score;
+            refined_score.index = best_index;
+            refined_score.raw_quality = best_quality;
+            refined_score.local_mean = score.local_mean;
+
+            result_scores.push_back (refined_score);
+          }
         });
     }
   thread_pool.wait_all();
-  sort (result_scores.begin(), result_scores.end(), [] (const Score& a, const Score &b) { return a.index < b.index; });
-  key_result.sync_scores = result_scores;
+  sort (result_scores.begin(), result_scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
+  key_result.scores = result_scores;
 }
 
 vector<SyncFinder::KeyResult>
@@ -383,26 +503,56 @@ SyncFinder::search (const vector<Key>& key_list, const WavData& wav_data, Mode m
       wav_data_last  = wav_data.samples().size();
     }
 
-  vector<KeyResult>                 key_results;
+  vector<SearchKeyResult>           search_key_results;
   vector<vector<vector<FrameBit>>>  sync_bits;
 
   for (const auto& key : key_list)
     {
-      KeyResult key_result;
-      key_result.key = key;
-      key_results.push_back (key_result);
+      SearchKeyResult search_key_result;
+      search_key_result.key = key;
+      search_key_results.push_back (search_key_result);
       sync_bits.push_back (get_sync_bits (key, mode));
     }
 
-  search_approx (key_results, sync_bits, wav_data, mode);
-  for (size_t k = 0; k < key_results.size(); k++)
+  search_approx (search_key_results, sync_bits, wav_data, mode);
+  vector<SyncFinder::KeyResult> key_results;
+  for (size_t k = 0; k < search_key_results.size(); k++)
     {
-      /* find local maxima, select by threshold */
-      sync_select_by_threshold (key_results[k].sync_scores);
-      if (mode == Mode::CLIP)
-        sync_select_n_best (key_results[k].sync_scores, 5);
+      /* find local maxima */
+      auto& search_scores = search_key_results[k].scores;
+      sync_select_local_maxima (search_scores);
+      sync_mask_avg_false_positives (search_scores);
 
-      search_refine (wav_data, mode, key_results[k], sync_bits[k]);
+      /* select: threshold1 & at least n_best */
+      sync_select_threshold_and_n_best (search_scores, Params::sync_threshold2 * 0.75);
+
+      if (mode == Mode::CLIP)
+        {
+          /* ClipDecoder: enforce a maximum number of matches: at most n_best but at least 5 */
+          size_t n_max = std::max (Params::get_n_best, 5);
+          sync_select_truncate_n (search_scores, n_max);
+        }
+
+      search_refine (wav_data, mode, search_key_results[k], sync_bits[k]);
+
+      /* select: threshold2 & at least n_best */
+      sync_select_threshold_and_n_best (search_scores, Params::sync_threshold2);
+
+      sort (search_scores.begin(), search_scores.end(), [] (const SearchScore& a, const SearchScore &b) { return a.index < b.index; });
+
+      KeyResult key_result;
+      key_result.key = search_key_results[k].key;
+      for (auto search_score : search_scores)
+        {
+          double q = search_score.raw_quality - search_score.local_mean;
+
+          Score score;
+          score.index = search_score.index;
+          score.quality = fabs (q);
+          score.block_type = q > 0 ? ConvBlockType::a : ConvBlockType::b;
+          key_result.sync_scores.push_back (score);
+        }
+      key_results.push_back (key_result);
     }
 
   return key_results;

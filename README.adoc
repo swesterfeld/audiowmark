@@ -85,19 +85,24 @@ To get the 128-bit message from the watermarked file, use:
 [subs=+quotes]
 ....
   *$ audiowmark get out.wav*
-  pattern  0:05 0123456789abcdef0011223344556677 1.324 0.059 A
-  pattern  0:57 0123456789abcdef0011223344556677 1.413 0.112 B
-  pattern  0:57 0123456789abcdef0011223344556677 1.368 0.086 AB
-  pattern  1:49 0123456789abcdef0011223344556677 1.302 0.098 A
-  pattern  2:40 0123456789abcdef0011223344556677 1.361 0.093 B
-  pattern  2:40 0123456789abcdef0011223344556677 1.331 0.096 AB
-  pattern   all 0123456789abcdef0011223344556677 1.350 0.054
+  pattern  0:05 0123456789abcdef0011223344556677 1.358 0.059 A
+  pattern  0:57 0123456789abcdef0011223344556677 1.426 0.050 B
+  pattern  0:57 0123456789abcdef0011223344556677 1.392 0.055 AB
+  pattern  1:49 0123456789abcdef0011223344556677 1.453 0.074 A
+  pattern  2:40 0123456789abcdef0011223344556677 1.359 0.080 B
+  pattern  2:40 0123456789abcdef0011223344556677 1.406 0.077 AB
+  pattern   all 0123456789abcdef0011223344556677 1.399 0.035
+  pattern  2:58 c6141f3d25720eb0dbd0e38ee2355ff4 0.185 0.382 B
+  pattern  2:14 df659ac435f0569c67cdac1fb2e36cd8 0.178 0.391 B
+  pattern  1:58 d7d7ed21e9d6da0a4ffdd5e55ffdb623 0.176 0.389 A
+  pattern  2:59 1c13f1532eeb6c9aa719253736849d6e 0.167 0.389 A
 ....
 The output of `audiowmark get` is designed to be machine readable. Each line
 that starts with `pattern` contains one decoded message. The fields are
 seperated by one or more space characters. The first field is a *timestamp*
 indicating the position of the data block. The second field is the *decoded
-message*. For most purposes this is all you need to know.
+message*. The results are sorted by relevance, the most relevant matches
+are shown first.
 
 The software was designed under the assumption that the message is a *hash* or
 *HMAC* of some sort. Before you start using `audiowmark` in any serious
@@ -106,11 +111,8 @@ be able to decide whether a message is correct or not. To do this, on
 watermarking song files, you could *create a database entry* for each message
 you embedded in a watermark. During retrieval, you should perform a *database
 lookup* for each pattern `audiowmark get` outputs. If the message is not found,
-then you should assume that a decoding error occurred. In our example each
-pattern was decoded correctly, because the watermark was not damaged at all,
-but if you for instance use lossy compression (with a low bitrate), it may
-happen that only some of the decoded patterns are correct. Or none, if the
-watermark was damaged too much.
+then you should assume that a decoding error occurred. In our example the
+last results did not match the correct message and need to be ignored.
 
 The third field is the *sync score* (higher is better). The synchronization
 algorithm tries to find valid data blocks in the audio file, that become
@@ -121,24 +123,21 @@ decoding, we use convolutional codes for error correction, to make the
 watermarking more robust.
 
 The fifth field is the *block type*. There are two types of data blocks,
-A blocks and B blocks. A single data block can be decoded alone, as it
-contains a complete message. However, if during watermark detection an
-A block followed by a B block was found, these two can be decoded
-together (then this field will be AB), resulting in even higher error
-correction capacity than one block alone would have.
+A blocks and B blocks. A single data block can be decoded alone, as it contains
+a complete message. However, if during watermark detection an A block followed
+by a B block was found, and the two blocks are at the expected distance, these
+two can be decoded together (then this field will be AB), resulting in even
+higher error correction capacity than one block alone would have.
 
 To improve the error correction capacity even further, the `all` pattern
-combines all data blocks that are available. The combined decoded
-message will often be the most reliable result (meaning that even if all
-other patterns were incorrect, this could still be right).
+merges multiple data blocks that are found at the expected distance. The
+combined decoded message will often be the most reliable result (meaning that
+even if all other patterns were incorrect, this could still be right).
 
 The most important options for getting a watermark are:
 
 --key <filename>::
 Use watermarking key from file <filename> (see <<key>>).
-
---strength <s>::
-Set the watermarking strength (see <<strength>>).
 
 --detect-speed::
 --detect-speed-patient::
@@ -150,6 +149,21 @@ Write results to <file> in machine readable JSON format.
 --chunk-size <minutes>::
 Set chunk size for memory/speed tradeoff. Larger chunk sizes result in
 faster detection but higher memory usage. Default: 30 minutes.
+
+--sync-threshold <t>::
+Set threshold for minimum sync quality. Patterns with sync scores higher than
+this threshold are considered relevant and are decoded. The default (0.35) is
+usually fine.
+
+--n-best <n>::
+In addition to all patterns that are considered relevant due to their sync
+score, this parameter ensures that at least <n> matches are decoded, even if
+their sync score is low. This can help in situations where the quality of the
+input material is low, so that no patterns have a high enough sync score to be
+considered relevant. On the other hand this makes watermark detection slower,
+especially when many keys are used, so if performance is more important than
+accuracy, using `--n-best 0` can be used to disable n-best decoding.  Default:
+at least decode 8 matches.
 
 [[key]]
 == Watermark Key
@@ -198,12 +212,10 @@ against multiple conversions or conversions to low bit rates (i.e. 64kbit/s) is
 desired.
 
 A lower strength (for instance 6) makes the watermark less audible, but also
-less robust. Strengths below 5 are not recommended. To set the strength, the
-same value has to be passed during both, generation and retrieving the
-watermark. Fractional strengths (like 7.5) are possible.
+less robust. Strengths below 5 are not recommended. The strength has to be
+provided for `audiowmark add`. Fractional strengths (like 7.5) are possible.
 
   audiowmark add --strength 15 in.wav out.wav 0123456789abcdef0011223344556677
-  audiowmark get --strength 15 out.wav
 
 [[rec-payload]]
 == Recommendations for the Watermarking Payload
@@ -328,7 +340,15 @@ There are two versions of the speed detection algorithm, `--detect-speed` and
 `--detect-speed-patient`. The difference is that the patient version takes
 more cpu time to detect the speed, but produces more accurate results.
 
-== Short Payload (experimental)
+== Short Payload (deprecated)
+
+**The support for short payload is now deprecated and will probably be removed in
+some newer version**, mainly because with a 128-bit HMAC based message, you can
+really be 100% certain that there are no false positives, so that if you see a
+certain payload, you can be sure that it was the watermark that was originally
+added. For short payload, there is a (very very small) probablity for
+generating a false positive, and there is no way of detecting it if this has
+happened.
 
 By default, the watermark will store a 128-bit message. In this mode, we
 recommend using a 128bit hash (or HMAC) as payload. No error checking is
