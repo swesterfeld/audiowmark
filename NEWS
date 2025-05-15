@@ -9,6 +9,7 @@ Overview of Changes in audiowmark-0.6.5:
   - change output order: print most relevant matches first
   - deprecate short payload
 * fix speed detection result output for default key
+* ship more m4 macros to fix automake on some target systems
 
 Overview of Changes in audiowmark-0.6.4:
 
