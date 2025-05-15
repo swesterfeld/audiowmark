@@ -197,7 +197,7 @@ SyncFinder::search_approx (vector<SearchKeyResult>& key_results, const vector<ve
           for (auto split_start_frames : split_vector (start_frames, 256))
             {
               thread_pool.add_job ([this, k, sync_shift, split_start_frames,
-                                    &sync_bits, &wav_data, &fft_db, &have_frames, &key_results, &result_mutex]()
+                                    &sync_bits, &fft_db, &have_frames, &key_results, &result_mutex]()
                 {
                   for (auto start_frame : split_start_frames)
                     {

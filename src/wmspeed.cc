@@ -423,7 +423,6 @@ score_smooth_find_best (const vector<SpeedSync::Score>& in_scores, double step, 
 class SpeedSearch
 {
   vector<std::unique_ptr<SpeedSync>> speed_sync;
-  SpeedSync      *center_speed_sync = nullptr;
   const WavData&  in_data;
   WavData         clipped_in_data;
   double          clip_location;
