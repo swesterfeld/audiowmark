@@ -943,6 +943,10 @@ main (int argc, char **argv)
 
       ap.parse_opt ("--bit-rate", Params::hls_bit_rate);
 
+      float f;
+      if (ap.parse_opt ("--strength", f))
+        Params::water_delta = f / 1000;
+
       Key key = parse_key (ap);
       args = parse_positional (ap, "input_ts", "output_ts", "message_hex");
       return hls_add (key, args[0], args[1], args[2]);
