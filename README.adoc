@@ -99,7 +99,7 @@ To get the 128-bit message from the watermarked file, use:
 ....
 The output of `audiowmark get` is designed to be machine readable. Each line
 that starts with `pattern` contains one decoded message. The fields are
-seperated by one or more space characters. The first field is a *timestamp*
+separated by one or more space characters. The first field is a *timestamp*
 indicating the position of the data block. The second field is the *decoded
 message*. The results are sorted by relevance, the most relevant matches
 are shown first.
