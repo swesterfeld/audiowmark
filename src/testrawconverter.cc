@@ -36,7 +36,7 @@ test_int16 (const char *label, const vector<float>& in_samples, Encoding encodin
   RawFormat format;
   format.set_bit_depth (16);
   format.set_encoding (encoding);
-#ifdef WORDS_BIGENDDIAN
+#ifdef WORDS_BIGENDIAN
   format.set_endian (RawFormat::BIG);
 #else
   format.set_endian (RawFormat::LITTLE);

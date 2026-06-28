@@ -126,7 +126,7 @@ template<RawFormat::Endian ENDIAN>
 static uint32_t
 to_endian (uint32_t i)
 {
-#ifdef WORDS_BIGENDDIAN
+#ifdef WORDS_BIGENDIAN
   constexpr bool native_endian = ENDIAN == RawFormat::BIG;
 #else
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
@@ -141,7 +141,7 @@ template<RawFormat::Endian ENDIAN>
 static uint64_t
 to_endian (uint64_t i)
 {
-#ifdef WORDS_BIGENDDIAN
+#ifdef WORDS_BIGENDIAN
   constexpr bool native_endian = ENDIAN == RawFormat::BIG;
 #else
   constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
@@ -181,7 +181,7 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::to_raw (const float *samples, uns
     }
   else
     {
-#ifdef WORDS_BIGENDDIAN
+#ifdef WORDS_BIGENDIAN
       constexpr bool native_endian = ENDIAN == RawFormat::BIG;
 #else
       constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
@@ -248,7 +248,7 @@ RawConverterImpl<BIT_DEPTH, ENDIAN, ENCODING>::from_raw (const unsigned char *in
     {
       const unsigned char *ptr = input_bytes;
       constexpr auto eshift = make_endian_shift<BIT_DEPTH, ENDIAN>();
-#ifdef WORDS_BIGENDDIAN
+#ifdef WORDS_BIGENDIAN
       constexpr bool native_endian = ENDIAN == RawFormat::BIG;
 #else
       constexpr bool native_endian = ENDIAN == RawFormat::LITTLE;
