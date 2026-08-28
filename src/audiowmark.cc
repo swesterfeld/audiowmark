@@ -348,7 +348,7 @@ test_snr (const string& orig_file, const string& wm_file)
 }
 
 int
-test_clip (const Key& key, const string& in_file, const string& out_file, int seed, int time_seconds)
+test_clip (const Key& key, const string& in_file, const string& out_file, int seed, float time_seconds)
 {
   WavData in_data;
   Error err = in_data.load (in_file);
@@ -1020,7 +1020,7 @@ main (int argc, char **argv)
 
       Key key = parse_key (ap);
       args = parse_positional (ap, "input_wav", "output_wav", "seed", "seconds");
-      return test_clip (key, args[0], args[1], atoi_or_die (args[2].c_str()), atoi_or_die (args[3].c_str()));
+      return test_clip (key, args[0], args[1], atoi_or_die (args[2].c_str()), atof_or_die (args[3].c_str()));
     }
   else if (ap.parse_cmd ("test-speed"))
     {
