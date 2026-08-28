@@ -28,6 +28,7 @@ fi
 
 audiowmark_cmp()
 {
+  echo
   audiowmark cmp "$@" || {
     if [ "x$AWM_FAIL_DIR" != "x" ]; then
       mkdir -p $AWM_FAIL_DIR
@@ -72,7 +73,7 @@ do
     PATTERN=${PATTERN:0:$((AWM_PATTERN_BITS / 4))}
     echo in_pattern $PATTERN
     echo in_flags $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED
-    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet
+    audiowmark add "$i" ${AWM_FILE}.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_ADD --test-key $SEED --quiet --strict
     CUT=0
     if [ "x$AWM_ALWAYS_CUT" != x ]; then
       CUT="$AWM_ALWAYS_CUT"
@@ -149,11 +150,17 @@ do
       echo "unknown transform $TRANSFORM" >&2
       exit 1
     fi
-    echo
     if [ "x${AWM_CLIP}" != "x" ]; then
       for CLIP in $(seq $AWM_MULTI_CLIP)
       do
         audiowmark test-clip $OUT_FILE ${OUT_FILE}.clip.wav $((CLIP_SEED++)) $AWM_CLIP --test-key $SEED
+        if [ "x$AWM_CLIP_POST_MP3" != x ]; then
+          echo "clip_post_mp3 $AWM_CLIP_POST_MP3"
+          # (optional) mp3 step: simulate quality loss after clip
+          lame -b "$AWM_CLIP_POST_MP3" ${OUT_FILE}.clip.wav ${OUT_FILE}.clip.mp3 --quiet
+          rm ${OUT_FILE}.clip.wav
+          ffmpeg -f mp3 -i ${OUT_FILE}.clip.mp3 ${OUT_FILE}.clip.wav -v quiet -nostdin
+        fi
         audiowmark_cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_GET --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
         rm ${OUT_FILE}.clip.wav
         echo
