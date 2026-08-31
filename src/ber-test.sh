@@ -160,6 +160,7 @@ do
           lame -b "$AWM_CLIP_POST_MP3" ${OUT_FILE}.clip.wav ${OUT_FILE}.clip.mp3 --quiet
           rm ${OUT_FILE}.clip.wav
           ffmpeg -f mp3 -i ${OUT_FILE}.clip.mp3 ${OUT_FILE}.clip.wav -v quiet -nostdin
+          rm ${OUT_FILE}.clip.mp3
         fi
         audiowmark_cmp ${OUT_FILE}.clip.wav $PATTERN $AWM_PARAMS $AWM_PARAMS_GET --test-key $SEED $TEST_CUT_ARGS $TEST_SPEED_ARGS
         rm ${OUT_FILE}.clip.wav
