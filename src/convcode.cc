@@ -137,11 +137,10 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
   struct StateEntry
   {
     int   last_state;
-    int   bit;
   };
   vector<vector<StateEntry>> error_count;
   for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
-    error_count.emplace_back (state_count, StateEntry {0, 0});
+    error_count.emplace_back (state_count, StateEntry {0});
 
   vector<float> old_delta (state_count, -1);
   vector<float> new_delta (state_count, -1);
@@ -193,7 +192,6 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
                     {
                       new_delta[new_state]            = delta;
                       new_table[new_state].last_state = state;
-                      new_table[new_state].bit        = bit;
                     }
                 }
             }
@@ -205,7 +203,8 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
     *error_out = new_delta[state] / coded_bits.size();
   for (size_t idx = error_count.size() - 1; idx > 0; idx--)
     {
-      decoded_bits.push_back (error_count[idx][state].bit);
+      const int bit = state & 1;
+      decoded_bits.push_back (bit);
 
       state = error_count[idx][state].last_state;
     }
