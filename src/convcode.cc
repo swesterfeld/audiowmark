@@ -23,6 +23,7 @@
 #include <assert.h>
 
 using std::vector;
+using std::array;
 using std::string;
 using std::min;
 
@@ -134,9 +135,8 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
 
   assert (coded_bits.size() % rate == 0);
 
-  vector<vector<unsigned char>> traceback_bits;
-  for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
-    traceback_bits.emplace_back (state_count, 0);
+  vector<array<unsigned char, state_count>> traceback_bits;
+  traceback_bits.resize (coded_bits.size() / rate + 1); /* 1 extra element */
 
   vector<float> old_delta (state_count, -1);
   vector<float> new_delta (state_count, -1);
@@ -161,7 +161,7 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
           old_delta.swap (new_delta);
           std::fill (new_delta.begin(), new_delta.end(), -1);
         }
-      vector<unsigned char>& new_traceback_bits = traceback_bits[i / rate + 1];
+      array<unsigned char, state_count>& new_traceback_bits = traceback_bits[i / rate + 1];
 
       for (unsigned int state = 0; state < state_count; state++)
         {
