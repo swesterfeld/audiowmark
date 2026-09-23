@@ -134,13 +134,9 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
 
   assert (coded_bits.size() % rate == 0);
 
-  struct StateEntry
-  {
-    int   last_state;
-  };
-  vector<vector<StateEntry>> error_count;
+  vector<vector<unsigned char>> traceback_bits;
   for (size_t i = 0; i < coded_bits.size() + rate; i += rate) /* 1 extra element */
-    error_count.emplace_back (state_count, StateEntry {0});
+    traceback_bits.emplace_back (state_count, 0);
 
   vector<float> old_delta (state_count, -1);
   vector<float> new_delta (state_count, -1);
@@ -165,7 +161,7 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
           old_delta.swap (new_delta);
           std::fill (new_delta.begin(), new_delta.end(), -1);
         }
-      vector<StateEntry>& new_table = error_count[i / rate + 1];
+      vector<unsigned char>& new_traceback_bits = traceback_bits[i / rate + 1];
 
       for (unsigned int state = 0; state < state_count; state++)
         {
@@ -190,8 +186,10 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
 
                   if (delta < new_delta[new_state] || new_delta[new_state] < 0) /* better match with this link? replace entry */
                     {
-                      new_delta[new_state]            = delta;
-                      new_table[new_state].last_state = state;
+                      const unsigned high_bit = state_count >> 1;
+
+                      new_delta[new_state]          = delta;
+                      new_traceback_bits[new_state] = (state & high_bit) ? 1 : 0;
                     }
                 }
             }
@@ -201,12 +199,13 @@ conv_decode_soft (ConvBlockType block_type, const vector<float>& coded_bits, flo
   unsigned int state = 0;
   if (error_out)
     *error_out = new_delta[state] / coded_bits.size();
-  for (size_t idx = error_count.size() - 1; idx > 0; idx--)
+  for (size_t idx = traceback_bits.size() - 1; idx > 0; idx--)
     {
       const int bit = state & 1;
       decoded_bits.push_back (bit);
 
-      state = error_count[idx][state].last_state;
+      const unsigned high_bit = state_count >> 1;
+      state = traceback_bits[idx][state] * high_bit + (state >> 1);
     }
   std::reverse (decoded_bits.begin(), decoded_bits.end());
 
