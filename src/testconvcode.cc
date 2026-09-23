@@ -17,6 +17,7 @@
 
 #include "utils.hh"
 #include "convcode.hh"
+#include "threadpool.hh"
 
 #include <random>
 
@@ -24,6 +25,7 @@
 
 using std::vector;
 using std::string;
+using std::max;
 
 vector<int>
 generate_error_vector (size_t n, int errors)
@@ -208,6 +210,28 @@ main (int argc, char **argv)
           assert (out_bits == in_bits);
         }
       printf ("%.1f ms/block\n", (get_time() - start_t) / runs * 1000.0);
+    }
+  if (argc == 3 && string (argv[2]) == "thread-perf")
+    {
+      const double start_t = get_time();
+
+      ThreadPool thread_pool;
+      const size_t runs = max<size_t> (200, thread_pool.n_threads() * 10);
+      for (size_t i = 0; i < runs; i++)
+        {
+          thread_pool.add_job (
+            [block_type]
+              {
+                vector<int> in_bits;
+                while (in_bits.size() != 128)
+                  in_bits.push_back (rand() & 1);
+
+                vector<int> out_bits = conv_decode_hard (block_type, conv_encode (block_type, in_bits));
+                assert (out_bits == in_bits);
+              });
+        }
+      thread_pool.wait_all();
+      printf ("%.2f ms/block\n", (get_time() - start_t) / runs * 1000.0);
     }
   if (argc == 3 && string (argv[2]) == "table")
     conv_print_table (block_type);
